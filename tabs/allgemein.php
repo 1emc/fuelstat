@@ -1,7 +1,12 @@
 <?php
 // tabs/allgemein.php
 
-// Hier werden die allgemeinen Fahrzeuginformationen angezeigt
+// Fahrzeugdetails werden von fahrzeug_detail.php bereitgestellt (via $fahrzeug)
+$initial_tachostand = $fahrzeug['tachostand']; // Initialer Tachostand aus dem Fahrzeugobjekt
+$aktueller_tachostand = getAktuellenTachostand($fahrzeug_id);
+
+// Berechne die Fahrleistung (aktuelle km - initiale km)
+$fahrleistung = berechneFahrleistung($fahrzeug_id, $initial_tachostand);
 ?>
 
 <div class="mt-4">
@@ -17,47 +22,22 @@
         <div class="col-md-8">
             <!-- Fahrzeugdetails -->
             <h2><?php echo htmlspecialchars($fahrzeug['marke'] . ' ' . $fahrzeug['modell']); ?></h2>
-            <p><strong>Tachostand:</strong> <?php echo number_format($fahrzeug['tachostand'], 0, ',', '.'); ?> km</p>
-            <p><strong>Fahrleistung:</strong> <?php echo number_format($fahrzeug['fahrleistung'], 0, ',', '.'); ?> km</p>
-            <!-- Weitere Informationen -->
+            <p><strong>Tachostand:</strong> <?php echo ($aktueller_tachostand !== null) ? number_format($aktueller_tachostand, 0, ',', '.') : 'Keine Daten'; ?> km</p>
+            <p><strong>Fahrleistung:</strong> <?php echo ($fahrleistung !== null) ? number_format($fahrleistung, 0, ',', '.') : 'Keine Daten'; ?> km</p>
+            
             <!-- Kraftstoffverbrauch -->
             <h3>Kraftstoffverbrauch</h3>
-            <p><strong>Gesamt:</strong> <?php echo berechneGesamtverbrauch($fahrzeug_id); ?> l/100km</p>
-            <p><strong>Aktuell:</strong> <?php echo berechneAktuellenVerbrauch($fahrzeug_id); ?> l/100km <?php echo zeigeVerbrauchstendenz($fahrzeug_id); ?></p>
+            <p><strong>Gesamt:</strong> <?php echo number_format(berechneGesamtverbrauch($fahrzeug_id), 2, ',', '.'); ?> l/100km</p>
+            <p><strong>Aktuell:</strong> <?php echo number_format(berechneAktuellenVerbrauch($fahrzeug_id), 2, ',', '.'); ?> l/100km <?php echo zeigeVerbrauchstendenz($fahrzeug_id); ?></p>
+            
             <!-- Kosten per Kilometer -->
             <h3>Kosten per Kilometer</h3>
-            <p><strong>Gesamt:</strong> <?php echo berechneKostenProKmGesamt($fahrzeug_id); ?> €/km</p>
-            <p><strong>Tanken:</strong> <?php echo berechneKraftstoffkostenProKm($fahrzeug_id); ?> €/km</p>
+            <p><strong>Gesamt:</strong> <?php echo number_format(berechneKostenProKmGesamt($fahrzeug_id), 2, ',', '.'); ?> €/km</p>
+            <p><strong>Tanken:</strong> <?php echo number_format(berechneKraftstoffkostenProKm($fahrzeug_id), 2, ',', '.'); ?> €/km</p>
         </div>
     </div>
     <!-- Bearbeiten-Button -->
     <a href="fahrzeug_bearbeiten.php?id=<?php echo $fahrzeug_id; ?>" class="btn btn-primary mt-3"><i class="fas fa-edit"></i> Bearbeiten</a>
 </div>
 
-<?php
-// Funktionen zur Berechnung der Werte (können in includes/functions.php ausgelagert werden)
-function berechneGesamtverbrauch($fahrzeug_id) {
-    // Hier implementierst du die Logik zur Berechnung des Gesamtverbrauchs
-    return '6.5'; // Beispielwert
-}
 
-function berechneAktuellenVerbrauch($fahrzeug_id) {
-    // Hier implementierst du die Logik zur Berechnung des aktuellen Verbrauchs
-    return '6.8'; // Beispielwert
-}
-
-function zeigeVerbrauchstendenz($fahrzeug_id) {
-    // Hier vergleichst du den aktuellen Verbrauch mit dem vorherigen und gibst einen Pfeil zurück
-    return '<i class="fas fa-arrow-up text-danger"></i>'; // Beispiel für steigenden Verbrauch
-}
-
-function berechneKostenProKmGesamt($fahrzeug_id) {
-    // Hier implementierst du die Logik zur Berechnung der Gesamtkosten pro Kilometer
-    return '0.12'; // Beispielwert
-}
-
-function berechneKraftstoffkostenProKm($fahrzeug_id) {
-    // Hier implementierst du die Logik zur Berechnung der Kraftstoffkosten pro Kilometer
-    return '0.08'; // Beispielwert
-}
-?>

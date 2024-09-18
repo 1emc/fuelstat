@@ -16,11 +16,12 @@ if ($kategorie == 'Tankfüllung') {
     $preis_pro_einheit = floatval($_POST['preis_pro_einheit']);
     $menge = floatval($_POST['menge']);
     $vollgetankt = isset($_POST['vollgetankt']) ? 1 : 0;
+	$skip_previous = isset($_POST['skip_previous']) ? 1 : 0;
     $kosten = $gesamtpreis; // Gesamtkosten sind hier der Gesamtpreis
 
     // SQL-Abfrage vorbereiten
-    $stmt = $conn->prepare("INSERT INTO Eintraege (fahrzeug_id, kategorie, datum, tachostand, standort, kosten, preis_pro_einheit, menge, vollgetankt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("issisdddi", $fahrzeug_id, $kategorie, $datum, $tachostand, $standort, $kosten, $preis_pro_einheit, $menge, $vollgetankt);
+	$stmt = $conn->prepare("INSERT INTO eintraege (fahrzeug_id, kategorie, datum, tachostand, standort, kosten, preis_pro_einheit, menge, vollgetankt, skip_previous) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+	$stmt->bind_param("issisdddii", $fahrzeug_id, $kategorie, $datum, $tachostand, $standort, $kosten, $preis_pro_einheit, $menge, $vollgetankt, $skip_previous);
 
 } else {
     $kosten = floatval($_POST['kosten']);

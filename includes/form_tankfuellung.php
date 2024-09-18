@@ -19,13 +19,16 @@
     <input type="number" step="0.01" name="gesamtpreis" required><br>
 
     <label for="preis_pro_einheit">Preis pro Liter/kWh (€):</label>
-    <input type="number" step="0.01" name="preis_pro_einheit" required><br>
+    <input type="number" step="0.001" name="preis_pro_einheit" required><br>
 
     <label for="menge">Tankmenge (Liter/kWh):</label>
     <input type="number" step="0.01" name="menge" required><br>
 
     <label for="vollgetankt">Vollgetankt?</label>
-    <input type="checkbox" name="vollgetankt" value="1"><br><br>
+    <input type="checkbox" name="vollgetankt" value="1"><br>
+	
+    <label for="skip_previous" class="form-label">Vorherige Tankfüllungen vergessen</label>
+    <input type="checkbox" id="skip_previous" name="skip_previous" value="1"><br><br>
 
     <button type="submit" name="eintrag_speichern">Eintrag speichern</button>
 </form>

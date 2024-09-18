@@ -27,10 +27,10 @@ if (isset($_POST['auswahl_bestaetigen'])) {
 
     if ($eintragstyp == 'Tankfüllung') {
         // Formular für Tankfüllung anzeigen
-        include 'includes/form_tankfuellung.php';
+        include '../includes/form_tankfuellung.php';
     } else {
         // Formular für andere Ausgaben anzeigen
-        include 'includes/form_andere_ausgabe.php';
+        include '../includes/form_andere_ausgabe.php';
     }
 }
 ?>

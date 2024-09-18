@@ -1,9 +1,19 @@
 <?php
 // tabs/eintraege.php
 
+include_once '../includes/functions.php'; // Sicherstellen, dass Funktionen eingebunden sind
+
+// Optional: Jahr-Filter verarbeiten
+$jahr = isset($_GET['jahr']) ? intval($_GET['jahr']) : null;
+
 // Einträge für das Fahrzeug abrufen
-$stmt = $conn->prepare("SELECT * FROM Eintraege WHERE fahrzeug_id = ? ORDER BY datum DESC");
-$stmt->bind_param("i", $fahrzeug_id);
+if ($jahr) {
+    $stmt = $conn->prepare("SELECT * FROM eintraege WHERE fahrzeug_id = ? AND YEAR(datum) = ? ORDER BY datum DESC");
+    $stmt->bind_param("ii", $fahrzeug_id, $jahr);
+} else {
+    $stmt = $conn->prepare("SELECT * FROM eintraege WHERE fahrzeug_id = ? ORDER BY datum DESC");
+    $stmt->bind_param("i", $fahrzeug_id);
+}
 $stmt->execute();
 $result = $stmt->get_result();
 
@@ -14,54 +24,114 @@ while ($row = $result->fetch_assoc()) {
     $eintraege[$monat][] = $row;
 }
 ?>
-
 <div class="mt-4">
     <!-- Button zum Hinzufügen neuer Einträge -->
-    <a href="eintrag_hinzufuegen.php?fahrzeug_id=<?php echo $fahrzeug_id; ?>" class="btn btn-success mb-3"><i class="fas fa-plus"></i> Neuer Eintrag</a>
+    <a href="eintrag_hinzufuegen.php?fahrzeug_id=<?php echo $fahrzeug_id; ?>" class="btn btn-success mb-3">
+        <i class="fas fa-plus"></i> Neuer Eintrag
+    </a>
 
     <?php if (!empty($eintraege)): ?>
         <?php foreach ($eintraege as $monat => $eintraege_im_monat): ?>
-            <h3><?php echo date('F Y', strtotime($monat . '-01')); ?></h3>
-            <div class="row">
-                <?php foreach ($eintraege_im_monat as $eintrag): ?>
-                    <div class="col-md-6">
-                        <div class="card mb-3">
-                            <div class="card-body">
-                                <h5 class="card-title"><?php echo htmlspecialchars($eintrag['kategorie']); ?></h5>
-                                <p class="card-text">
-                                    <strong>Datum:</strong> <?php echo date('d.m.Y', strtotime($eintrag['datum'])); ?><br>
-                                    <strong>Tachostand:</strong> <?php echo number_format($eintrag['tachostand'], 0, ',', '.'); ?> km<br>
-                                    <strong>Standort:</strong> <?php echo htmlspecialchars($eintrag['standort']); ?><br>
-                                    <?php if ($eintrag['kategorie'] == 'Tankfüllung'): ?>
-                                        <strong>Verbrauch:</strong> <?php echo berechneVerbrauchEintrag($eintrag); ?> l/100km<br>
-                                        <strong>Kosten:</strong> <?php echo number_format($eintrag['kosten'], 2, ',', '.'); ?> €<br>
-                                        <strong>Preis pro Liter:</strong> <?php echo number_format($eintrag['preis_pro_einheit'], 2, ',', '.'); ?> €/l<br>
-                                        <strong>Gefahrene Kilometer:</strong> <?php echo berechneGefahreneKm($eintrag, $fahrzeug_id); ?> km<br>
-                                        <strong>Liter:</strong> <?php echo number_format($eintrag['menge'], 2, ',', '.'); ?> l<br>
-                                    <?php else: ?>
-                                        <strong>Kosten:</strong> <?php echo number_format($eintrag['kosten'], 2, ',', '.'); ?> €<br>
-                                        <strong>Beschreibung:</strong> <?php echo htmlspecialchars($eintrag['beschreibung']); ?><br>
-                                    <?php endif; ?>
-                                </p>
+            <h4><?php echo date('F Y', strtotime($monat . '-01')); ?></h4>
+            <div class="accordion" id="accordion-<?php echo $monat; ?>">
+                <?php foreach ($eintraege_im_monat as $index => $eintrag): ?>
+				<?php
+				// Berechnete Werte
+				$verbrauch = berechneVerbrauchEintrag($eintrag, $fahrzeug_id);
+				$gefahrene_km = berechneGefahreneKm($eintrag, $fahrzeug_id);
+
+				// Debugging-Ausgaben (temporär hinzufügen)
+				echo "<!-- Verbrauch: " . htmlspecialchars($verbrauch) . " | Gefahrene km: " . htmlspecialchars($gefahrene_km) . " -->";
+
+				$vorheriger_verbrauch = getPreviousVerbrauch($eintrag, $fahrzeug_id);
+
+				// Weitere Debugging-Ausgabe
+				echo "<!-- Vorheriger Verbrauch: " . htmlspecialchars($vorheriger_verbrauch) . " -->";
+
+				// Verbrauchstrend bestimmen
+				$trend = 'neutral'; // 'up' für gestiegen, 'down' für gesunken
+				if ($vorheriger_verbrauch !== null && $verbrauch !== null) {
+					if ($verbrauch > $vorheriger_verbrauch) {
+						$trend = 'up';
+					} elseif ($verbrauch < $vorheriger_verbrauch) {
+						$trend = 'down';
+					}
+				}
+				?>
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="row">
+                                <!-- Spalte 1: Kategorie-Icon -->
+                                <div class="col-2 text-center">
+                                    <i class="fas <?php echo getCategoryIcon($eintrag['kategorie']); ?> fa-2x"></i>
+                                </div>
+                                <!-- Spalte 2: Daten -->
+                                <div class="col-10">
+                                    <!-- Erste Zeile: Kategorie-Name und Gesamtkosten -->
+                                    <div class="d-flex justify-content-between">
+                                        <div class="fw-bold"><?php echo htmlspecialchars($eintrag['kategorie']); ?></div>
+                                        <div class="text-end"><?php echo number_format($eintrag['kosten'], 2, ',', '.'); ?> €</div>
+                                    </div>
+                                    <!-- Zweite Zeile: Tachostand und Datum/Kosten pro Liter -->
+                                    <div class="d-flex justify-content-between">
+                                        <div class="text-muted small"><?php echo number_format($eintrag['tachostand'], 0, ',', '.'); ?> km &#183; <?php echo date('d.m.y', strtotime($eintrag['datum'])); ?></div>
+                                        <div class="text-end small"><?php echo number_format($eintrag['preis_pro_einheit'], 3, ',', '.'); ?> €/l</div>
+                                    </div>
+                                    <!-- Dritte Zeile: Standort und gefahrene Kilometer -->
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <i class="fas fa-map-marker-alt text-muted me-1"></i>
+                                            <?php echo htmlspecialchars($eintrag['standort']); ?>
+                                        </div>
+                                        <div class="text-end">
+                                            <i class="fas fa-ruler-combined text-muted me-1"></i>
+											<?php echo (is_numeric($gefahrene_km)) ? number_format($gefahrene_km, 0, ',', '.') . ' km' : 'N/A'; ?>
+                                        </div>
+                                    </div>
+                                    <!-- Vierte Zeile: Verbrauchstrend und getankte Liter -->
+									<div class="d-flex justify-content-between align-items-center">
+										<div>
+											<?php if ($trend === 'up' AND $verbrauch != 'zwischen'): ?>
+												<i class="fas fa-arrow-trend-up text-danger me-1"></i>
+											<?php elseif ($verbrauch === 'zwischen'): ?>
+												<i class="fas fa-circle-half-stroke text-warning me-1"></i>
+											<?php elseif ($trend === 'down'): ?>
+												<i class="fas fa-arrow-trend-down text-success me-1"></i>
+											<?php else: ?>
+												<i class="fas fa-minus text-muted me-1"></i>
+											<?php endif; ?>
+											<?php if (is_numeric($verbrauch)):?>
+											<?php echo number_format($verbrauch, 2, ',', '.') . ' l/100km';?>
+											<?php elseif ($verbrauch === 'zwischen'): ?>
+											<i>nicht vollgetankt</i>
+											<?php else: ?>
+											N/A
+											<?php endif; ?>
+										</div>
+										<div class="text-end">
+											<i class="fas fa-tint text-muted me-1"></i>
+											<?php echo number_format($eintrag['menge'], 2, ',', '.') . ' l'; ?>
+										</div>
+									</div>
+                                </div>
                             </div>
                         </div>
                     </div>
+					<br />
                 <?php endforeach; ?>
             </div>
         <?php endforeach; ?>
     <?php else: ?>
-        <p>Keine Einträge vorhanden.</p>
+        <div class="alert alert-warning">Keine Einträge vorhanden.</div>
     <?php endif; ?>
 </div>
 
-<?php
-function berechneVerbrauchEintrag($eintrag) {
-    // Implementiere die Logik zur Berechnung des Verbrauchs für diesen Eintrag
-    return '6.5'; // Beispielwert
-}
-
-function berechneGefahreneKm($eintrag, $fahrzeug_id) {
-    // Implementiere die Logik zur Berechnung der gefahrenen Kilometer seit dem letzten Eintrag
-    return '500'; // Beispielwert
-}
-?>
+<!-- Optional: Bootstrap Tooltips Initialisierung -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    })
+});
+</script>
