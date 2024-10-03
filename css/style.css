@@ -1,5 +1,12 @@
 /* css/style.css */
 
+/* Body Background Color */
+body {
+  min-height: calc(100% + env(safe-area-inset-top));
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  background-color: var(--bs-body-bg);
+}
+
 /* Hover-Effekt für Karten */
 .card:hover {
     box-shadow: 0 4px 8px rgba(0,0,0,0.2);
