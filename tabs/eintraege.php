@@ -35,30 +35,34 @@ while ($row = $result->fetch_assoc()) {
             <h4><?php echo date('F Y', strtotime($monat . '-01')); ?></h4>
             <div class="accordion" id="accordion-<?php echo $monat; ?>">
                 <?php foreach ($eintraege_im_monat as $index => $eintrag): ?>
-				<?php
-				// Berechnete Werte
-				$verbrauch = berechneVerbrauchEintrag($eintrag, $fahrzeug_id);
-				$gefahrene_km = berechneGefahreneKm($eintrag, $fahrzeug_id);
+                <?php
+                // Initialisierung der Variablen
+                $verbrauch = null;
+                $gefahrene_km = null;
+                $vorheriger_verbrauch = null;
+                $trend = 'neutral';
 
-				// Debugging-Ausgaben (temporär hinzufügen)
-				echo "<!-- Verbrauch: " . htmlspecialchars($verbrauch) . " | Gefahrene km: " . htmlspecialchars($gefahrene_km) . " -->";
+                // Abhängig vom Eintragstyp Berechnungen durchführen
+                if ($eintrag['kategorie'] == 'Tankfüllung') {
+                    // Berechnete Werte
+                    $verbrauch = berechneVerbrauchEintrag($eintrag, $fahrzeug_id);
+                    $gefahrene_km = berechneGefahreneKm($eintrag, $fahrzeug_id);
 
-				$vorheriger_verbrauch = getPreviousVerbrauch($eintrag, $fahrzeug_id);
+                    $vorheriger_verbrauch = getPreviousVerbrauch($eintrag, $fahrzeug_id);
 
-				// Weitere Debugging-Ausgabe
-				echo "<!-- Vorheriger Verbrauch: " . htmlspecialchars($vorheriger_verbrauch) . " -->";
+                    // Verbrauchstrend bestimmen
+                    if ($vorheriger_verbrauch !== null && $verbrauch !== null) {
+                        if ($verbrauch > $vorheriger_verbrauch) {
+                            $trend = 'up';
+                        } elseif ($verbrauch < $vorheriger_verbrauch) {
+                            $trend = 'down';
+                        }
+                    }
+                }
 
-				// Verbrauchstrend bestimmen
-				$trend = 'neutral'; // 'up' für gestiegen, 'down' für gesunken
-				if ($vorheriger_verbrauch !== null && $verbrauch !== null) {
-					if ($verbrauch > $vorheriger_verbrauch) {
-						$trend = 'up';
-					} elseif ($verbrauch < $vorheriger_verbrauch) {
-						$trend = 'down';
-					}
-				}
-				?>
-                    <div class="card">
+                // Start der Anzeige des Eintrags
+                ?>
+                    <div class="card mb-3">
                         <div class="card-body">
                             <div class="row">
                                 <!-- Spalte 1: Kategorie-Icon -->
@@ -70,54 +74,89 @@ while ($row = $result->fetch_assoc()) {
                                     <!-- Erste Zeile: Kategorie-Name und Gesamtkosten -->
                                     <div class="d-flex justify-content-between">
                                         <div class="fw-bold"><?php echo htmlspecialchars($eintrag['kategorie']); ?></div>
-                                        <div class="text-end"><?php echo number_format($eintrag['kosten'], 2, ',', '.'); ?> €</div>
-                                    </div>
-                                    <!-- Zweite Zeile: Tachostand und Datum/Kosten pro Liter -->
-                                    <div class="d-flex justify-content-between">
-                                        <div class="text-muted small"><?php echo number_format($eintrag['tachostand'], 0, ',', '.'); ?> km &#183; <?php echo date('d.m.y', strtotime($eintrag['datum'])); ?></div>
-                                        <div class="text-end small"><?php echo number_format($eintrag['preis_pro_einheit'], 3, ',', '.'); ?> €/l</div>
-                                    </div>
-                                    <!-- Dritte Zeile: Standort und gefahrene Kilometer -->
-                                    <div class="d-flex justify-content-between">
-                                        <div>
-                                            <i class="fas fa-map-marker-alt text-muted me-1"></i>
-                                            <?php echo htmlspecialchars($eintrag['standort']); ?>
-                                        </div>
                                         <div class="text-end">
-                                            <i class="fas fa-ruler-combined text-muted me-1"></i>
-											<?php echo (is_numeric($gefahrene_km)) ? number_format($gefahrene_km, 0, ',', '.') . ' km' : 'N/A'; ?>
+                                            <?php if (isset($eintrag['kosten']) && $eintrag['kosten'] > 0): ?>
+                                                <?php echo number_format($eintrag['kosten'], 2, ',', '.'); ?> €
+                                            <?php endif; ?>
                                         </div>
                                     </div>
-                                    <!-- Vierte Zeile: Verbrauchstrend und getankte Liter -->
-									<div class="d-flex justify-content-between align-items-center">
-										<div>
-											<?php if ($trend === 'up' AND $verbrauch != 'zwischen'): ?>
-												<i class="fas fa-arrow-trend-up text-danger me-1"></i>
-											<?php elseif ($verbrauch === 'zwischen'): ?>
-												<i class="fas fa-circle-half-stroke text-warning me-1"></i>
-											<?php elseif ($trend === 'down'): ?>
-												<i class="fas fa-arrow-trend-down text-success me-1"></i>
-											<?php else: ?>
-												<i class="fas fa-minus text-muted me-1"></i>
-											<?php endif; ?>
-											<?php if (is_numeric($verbrauch)):?>
-											<?php echo number_format($verbrauch, 2, ',', '.') . ' l/100km';?>
-											<?php elseif ($verbrauch === 'zwischen'): ?>
-											<i>nicht vollgetankt</i>
-											<?php else: ?>
-											N/A
-											<?php endif; ?>
-										</div>
-										<div class="text-end">
-											<i class="fas fa-tint text-muted me-1"></i>
-											<?php echo number_format($eintrag['menge'], 2, ',', '.') . ' l'; ?>
-										</div>
-									</div>
+                                    <!-- Zweite Zeile: Tachostand und Datum -->
+                                    <div class="d-flex justify-content-between">
+                                        <div class="text-muted small">
+                                            <?php if (isset($eintrag['tachostand'])): ?>
+                                                <?php echo number_format($eintrag['tachostand'], 0, ',', '.'); ?> km
+                                            <?php endif; ?>
+                                            &#183; <?php echo date('d.m.y', strtotime($eintrag['datum'])); ?>
+                                        </div>
+                                        <div class="text-end small">
+                                            <?php if (isset($eintrag['preis_pro_einheit']) && $eintrag['kategorie'] == 'Tankfüllung'): ?>
+                                                <?php echo number_format($eintrag['preis_pro_einheit'], 3, ',', '.'); ?> €/l
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+
+                                    <!-- Anzeige je nach Kategorie -->
+                                    <?php if ($eintrag['kategorie'] == 'Tankfüllung'): ?>
+                                        <!-- Dritte Zeile: Standort und gefahrene Kilometer -->
+                                        <div class="d-flex justify-content-between">
+                                            <div>
+                                                <?php if (!empty($eintrag['standort'])): ?>
+                                                    <i class="fas fa-map-marker-alt text-muted me-1"></i>
+                                                    <?php echo htmlspecialchars($eintrag['standort']); ?>
+                                                <?php endif; ?>
+                                            </div>
+                                            <div class="text-end">
+                                                <i class="fas fa-ruler-combined text-muted me-1"></i>
+                                                <?php echo (is_numeric($gefahrene_km)) ? number_format($gefahrene_km, 0, ',', '.') . ' km' : 'N/A'; ?>
+                                            </div>
+                                        </div>
+                                        <!-- Vierte Zeile: Verbrauchstrend und getankte Liter -->
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <?php if ($trend === 'up' && $verbrauch != 'zwischen'): ?>
+                                                    <i class="fas fa-arrow-trend-up text-danger me-1"></i>
+                                                <?php elseif ($verbrauch === 'zwischen'): ?>
+                                                    <i class="fas fa-circle-half-stroke text-warning me-1"></i>
+                                                <?php elseif ($trend === 'down'): ?>
+                                                    <i class="fas fa-arrow-trend-down text-success me-1"></i>
+                                                <?php else: ?>
+                                                    <i class="fas fa-minus text-muted me-1"></i>
+                                                <?php endif; ?>
+                                                <?php if (is_numeric($verbrauch)):?>
+                                                    <?php echo number_format($verbrauch, 2, ',', '.') . ' l/100km';?>
+                                                <?php elseif ($verbrauch === 'zwischen'): ?>
+                                                    <i>nicht vollgetankt</i>
+                                                <?php else: ?>
+                                                    N/A
+                                                <?php endif; ?>
+                                            </div>
+                                            <div class="text-end">
+                                                <i class="fas fa-tint text-muted me-1"></i>
+                                                <?php echo number_format($eintrag['menge'], 2, ',', '.') . ' l'; ?>
+                                            </div>
+                                        </div>
+                                    <?php elseif ($eintrag['kategorie'] == 'Andere Ausgabe'): ?>
+                                        <!-- Anzeige für Andere Ausgaben -->
+                                        <div class="mt-2">
+                                            <div>
+                                                <?php if (!empty($eintrag['beschreibung'])): ?>
+                                                    <?php echo htmlspecialchars($eintrag['beschreibung']); ?>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
+                                    <?php elseif ($eintrag['kategorie'] == 'Fahrt'): ?>
+                                        <!-- Anzeige für Fahrt -->
+                                        <div class="mt-2">
+                                            <div><strong>Startort:</strong> <?php echo htmlspecialchars($eintrag['startort']); ?></div>
+                                            <div><strong>Zielort:</strong> <?php echo htmlspecialchars($eintrag['zielort']); ?></div>
+                                            <div><strong>Zweck:</strong> <?php echo htmlspecialchars($eintrag['zweck']); ?></div>
+                                            <div><strong>Gefahrene Kilometer:</strong> <?php echo number_format($eintrag['gefahrene_km'], 1, ',', '.'); ?> km</div>
+                                        </div>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                         </div>
                     </div>
-					<br />
                 <?php endforeach; ?>
             </div>
         <?php endforeach; ?>
