@@ -1,40 +1,36 @@
 <?php
-// eintrag_hinzufuegen.php
+// pages/fahrzeug_detail.php
 session_start();
 include '../includes/db_connect.php';
 include '../includes/header.php';
 include '../includes/functions.php';
 
-// Überprüfe, ob die Fahrzeug-ID übergeben wurde
+// Fahrzeug-ID prüfen
 if (isset($_GET['id'])) {
     $fahrzeug_id = intval($_GET['id']);
 } else {
-    // Fehlerbehandlung oder Weiterleitung
     die("Fahrzeug-ID fehlt.");
 }
 
-// Fahrzeugdetails aus der Datenbank abrufen
-$stmt = $conn->prepare("SELECT * FROM Fahrzeuge WHERE id = ?");
+// Fahrzeugdaten abrufen
+$stmt = $conn->prepare("SELECT * FROM fahrzeuge WHERE id = ?");
 $stmt->bind_param("i", $fahrzeug_id);
 $stmt->execute();
 $result = $stmt->get_result();
-
-if ($result->num_rows > 0) {
-    $fahrzeug = $result->fetch_assoc();
-} else {
+if ($result->num_rows === 0) {
     die("Fahrzeug nicht gefunden.");
 }
+$fahrzeug = $result->fetch_assoc();
+$stmt->close();
 ?>
-
-<!-- fahrzeug_detail.php -->
 
 <div class="container mt-5">
     <h1><?php echo htmlspecialchars($fahrzeug['marke'] . ' ' . $fahrzeug['modell']); ?></h1>
 
     <!-- Tab Navigation -->
-    <ul class="nav nav-tabs" id="fahrzeugTabs" role="tablist">
+    <ul class="nav nav-tabs flex-nowrap overflow-auto" id="fahrzeugTabs" role="tablist" style="white-space: nowrap;">
         <li class="nav-item">
-            <a class="nav-link active" id="allgemein-tab" data-bs-toggle="tab" href="#allgemein" role="tab" aria-controls="allgemein" aria-selected="true">Allgemein</a>
+            <a class="nav-link" id="allgemein-tab" data-bs-toggle="tab" href="#allgemein" role="tab" aria-controls="allgemein" aria-selected="false">Allgemein</a>
         </li>
         <li class="nav-item">
             <a class="nav-link" id="eintraege-tab" data-bs-toggle="tab" href="#eintraege" role="tab" aria-controls="eintraege" aria-selected="false">Einträge</a>
@@ -52,27 +48,40 @@ if ($result->num_rows > 0) {
 
     <!-- Tab Inhalte -->
     <div class="tab-content" id="fahrzeugTabsContent">
-        <!-- Reiter 1: Allgemein -->
-        <div class="tab-pane fade show active" id="allgemein" role="tabpanel" aria-labelledby="allgemein-tab">
+        <div class="tab-pane fade" id="allgemein" role="tabpanel" aria-labelledby="allgemein-tab">
             <?php include '../tabs/allgemein.php'; ?>
         </div>
-        <!-- Reiter 2: Einträge -->
         <div class="tab-pane fade" id="eintraege" role="tabpanel" aria-labelledby="eintraege-tab">
             <?php include '../tabs/eintraege.php'; ?>
         </div>
-        <!-- Reiter 3: Statistiken -->
         <div class="tab-pane fade" id="statistiken" role="tabpanel" aria-labelledby="statistiken-tab">
             <?php include '../tabs/statistiken.php'; ?>
         </div>
-        <!-- Reiter 4: Ausgaben -->
         <div class="tab-pane fade" id="ausgaben" role="tabpanel" aria-labelledby="ausgaben-tab">
             <?php include '../tabs/ausgaben.php'; ?>
         </div>
-        <!-- Reiter 5: Einstellungen -->
         <div class="tab-pane fade" id="einstellungen" role="tabpanel" aria-labelledby="einstellungen-tab">
-            <?php include '../tabs/einstellungen.php'; ?>asd
+            <?php include '../tabs/einstellungen.php'; ?>
         </div>
     </div>
 </div>
+
+<script>
+// Aktiviere Tab entsprechend dem URL-Hash
+document.addEventListener('DOMContentLoaded', function() {
+    var hash = window.location.hash;
+    if (hash) {
+        var trigger = document.querySelector('.nav-link[href="' + hash + '"]');
+        if (trigger) {
+            var bsTab = new bootstrap.Tab(trigger);
+            bsTab.show();
+        }
+    } else {
+        // Standardmäßig Allgemein aktivieren
+        var defaultTab = document.querySelector('#allgemein-tab');
+        new bootstrap.Tab(defaultTab).show();
+    }
+});
+</script>
 
 <?php include '../includes/footer.php'; ?>

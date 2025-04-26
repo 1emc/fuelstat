@@ -11,7 +11,7 @@ $bild = $_FILES['bild']['name'];
 $ziel = "../images/" . basename($bild);
 move_uploaded_file($_FILES['bild']['tmp_name'], $ziel);
 
-$sql = "INSERT INTO Fahrzeuge (benutzer_id, marke, modell, bild) VALUES ('$benutzer_id', '$marke', '$modell', '$bild')";
+$sql = "INSERT INTO fahrzeuge (benutzer_id, marke, modell, bild) VALUES ('$benutzer_id', '$marke', '$modell', '$bild')";
 if ($conn->query($sql) === TRUE) {
     header("Location: ../index.php");
 } else {

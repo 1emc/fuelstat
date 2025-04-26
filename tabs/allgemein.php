@@ -22,18 +22,49 @@ $fahrleistung = berechneFahrleistung($fahrzeug_id, $initial_tachostand);
         <div class="col-md-8">
             <!-- Fahrzeugdetails -->
             <h2><?php echo htmlspecialchars($fahrzeug['marke'] . ' ' . $fahrzeug['modell']); ?></h2>
-            <p><strong>Tachostand:</strong> <?php echo ($aktueller_tachostand !== null) ? number_format($aktueller_tachostand, 0, ',', '.') : 'Keine Daten'; ?> km</p>
+            <p><strong>Tachostand:</strong>
+				<?php 
+					echo ($aktueller_tachostand !== null) ? number_format($aktueller_tachostand, 0, ',', '.') : 'Keine Daten'; 
+				?>
+			</p>
             <p><strong>Fahrleistung:</strong> <?php echo ($fahrleistung !== null) ? number_format($fahrleistung, 0, ',', '.') : 'Keine Daten'; ?> km</p>
             
             <!-- Kraftstoffverbrauch -->
             <h3>Kraftstoffverbrauch</h3>
-            <p><strong>Gesamt:</strong> <?php echo number_format(berechneGesamtverbrauch($fahrzeug_id), 2, ',', '.'); ?> l/100km</p>
-            <p><strong>Aktuell:</strong> <?php echo number_format(berechneAktuellenVerbrauch($fahrzeug_id), 2, ',', '.'); ?> l/100km <?php echo zeigeVerbrauchstendenz($fahrzeug_id); ?></p>
+            <p><strong>Gesamt:</strong>
+			<?php
+				$gesamt = berechneGesamtverbrauch($fahrzeug_id);
+				echo $gesamt !== null
+				  ? number_format($gesamt, 2, ',', '.') . ' l/100km'
+				  : 'Keine Daten';
+			?>
+			</p>
+            <p><strong>Aktuell:</strong> 
+			<?php
+				$aktuell = berechneAktuellenVerbrauch($fahrzeug_id);
+				echo $aktuell !== null
+				  ? number_format($aktuell, 2, ',', '.') . ' l/100km ' . zeigeVerbrauchstendenz($fahrzeug_id)
+				  : 'Keine Daten'; 
+			?></p>
             
             <!-- Kosten per Kilometer -->
             <h3>Kosten per Kilometer</h3>
-            <p><strong>Gesamt:</strong> <?php echo number_format(berechneKostenProKmGesamt($fahrzeug_id), 2, ',', '.'); ?> €/km</p>
-            <p><strong>Tanken:</strong> <?php echo number_format(berechneKraftstoffkostenProKm($fahrzeug_id), 2, ',', '.'); ?> €/km</p>
+			<?php
+				$kostenGesamt = berechneKostenProKmGesamt($fahrzeug_id);
+				$kostenTanken = berechneKraftstoffkostenProKm($fahrzeug_id);
+			?>
+            <p><strong>Gesamt:</strong> 
+			<?php
+				echo $kostenGesamt !== null
+				  ? number_format($kostenGesamt, 2, ',', '.') . ' €/km'
+				  : 'Keine Daten';
+			?></p>
+            <p><strong>Tanken:</strong>
+			<?php
+				echo $kostenTanken !== null
+				  ? number_format($kostenTanken, 2, ',', '.') . ' €/km'
+				  : 'Keine Daten';
+			?></p>
         </div>
     </div>
     <!-- Bearbeiten-Button -->

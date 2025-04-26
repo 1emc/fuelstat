@@ -3,7 +3,7 @@
 
 <?php
 $benutzer_id = 1; // Temporär, bis ein Login-System existiert
-$sql = "SELECT * FROM Fahrzeuge WHERE benutzer_id = $benutzer_id";
+$sql = "SELECT * FROM fahrzeuge WHERE benutzer_id = $benutzer_id";
 $result = $conn->query($sql);
 
 if ($result->num_rows > 0) {

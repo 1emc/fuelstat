@@ -25,4 +25,18 @@ body {
     object-fit: cover;
 }
 
+/* Nur horizontales Scrollen erlauben, vertikales Überziehen unterbinden */
+#fahrzeugTabs {
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  -webkit-overflow-scrolling: touch;    /* flüssiges Scrollen auf iOS */
+  overscroll-behavior-y: contain;       /* kein Vertikal-„Pull“ mehr */
+}
+
+/* Optional: Scrollbar verstecken für ein noch cleaneres mobile UI */
+#fahrzeugTabs::-webkit-scrollbar {
+  display: none;
+}
+
+
 /* Weitere Anpassungen nach Bedarf */

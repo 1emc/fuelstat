@@ -9,14 +9,14 @@
  */
 function getCategoryIcon($kategorie) {
     $icons = [
-        'Tankfüllung'     => 'fa-gas-pump',
+        'Tankfuellung'     => 'fa-gas-pump',
         'Versicherung'    => 'fa-shield-alt',
         'Werkstatt'       => 'fa-tools',
         'Inspektion'      => 'fa-wrench',
         'Steuer'          => 'fa-money-bill-wave',
         'Reparatur'       => 'fa-car-crash',
         'Reifen'          => 'fa-car-side',
-        'TÜV'             => 'fa-calendar-check',
+        'TUV'             => 'fa-calendar-check',
         'Wartung'         => 'fa-cogs',
         'Dekor'           => 'fa-paint-roller',
         'Verbrauch'       => 'fa-chart-line',
@@ -27,7 +27,7 @@ function getCategoryIcon($kategorie) {
 }
 
 /**
- * Berechnet die gefahrenen Kilometer seit der letzten Tankfüllung.
+ * Berechnet die gefahrenen Kilometer seit der letzten Tankfuellung.
  *
  * @param array $eintrag Der aktuelle Eintrag aus der Datenbank.
  * @param int $fahrzeug_id Die ID des Fahrzeugs.
@@ -36,19 +36,19 @@ function getCategoryIcon($kategorie) {
 function berechneGefahreneKm($eintrag, $fahrzeug_id) {
     global $conn;
 
-    // Stelle sicher, dass der aktuelle Eintrag eine Tankfüllung ist
-    if ($eintrag['kategorie'] !== 'Tankfüllung') {
+    // Stelle sicher, dass der aktuelle Eintrag eine Tankfuellung ist
+    if ($eintrag['kategorie'] !== 'Tankfuellung') {
         return null;
     }
 
-    // Wenn skip_previous aktiviert ist, ignoriere alle vorherigen Tankfüllungen
+    // Wenn skip_previous aktiviert ist, ignoriere alle vorherigen Tankfuellungen
     if ($eintrag['skip_previous']) {
-        // Suche nach der letzten Tankfüllung, die vollgetankt war, unabhängig von skipped entries
+        // Suche nach der letzten Tankfuellung, die vollgetankt war, unabhängig von skipped entries
         $stmt = $conn->prepare("
             SELECT tachostand 
             FROM eintraege 
             WHERE fahrzeug_id = ? 
-              AND kategorie = 'Tankfüllung' 
+              AND kategorie = 'Tankfuellung' 
               AND vollgetankt = b'1' 
               AND datum < ? 
             ORDER BY datum DESC 
@@ -56,12 +56,12 @@ function berechneGefahreneKm($eintrag, $fahrzeug_id) {
         ");
         $stmt->bind_param("is", $fahrzeug_id, $eintrag['datum']);
     } else {
-        // Suche nach der letzten Tankfüllung, die vollgetankt war und nicht skipped
+        // Suche nach der letzten Tankfuellung, die vollgetankt war und nicht skipped
         $stmt = $conn->prepare("
             SELECT tachostand 
             FROM eintraege 
             WHERE fahrzeug_id = ? 
-              AND kategorie = 'Tankfüllung' 
+              AND kategorie = 'Tankfuellung' 
               AND vollgetankt = b'1' 
               AND datum < ? 
               AND skip_previous = b'0'
@@ -93,7 +93,7 @@ function berechneGefahreneKm($eintrag, $fahrzeug_id) {
 }
 
 /**
- * Berechnet den Kraftstoffverbrauch (l/100km) für einen Tankfüllungseintrag.
+ * Berechnet den Kraftstoffverbrauch (l/100km) für einen Tankfuellungseintrag.
  *
  * @param array $eintrag Der aktuelle Eintrag aus der Datenbank.
  * @param int $fahrzeug_id Die ID des Fahrzeugs.
@@ -102,8 +102,8 @@ function berechneGefahreneKm($eintrag, $fahrzeug_id) {
 function berechneVerbrauchEintrag($eintrag, $fahrzeug_id) {
     global $conn;
 
-    // Stelle sicher, dass der aktuelle Eintrag eine Tankfüllung ist und vollgetankt wurde
-    if ($eintrag['kategorie'] !== 'Tankfüllung' || $eintrag['vollgetankt'] == 0) {
+    // Stelle sicher, dass der aktuelle Eintrag eine Tankfuellung ist und vollgetankt wurde
+    if ($eintrag['kategorie'] !== 'Tankfuellung' || $eintrag['vollgetankt'] == 0) {
         return "zwischen"; // Kein Verbrauch zu berechnen, wenn nicht vollgetankt wurde
     }
 
@@ -112,7 +112,7 @@ function berechneVerbrauchEintrag($eintrag, $fahrzeug_id) {
         SELECT menge, tachostand, datum 
         FROM eintraege 
         WHERE fahrzeug_id = ? 
-          AND kategorie = 'Tankfüllung' 
+          AND kategorie = 'Tankfuellung' 
           AND vollgetankt = 1 
           AND datum < ? 
         ORDER BY datum DESC 
@@ -142,7 +142,7 @@ function berechneVerbrauchEintrag($eintrag, $fahrzeug_id) {
         SELECT SUM(menge) AS gesamt_menge 
         FROM eintraege 
         WHERE fahrzeug_id = ? 
-          AND kategorie = 'Tankfüllung' 
+          AND kategorie = 'Tankfuellung' 
           AND vollgetankt = 0 
           AND datum > ? 
           AND datum < ?
@@ -172,11 +172,11 @@ function berechneVerbrauchEintrag($eintrag, $fahrzeug_id) {
 function getPreviousVerbrauch($eintrag, $fahrzeug_id) {
     global $conn;
 
-    // Schritt 1: Finde den vorherigen Tankfüllungseintrag (e_prev)
+    // Schritt 1: Finde den vorherigen Tankfuellungseintrag (e_prev)
     $stmt_prev = $conn->prepare("
         SELECT * FROM eintraege 
         WHERE fahrzeug_id = ? 
-          AND kategorie = 'Tankfüllung' 
+          AND kategorie = 'Tankfuellung' 
           AND vollgetankt = 1 
           AND datum < ? 
           AND skip_previous = 0 
@@ -199,11 +199,11 @@ function getPreviousVerbrauch($eintrag, $fahrzeug_id) {
     $previous_entry = $result_prev->fetch_assoc();
     $stmt_prev->close();
 
-    // Schritt 2: Finde den Eintrag vor dem vorherigen Tankfüllungseintrag (e_prev_prev)
+    // Schritt 2: Finde den Eintrag vor dem vorherigen Tankfuellungseintrag (e_prev_prev)
     $stmt_prev_prev = $conn->prepare("
         SELECT tachostand FROM eintraege 
         WHERE fahrzeug_id = ? 
-          AND kategorie = 'Tankfüllung' 
+          AND kategorie = 'Tankfuellung' 
           AND vollgetankt = 1 
           AND datum < ? 
           AND skip_previous = 0 
@@ -249,11 +249,11 @@ function getPreviousVerbrauch($eintrag, $fahrzeug_id) {
 function berechneGesamtverbrauch($fahrzeug_id) {
     global $conn;
 
-    // Berechne den Gesamtverbrauch basierend auf allen Tankfüllungen
+    // Berechne den Gesamtverbrauch basierend auf allen Tankfuellungen
     $stmt = $conn->prepare("
         SELECT SUM(menge) AS gesamt_menge, MAX(tachostand) - MIN(tachostand) AS gefahrene_km
         FROM eintraege
-        WHERE fahrzeug_id = ? AND kategorie = 'Tankfüllung' AND vollgetankt = 1
+        WHERE fahrzeug_id = ? AND kategorie = 'Tankfuellung' AND vollgetankt = 1
     ");
     $stmt->bind_param("i", $fahrzeug_id);
     $stmt->execute();
@@ -269,7 +269,7 @@ function berechneGesamtverbrauch($fahrzeug_id) {
 
 
 /**
- * Berechnet den aktuellen Kraftstoffverbrauch (l/100km) für die letzte Tankfüllung.
+ * Berechnet den aktuellen Kraftstoffverbrauch (l/100km) für die letzte Tankfuellung.
  *
  * @param int $fahrzeug_id Die ID des Fahrzeugs.
  * @return float|null Der aktuelle Verbrauch oder null, wenn keine Daten vorhanden sind.
@@ -277,26 +277,37 @@ function berechneGesamtverbrauch($fahrzeug_id) {
 function berechneAktuellenVerbrauch($fahrzeug_id) {
     global $conn;
 
-    // Berechne den Verbrauch basierend auf der letzten Tankfüllung
+    // Berechne den Verbrauch basierend auf der letzten Tankfuellung
     $stmt = $conn->prepare("
-        SELECT menge, tachostand - (
-            SELECT MAX(tachostand) FROM eintraege WHERE fahrzeug_id = ? AND kategorie = 'Tankfüllung' AND vollgetankt = 1 AND datum < e1.datum
-        ) AS gefahrene_km
+        SELECT 
+          menge, 
+          tachostand - (
+            SELECT MAX(tachostand) 
+              FROM eintraege 
+             WHERE fahrzeug_id = ? 
+               AND kategorie = 'Tankfuellung' 
+               AND vollgetankt = 1 
+               AND datum < e1.datum
+          ) AS gefahrene_km
         FROM eintraege e1
-        WHERE fahrzeug_id = ? AND kategorie = 'Tankfüllung' AND vollgetankt = 1
-        ORDER BY datum DESC
-        LIMIT 1
+       WHERE fahrzeug_id = ? 
+         AND kategorie = 'Tankfuellung' 
+         AND vollgetankt = 1
+       ORDER BY datum DESC
+       LIMIT 1
     ");
     $stmt->bind_param("ii", $fahrzeug_id, $fahrzeug_id);
     $stmt->execute();
     $result = $stmt->get_result();
     $data = $result->fetch_assoc();
+    $stmt->close();
 
-    if ($data['gefahrene_km'] > 0) {
-        return ($data['menge'] / $data['gefahrene_km']) * 100;
-    } else {
+    // --- Schutz gegen null bzw. fehlendes Feld ---
+    if (!$data || !isset($data['gefahrene_km']) || $data['gefahrene_km'] <= 0) {
         return null;
     }
+
+    return ($data['menge'] / $data['gefahrene_km']) * 100;
 }
 
 /**
@@ -356,11 +367,11 @@ function berechneKostenProKmGesamt($fahrzeug_id) {
 function berechneKraftstoffkostenProKm($fahrzeug_id) {
     global $conn;
 
-    // Berechne die Kraftstoffkosten pro Kilometer basierend auf den Tankfüllungen
+    // Berechne die Kraftstoffkosten pro Kilometer basierend auf den Tankfuellungen
     $stmt = $conn->prepare("
         SELECT SUM(kosten) AS kraftstoff_kosten, MAX(tachostand) - MIN(tachostand) AS gefahrene_km
         FROM eintraege
-        WHERE fahrzeug_id = ? AND kategorie = 'Tankfüllung'
+        WHERE fahrzeug_id = ? AND kategorie = 'Tankfuellung'
     ");
     $stmt->bind_param("i", $fahrzeug_id);
     $stmt->execute();
@@ -375,7 +386,7 @@ function berechneKraftstoffkostenProKm($fahrzeug_id) {
 }
 
 /**
- * Holt den Verbrauchswert der letzten Tankfüllung für ein Fahrzeug.
+ * Holt den Verbrauchswert der letzten Tankfuellung für ein Fahrzeug.
  *
  * @param int $fahrzeug_id Die ID des Fahrzeugs.
  * @return float|null Der vorherige Verbrauch oder null, wenn keine Daten vorhanden sind.
@@ -383,13 +394,13 @@ function berechneKraftstoffkostenProKm($fahrzeug_id) {
 function getPreviousVerbrauchByFahrzeug($fahrzeug_id) {
     global $conn;
 
-    // Schritt 1: Finde den letzten Tankfüllungseintrag (e_prev)
+    // Schritt 1: Finde den letzten Tankfuellungseintrag (e_prev)
     $stmt_prev = $conn->prepare("
         SELECT menge, tachostand - (
-            SELECT MAX(tachostand) FROM eintraege WHERE fahrzeug_id = ? AND kategorie = 'Tankfüllung' AND vollgetankt = 1 AND datum < e1.datum
+            SELECT MAX(tachostand) FROM eintraege WHERE fahrzeug_id = ? AND kategorie = 'Tankfuellung' AND vollgetankt = 1 AND datum < e1.datum
         ) AS gefahrene_km
         FROM eintraege e1
-        WHERE fahrzeug_id = ? AND kategorie = 'Tankfüllung' AND vollgetankt = 1
+        WHERE fahrzeug_id = ? AND kategorie = 'Tankfuellung' AND vollgetankt = 1
         ORDER BY datum DESC
         LIMIT 1
     ");

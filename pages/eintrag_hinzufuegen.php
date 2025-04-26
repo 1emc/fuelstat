@@ -1,178 +1,161 @@
 <?php
-// eintrag_hinzufuegen.php
+// pages/eintrag_hinzufuegen.php
 session_start();
 include '../includes/db_connect.php';
+include '../includes/functions.php';
 include '../includes/header.php';
 
-// Überprüfe, ob die Fahrzeug-ID übergeben wurde
-if (isset($_GET['fahrzeug_id'])) {
-    $fahrzeug_id = intval($_GET['fahrzeug_id']);
-} else {
-    // Fehlerbehandlung oder Weiterleitung
+if (!isset($_GET['fahrzeug_id'])) {
     die("Fahrzeug-ID fehlt.");
 }
+$fahrzeug_id = intval($_GET['fahrzeug_id']);
+
+$allCategories = [
+    'Versicherung', 'Werkstatt', 'Inspektion', 'Steuer',
+    'Reparatur', 'Reifen', 'TUV', 'Wartung', 'Dekor'
+];
 ?>
 
 <div class="container mt-5">
     <h2>Neuen Eintrag hinzufügen</h2>
     <form method="post" action="eintrag_speichern.php">
-        <!-- Eintragstyp Auswahl -->
-        <div class="form-group">
-            <label for="eintragstyp">Was möchtest du hinzufügen?</label>
-            <select class="form-control" id="eintragstyp" name="eintragstyp" required>
+        <input type="hidden" name="fahrzeug_id" value="<?php echo $fahrzeug_id; ?>">
+
+        <!-- Typ-Auswahl -->
+        <div class="mb-3">
+            <label for="entryType" class="form-label">Eintragstyp</label>
+            <select id="entryType" name="eintragstyp" class="form-select" required>
                 <option value="">Bitte auswählen</option>
-                <option value="Tankfüllung">Tankfüllung</option>
+                <option value="Tankfuellung">Tankfuellung</option>
                 <option value="Andere Ausgabe">Andere Ausgabe</option>
                 <option value="Fahrt">Fahrt</option>
             </select>
         </div>
 
         <!-- Gemeinsame Felder -->
-        <div id="gemeinsame_felder" style="display: none;">
-            <div class="form-group mt-3">
-                <label for="datum">Datum</label>
-                <input type="date" class="form-control" id="datum" name="datum" required>
+        <div id="fields_common" style="display:none;">
+            <div class="mb-3">
+                <label for="datum" class="form-label">Datum</label>
+                <input type="date" id="datum" name="datum" class="form-control" required>
             </div>
-            <div class="form-group mt-3">
-                <label for="tachostand">Tachostand (km)</label>
-                <input type="number" class="form-control" id="tachostand" name="tachostand" required
-                    inputmode="numeric" pattern="[0-9]*" min="0" step="1">
-            </div>
-        </div>
-
-        <!-- Felder für Tankfüllung -->
-        <div id="tankfuellung_felder" style="display: none;">
-            <div class="form-group mt-3">
-                <label for="menge">Getankte Menge (Liter)</label>
-                <input type="number" class="form-control" id="menge" name="menge" required
-                    inputmode="decimal" step="0.01" min="0">
-            </div>
-            <div class="form-group mt-3">
-                <label for="kosten">Kosten (€)</label>
-                <input type="number" class="form-control" id="kosten" name="kosten" required
-                    inputmode="decimal" step="0.01" min="0">
-            </div>
-            <div class="form-group mt-3">
-                <label for="preis_pro_einheit">Preis pro Liter (€)</label>
-                <input type="number" class="form-control" id="preis_pro_einheit" name="preis_pro_einheit" required
-                    inputmode="decimal" step="0.001" min="0">
-            </div>
-            <div class="form-check mt-3">
-                <input type="checkbox" class="form-check-input" id="vollgetankt" name="vollgetankt" value="1">
-                <label class="form-check-label" for="vollgetankt">Vollgetankt</label>
+            <div class="mb-3">
+                <label for="tachostand" class="form-label">Tachostand (km)</label>
+                <input type="number" id="tachostand" name="tachostand" class="form-control" min="0" step="1" required>
             </div>
         </div>
 
-        <!-- Felder für Andere Ausgabe -->
-        <div id="andere_ausgabe_felder" style="display: none;">
-            <div class="form-group mt-3">
-                <label for="kategorie_ausgabe">Kategorie</label>
-                <select class="form-control" id="kategorie_ausgabe" name="kategorie">
-                    <option value="Wartung">Wartung</option>
-                    <option value="Reparatur">Reparatur</option>
-                    <option value="Versicherung">Versicherung</option>
-                    <option value="Steuer">Steuer</option>
-                    <!-- Weitere Kategorien hinzufügen -->
+        <!-- Tankfuellung -->
+        <div id="fields_tank" style="display:none;">
+            <div class="mb-3">
+                <label for="standort" class="form-label">Standort</label>
+                <input type="text" id="standort" name="standort" class="form-control">
+            </div>
+            <div class="mb-3">
+                <label for="menge" class="form-label">Menge (Liter)</label>
+                <input type="number" id="menge" name="menge" class="form-control" min="0" step="0.01">
+            </div>
+            <div class="mb-3">
+                <label for="preis_pro_einheit" class="form-label">Preis pro Liter (€)</label>
+                <input type="number" id="preis_pro_einheit" name="preis_pro_einheit" class="form-control" min="0" step="0.001">
+            </div>
+            <div class="mb-3">
+                <label for="kosten" class="form-label">Gesamtpreis (€)</label>
+                <input type="number" id="kosten" name="kosten" class="form-control" min="0" step="0.01">
+            </div>
+            <div class="mb-3 form-check">
+                <input type="checkbox" id="vollgetankt" name="vollgetankt" class="form-check-input" value="1">
+                <label for="vollgetankt" class="form-check-label">Vollgetankt</label>
+            </div>
+            <div class="mb-3 form-check">
+                <input type="checkbox" id="skip_previous" name="skip_previous" class="form-check-input" value="1">
+                <label for="skip_previous" class="form-check-label">Vorherige Tankfüllungen ignorieren</label>
+            </div>
+        </div>
+
+        <!-- Andere Ausgabe -->
+        <div id="fields_other" style="display:none;">
+            <div class="mb-3">
+                <label for="kategorie" class="form-label">Kategorie</label>
+                <select id="kategorie" name="kategorie" class="form-select">
+                    <option value="">Bitte auswählen</option>
+                    <?php foreach ($allCategories as $cat): ?>
+                        <option value="<?php echo $cat; ?>"><?php echo $cat; ?></option>
+                    <?php endforeach; ?>
                 </select>
             </div>
-            <div class="form-group mt-3">
-                <label for="kosten_ausgabe">Kosten (€)</label>
-                <input type="number" class="form-control" id="kosten_ausgabe" name="kosten" required
-                    inputmode="decimal" step="0.01" min="0">
+            <div class="mb-3">
+                <label for="kosten_other" class="form-label">Kosten (€)</label>
+                <input type="number" id="kosten_other" name="kosten" class="form-control" min="0" step="0.01">
             </div>
-            <div class="form-group mt-3">
-                <label for="beschreibung">Beschreibung</label>
-                <textarea class="form-control" id="beschreibung" name="beschreibung"></textarea>
-            </div>
-        </div>
-
-        <!-- Felder für Fahrt -->
-        <div id="fahrt_felder" style="display: none;">
-            <div class="form-group mt-3">
-                <label for="startort">Startort</label>
-                <input type="text" class="form-control" id="startort" name="startort" required>
-            </div>
-            <div class="form-group mt-3">
-                <label for="zielort">Zielort</label>
-                <input type="text" class="form-control" id="zielort" name="zielort" required>
-            </div>
-            <div class="form-group mt-3">
-                <label for="zweck">Zweck der Fahrt</label>
-                <input type="text" class="form-control" id="zweck" name="zweck">
-            </div>
-            <div class="form-group mt-3">
-                <label for="gefahrene_km">Gefahrene Kilometer</label>
-                <input type="number" class="form-control" id="gefahrene_km" name="gefahrene_km" required
-                    inputmode="decimal" step="0.1" min="0">
+            <div class="mb-3">
+                <label for="beschreibung" class="form-label">Beschreibung</label>
+                <textarea id="beschreibung" name="beschreibung" class="form-control"></textarea>
             </div>
         </div>
 
-        <!-- Fahrzeug-ID als verstecktes Feld -->
-        <input type="hidden" name="fahrzeug_id" value="<?php echo $fahrzeug_id; ?>">
+        <!-- Fahrt -->
+        <div id="fields_trip" style="display:none;">
+            <div class="mb-3">
+                <label for="startort" class="form-label">Startort</label>
+                <input type="text" id="startort" name="startort" class="form-control">
+            </div>
+            <div class="mb-3">
+                <label for="zielort" class="form-label">Zielort</label>
+                <input type="text" id="zielort" name="zielort" class="form-control">
+            </div>
+            <div class="mb-3">
+                <label for="zweck" class="form-label">Zweck der Fahrt</label>
+                <input type="text" id="zweck" name="zweck" class="form-control">
+            </div>
+            <div class="mb-3">
+                <label for="gefahrene_km" class="form-label">Gefahrene Kilometer</label>
+                <input type="number" id="gefahrene_km" name="gefahrene_km" class="form-control" min="0" step="0.1">
+            </div>
+        </div>
 
-        <!-- Absenden-Button -->
-        <button type="submit" class="btn btn-primary mt-4">Eintrag speichern</button>
+        <button type="submit" class="btn btn-primary">Eintrag speichern</button>
+        <a href="fahrzeug_detail.php?id=<?php echo $fahrzeug_id; ?>" class="btn btn-secondary ms-2">Abbrechen</a>
     </form>
 </div>
 
-<!-- JavaScript zum dynamischen Anzeigen der Felder -->
 <script>
-document.getElementById('eintragstyp').addEventListener('change', function() {
-    var typ = this.value;
+const typeSelect = document.getElementById('entryType');
+const commonSection = document.getElementById('fields_common');
+const sections = {
+    'Tankfuellung': document.getElementById('fields_tank'),
+    'Andere Ausgabe': document.getElementById('fields_other'),
+    'Fahrt': document.getElementById('fields_trip')
+};
 
-    // Alle spezifischen Felder ausblenden und deaktivieren
-    var allFieldsets = ['tankfuellung_felder', 'andere_ausgabe_felder', 'fahrt_felder'];
-    allFieldsets.forEach(function(fieldsetId) {
-        var fieldset = document.getElementById(fieldsetId);
-        if (fieldset) {
-            fieldset.style.display = 'none';
-            // Deaktiviere alle Eingabefelder in diesem Abschnitt
-            Array.from(fieldset.querySelectorAll('input, select, textarea')).forEach(function(element) {
-                element.disabled = true;
-            });
-        }
+function toggleFields() {
+    // Verstecke alle Sektionen
+    commonSection.style.display = 'none';
+    disableSection(commonSection);
+    Object.values(sections).forEach(sec => {
+        sec.style.display = 'none';
+        disableSection(sec);
     });
 
-    // Gemeinsame Felder ausblenden und deaktivieren
-    var gemeinsameFelder = document.getElementById('gemeinsame_felder');
-    if (gemeinsameFelder) {
-        gemeinsameFelder.style.display = 'none';
-        Array.from(gemeinsameFelder.querySelectorAll('input, select, textarea')).forEach(function(element) {
-            element.disabled = true;
-        });
+    const val = typeSelect.value;
+    if (!val) return;
+    // Zeige gemeinsame Felder
+    commonSection.style.display = 'block';
+    enableSection(commonSection);
+    // Zeige spezifische Felder
+    const sec = sections[val];
+    if (sec) {
+        sec.style.display = 'block';
+        enableSection(sec);
     }
+}
 
-    // Spezifische Felder basierend auf der Auswahl anzeigen und aktivieren
-    if (typ) {
-        // Gemeinsame Felder anzeigen und aktivieren
-        gemeinsameFelder.style.display = 'block';
-        Array.from(gemeinsameFelder.querySelectorAll('input, select, textarea')).forEach(function(element) {
-            element.disabled = false;
-        });
+function disableSection(section) {
+    section.querySelectorAll('input, select, textarea').forEach(el => el.disabled = true);
+}
+function enableSection(section) {
+    section.querySelectorAll('input, select, textarea').forEach(el => el.disabled = false);
+}
 
-        var selectedFieldsetId = '';
-        if (typ === 'Tankfüllung') {
-            selectedFieldsetId = 'tankfuellung_felder';
-        } else if (typ === 'Andere Ausgabe') {
-            selectedFieldsetId = 'andere_ausgabe_felder';
-        } else if (typ === 'Fahrt') {
-            selectedFieldsetId = 'fahrt_felder';
-        }
-        var selectedFieldset = document.getElementById(selectedFieldsetId);
-        if (selectedFieldset) {
-            selectedFieldset.style.display = 'block';
-            // Aktiviere alle Eingabefelder in diesem Abschnitt
-            Array.from(selectedFieldset.querySelectorAll('input, select, textarea')).forEach(function(element) {
-                element.disabled = false;
-            });
-        }
-    }
-});
-
-// Formular beim Laden initialisieren
-document.addEventListener('DOMContentLoaded', function() {
-    var event = new Event('change');
-    document.getElementById('eintragstyp').dispatchEvent(event);
-});
-
+typeSelect.addEventListener('change', toggleFields);
+window.addEventListener('DOMContentLoaded', () => toggleFields());
 </script>

@@ -1,5 +1,7 @@
 <?php
-// fahrzeug_update.php
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 session_start();
 include '../includes/db_connect.php';
 include '../includes/functions.php';
@@ -14,8 +16,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 
     // Felder aus dem Formular
-    $marke = trim($_POST['marke']);
-    $modell = trim($_POST['modell']);
+    $marke       = trim($_POST['marke']);
+    $modell      = trim($_POST['modell']);
+    $baujahr     = isset($_POST['baujahr']) ? intval($_POST['baujahr']) : null;
     $tankgroesse = isset($_POST['tankgroesse']) ? floatval($_POST['tankgroesse']) : null;
 
     // Validierung der erforderlichen Felder
@@ -30,11 +33,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (isset($_FILES['bild']) && $_FILES['bild']['error'] != UPLOAD_ERR_NO_FILE) {
         $bild = $_FILES['bild'];
 
-        // Überprüfe auf Upload-Fehler
+        // Upload-Fehlerprüfung
         if ($bild['error'] !== UPLOAD_ERR_OK) {
             die("Fehler beim Hochladen des Bildes.");
         }
-
+        // Dateigrößenbegrenzung (max. 2 MB)
+        if ($bild['size'] > 2 * 1024 * 1024) {
+            die("Maximale Dateigröße von 2 MB überschritten.");
+        }
         // Überprüfe den Dateityp (nur Bilder erlauben)
         $erlaubte_typen = ['image/jpeg', 'image/png', 'image/gif'];
         if (!in_array($bild['type'], $erlaubte_typen)) {
@@ -47,33 +53,107 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         // Bewege die hochgeladene Datei an den Zielort
         if (!move_uploaded_file($bild['tmp_name'], $zielpfad)) {
-            die("Fehler beim Speichern des Bildes: ".$zielpfad);
+            die("Fehler beim Speichern des Bildes: " . $zielpfad);
         }
 
-        // Optional: Altes Bild löschen
-        // Hier könntest du das alte Bild aus der Datenbank holen und löschen
+        // Bild komprimieren / skalieren
+        list($origWidth, $origHeight, $format) = getimagesize($zielpfad);
+        $maxWidth  = 1200;
+        $maxHeight = 800;
+        $ratio = min($maxWidth / $origWidth, $maxHeight / $origHeight, 1);
+        $newW = (int) ($origWidth * $ratio);
+        $newH = (int) ($origHeight * $ratio);
+
+        switch ($format) {
+            case IMAGETYPE_JPEG:
+                $src = imagecreatefromjpeg($zielpfad);
+                break;
+            case IMAGETYPE_PNG:
+                $src = imagecreatefrompng($zielpfad);
+                break;
+            case IMAGETYPE_GIF:
+                $src = imagecreatefromgif($zielpfad);
+                break;
+            default:
+                $src = null;
+        }
+        if ($src) {
+            $dst = imagecreatetruecolor($newW, $newH);
+            // Erhalte Transparenz für PNG/GIF
+            if (in_array($format, [IMAGETYPE_PNG, IMAGETYPE_GIF])) {
+                imagecolortransparent($dst, imagecolorallocatealpha($dst, 0, 0, 0, 127));
+                imagealphablending($dst, false);
+                imagesavealpha($dst, true);
+            }
+            imagecopyresampled($dst, $src, 0, 0, 0, 0, $newW, $newH, $origWidth, $origHeight);
+            // Speichere komprimiert
+            if ($format === IMAGETYPE_JPEG) {
+                imagejpeg($dst, $zielpfad, 85);
+            } elseif ($format === IMAGETYPE_PNG) {
+                imagepng($dst, $zielpfad, 6);
+            } elseif ($format === IMAGETYPE_GIF) {
+                imagegif($dst, $zielpfad);
+            }
+            imagedestroy($src);
+            imagedestroy($dst);
+        }
     }
 
     // Bereite die SQL-Abfrage vor
     if ($bildname) {
-        // Wenn ein neues Bild hochgeladen wurde
-        $sql = "UPDATE Fahrzeuge SET marke = ?, modell = ?, tankgroesse = ?, bild = ? WHERE id = ?";
+        // Mit neuem Bild
+        $sql = "
+            UPDATE fahrzeuge
+               SET marke       = ?,
+                   modell      = ?,
+                   baujahr     = ?,
+                   tankgroesse = ?,
+                   bild        = ?
+             WHERE id = ?
+        ";
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("ssdsi", $marke, $modell, $tankgroesse, $bildname, $fahrzeug_id);
+        if (!$stmt) {
+            die("Prepare-Fehler: " . $conn->error);
+        }
+        $stmt->bind_param(
+            "ssidsi",
+            $marke,
+            $modell,
+            $baujahr,
+            $tankgroesse,
+            $bildname,
+            $fahrzeug_id
+        );
     } else {
         // Ohne Bildaktualisierung
-        $sql = "UPDATE Fahrzeuge SET marke = ?, modell = ?, tankgroesse = ? WHERE id = ?";
+        $sql = "
+            UPDATE fahrzeuge
+               SET marke       = ?,
+                   modell      = ?,
+                   baujahr     = ?,
+                   tankgroesse = ?
+             WHERE id = ?
+        ";
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("ssdi", $marke, $modell, $tankgroesse, $fahrzeug_id);
+        if (!$stmt) {
+            die("Prepare-Fehler: " . $conn->error);
+        }
+        $stmt->bind_param(
+            "ssidi",
+            $marke,
+            $modell,
+            $baujahr,
+            $tankgroesse,
+            $fahrzeug_id
+        );
     }
 
     // Führe die Abfrage aus und prüfe auf Fehler
-    if ($stmt->execute()) {
-        // Erfolgreich aktualisiert
-        $_SESSION['success_message'] = "Fahrzeugdaten erfolgreich aktualisiert.";
-    } else {
-        die("Fehler beim Aktualisieren der Fahrzeugdaten: " . $stmt->error);
+    if (!$stmt->execute()) {
+        die("Execute-Fehler: " . $stmt->error);
     }
+
+    $_SESSION['success_message'] = "Fahrzeugdaten erfolgreich aktualisiert.";
 
     $stmt->close();
     $conn->close();
