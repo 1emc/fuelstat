@@ -1,6 +1,13 @@
-
-
 </div> <!-- Ende des .container -->
+
+<!-- Footer -->
+<footer class="bg-light text-center text-muted py-3 mt-4">
+  <small>
+    &copy; <?php echo date('Y'); ?> Mario Caraggiu — 
+    <a href="/fuelstat/pages/impressum.php" class="text-decoration-none">Impressum</a> | 
+    <a href="/fuelstat/pages/datenschutz.php" class="text-decoration-none">Datenschutz</a>
+  </small>
+</footer>
 
 <!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>

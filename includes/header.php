@@ -2,10 +2,6 @@
 <html lang="de" class="light-style layout-menu-fixed layout-compact" dir="ltr">
 <head>
     <meta charset="utf-8" />
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0" />
-
     <title>Fuelstat - Die Tank-Statistik</title>
 
     <meta name="description" content="" />
@@ -15,8 +11,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
 	<meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="apple-touch-icon" href="/fuelstat/images/icon-192x192.png">
-	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <link rel="apple-touch-icon" href="/fuelstat/images/new-icon-512x512.png">
+	<link rel="icon" type="image/x-icon" href="/fuelstat/images/new-icon.ico">
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+
 
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -31,7 +29,7 @@
 <body>
 
 <!-- Navigation Menu -->
-<nav class="navbar navbar-expand-lg navbar-light bg-light">
+<nav class="navbar sticky-top navbar-expand-lg navbar-light bg-light">
     <div class="container-fluid">
         <a class="navbar-brand" href="/fuelstat/">
             <i class="fas fa-gas-pump"></i> Fuelstat

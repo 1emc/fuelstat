@@ -2,10 +2,14 @@
 
 /* Body Background Color */
 body {
-  min-height: calc(100% + env(safe-area-inset-top));
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-  background-color: var(--bs-body-bg);
-}
+   min-height: calc(100% + env(safe-area-inset-top));
+   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+   background-color: var(--bs-body-bg);
+ }
+ 
+ #offcanvas {
+   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+ }
 
 /* Hover-Effekt für Karten */
 .card:hover {
@@ -25,18 +29,19 @@ body {
     object-fit: cover;
 }
 
-/* Nur horizontales Scrollen erlauben, vertikales Überziehen unterbinden */
-#fahrzeugTabs {
-  overflow-x: auto !important;
-  overflow-y: hidden !important;
-  -webkit-overflow-scrolling: touch;    /* flüssiges Scrollen auf iOS */
-  overscroll-behavior-y: contain;       /* kein Vertikal-„Pull“ mehr */
+/* Füge oberhalb der Navbar-Padding für die Dynamic Island hinzu */
+.navbar.sticky-top,
+.navbar.fixed-top {
+  /* Fallback für ältere iOS */
+  padding-top: constant(safe-area-inset-top);
+  /* Standard für moderne Browser */
+  padding-top: env(safe-area-inset-top);
+  /* Gesamthöhe anpassen: 56px (Standard-Navbar-Höhe) + Safe-Area */
+  height: calc(56px + env(safe-area-inset-top));
+  /* Sicherstellen, dass der Content nicht darunter verschwindet */
+  z-index: 1020;
 }
 
-/* Optional: Scrollbar verstecken für ein noch cleaneres mobile UI */
-#fahrzeugTabs::-webkit-scrollbar {
-  display: none;
-}
 
 
 /* Weitere Anpassungen nach Bedarf */

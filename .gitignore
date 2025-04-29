@@ -36,4 +36,7 @@ $RECYCLE.BIN/
 # Ignore Images
 images/
 
+# Ignore .old-Files
+*.old
+
 # End of https://www.toptal.com/developers/gitignore/api/windows

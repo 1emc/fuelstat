@@ -23,11 +23,19 @@ $fahrleistung = berechneFahrleistung($fahrzeug_id, $initial_tachostand);
             <!-- Fahrzeugdetails -->
             <h2><?php echo htmlspecialchars($fahrzeug['marke'] . ' ' . $fahrzeug['modell']); ?></h2>
             <p><strong>Tachostand:</strong>
-				<?php 
-					echo ($aktueller_tachostand !== null) ? number_format($aktueller_tachostand, 0, ',', '.') : 'Keine Daten'; 
+				<?php
+					echo $aktueller_tachostand !== null
+					  ? number_format($aktueller_tachostand, 0, ',', '.') . ' km'
+					  : 'Keine Daten';
 				?>
 			</p>
-            <p><strong>Fahrleistung:</strong> <?php echo ($fahrleistung !== null) ? number_format($fahrleistung, 0, ',', '.') : 'Keine Daten'; ?> km</p>
+            <p><strong>Fahrleistung:</strong>
+				<?php
+					echo $fahrleistung !== null
+					  ? number_format($fahrleistung, 0, ',', '.') . ' km'
+					  : 'Keine Daten';
+				?>
+			</p>
             
             <!-- Kraftstoffverbrauch -->
             <h3>Kraftstoffverbrauch</h3>
@@ -67,8 +75,21 @@ $fahrleistung = berechneFahrleistung($fahrzeug_id, $initial_tachostand);
 			?></p>
         </div>
     </div>
-    <!-- Bearbeiten-Button -->
-    <a href="fahrzeug_bearbeiten.php?id=<?php echo $fahrzeug_id; ?>" class="btn btn-primary mt-3"><i class="fas fa-edit"></i> Bearbeiten</a>
+    <!-- Bearbeiten- und Löschen-Buttons -->
+	<div class="d-flex gap-2 mt-3">
+		<a href="fahrzeug_bearbeiten.php?id=<?php echo $fahrzeug_id; ?>" class="btn btn-primary">
+			<i class="fas fa-edit"></i> Bearbeiten
+		</a>
+
+		<form method="post" action="fahrzeug_loeschen.php" onsubmit="return confirm('Möchtest du dieses Fahrzeug wirklich löschen? Alle zugehörigen Einträge werden ebenfalls entfernt!');">
+			<input type="hidden" name="fahrzeug_id" value="<?php echo $fahrzeug_id; ?>">
+			<button type="submit" class="btn btn-danger">
+				<i class="fas fa-trash-alt"></i> Löschen
+			</button>
+		</form>
+	</div>
+
+	
 </div>
 
 

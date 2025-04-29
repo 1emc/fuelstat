@@ -1,5 +1,11 @@
 <?php include 'includes/db_connect.php'; ?>
 <?php include 'includes/header.php'; ?>
+<?php
+if (isset($_SESSION['success_message'])) {
+    echo '<div class="alert alert-success mt-4 text-center">' . htmlspecialchars($_SESSION['success_message']) . '</div>';
+    unset($_SESSION['success_message']);
+}
+?>
 
 <?php
 $benutzer_id = 1; // Temporär, bis ein Login-System existiert
