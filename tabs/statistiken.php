@@ -41,8 +41,8 @@ if ($kostenProMonatFormatted) {
     $teuersterKey = '-';
 }
 
-$besterVerbrauch     = !empty($verbrauchProMonatFormatted) ? max($verbrauchProMonatFormatted)  : null;
-$schlechtesterVerbrauch = !empty($verbrauchProMonatFormatted) ? min($verbrauchProMonatFormatted)  : null;
+$besterVerbrauch     = !empty($verbrauchProMonatFormatted) ? min($verbrauchProMonatFormatted)  : null;
+$schlechtesterVerbrauch = !empty($verbrauchProMonatFormatted) ? max($verbrauchProMonatFormatted)  : null;
 $teuersterMonatWert  = !empty($kostenProMonatFormatted)    ? max($kostenProMonatFormatted)     : null;
 ?>
 
