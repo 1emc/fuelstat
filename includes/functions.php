@@ -101,12 +101,29 @@ function berechneAktuellenVerbrauch(int $fid): ?float
 function getAktuellenTachostand(int $fid): ?int
 {
     global $conn;
-    $st = $conn->prepare("SELECT MAX(tachostand) AS t FROM eintraege WHERE fahrzeug_id=?");
+
+    // 1) Höchsten Tachostand aus den Einträgen lesen
+    $st = $conn->prepare(
+        'SELECT MAX(tachostand) AS t FROM eintraege WHERE fahrzeug_id = ?'
+    );
     $st->bind_param('i', $fid);
     $st->execute();
-    $t = $st->get_result()->fetch_assoc()['t'] ?? null;
+    $tachostand = $st->get_result()->fetch_assoc()['t'] ?? null;
     $st->close();
-    return $t;
+
+    // 2) Fallback auf den initialen Tachostand des Fahrzeugs
+    if ($tachostand === null) {
+        $st = $conn->prepare(
+            'SELECT tachostand FROM fahrzeuge WHERE id = ? LIMIT 1'
+        );
+        $st->bind_param('i', $fid);
+        $st->execute();
+        $tachostand = $st->get_result()->fetch_assoc()['tachostand'] ?? null;
+        $st->close();
+    }
+
+    // Immer als int zurückgeben, wenn vorhanden
+    return $tachostand !== null ? (int)$tachostand : null;
 }
 
 function berechneFahrleistung(int $fid, int $initial): ?int

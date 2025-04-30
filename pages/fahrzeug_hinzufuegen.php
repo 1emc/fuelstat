@@ -54,6 +54,19 @@ include '../includes/header.php';
                    class="form-control"
                    placeholder="z. B. 55">
         </div>
+		
+		<!-- Initialer Tachostand -->
+		<div class="mb-3">
+			<label for="tachostand_init" class="form-label">Tachostand bei Übernahme (km)</label>
+			<input type="number"
+				   id="tachostand_init"
+				   name="tachostand"
+				   class="form-control"
+				   min="0"
+				   step="1"
+				   placeholder="z. B. 125 000"
+				   required>
+		</div>
 
         <!-- Bild -->
         <div class="mb-3">

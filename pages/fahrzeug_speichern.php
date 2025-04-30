@@ -13,14 +13,16 @@ include '../includes/functions.php';   // falls du hier später gemeinsame Helfe
 /* ------------------------------------------------------------------
    1)  Formulareingaben auslesen & validieren
    ------------------------------------------------------------------ */
-$benutzer_id  = $_SESSION['user_id'] ?? 1;             // TODO: später Login-ID benutzen
-$marke        = trim($_POST['marke']  ?? '');
-$modell       = trim($_POST['modell'] ?? '');
-$baujahr      = isset($_POST['baujahr'])      ? intval($_POST['baujahr'])     : null;
+$benutzer_id = 1;                                   // TODO: später $_SESSION['user_id']
+$marke        = trim($_POST['marke']);
+$modell       = trim($_POST['modell']);
+$baujahr      = isset($_POST['baujahr'])      ? intval($_POST['baujahr'])      : null;
 $tankgroesse  = isset($_POST['tankgroesse'])  ? floatval($_POST['tankgroesse']) : null;
+$tachostand   = isset($_POST['tachostand'])   ? intval($_POST['tachostand'])   : null;
 
-if ($marke === '' || $modell === '') {
-    die('Marke und Modell sind erforderlich.');
+// Minimal-Validierung
+if ($marke === '' || $modell === '' || $tachostand === null) {
+    die('Marke, Modell und Tachostand sind Pflichtfelder.');
 }
 
 /* ------------------------------------------------------------------
@@ -84,34 +86,29 @@ if ($bildname === null) {
    3)  Datensatz anlegen
    ------------------------------------------------------------------ */
 $sql = "
-    INSERT INTO fahrzeuge 
-        (benutzer_id, marke, modell, baujahr, tankgroesse, bild)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO fahrzeuge
+        (benutzer_id, marke, modell, baujahr, tankgroesse, tachostand, bild)
+    VALUES
+        (?,            ?,     ?,      ?,       ?,           ?,          ?)
 ";
 $stmt = $conn->prepare($sql);
-if (!$stmt) die('Prepare-Fehler: ' . $conn->error);
+if (!$stmt) { die('Prepare-Fehler: ' . $conn->error); }
 
 $stmt->bind_param(
-    'issids',
+    'issidis',
     $benutzer_id,
     $marke,
     $modell,
-    $baujahr,        // darf null sein
-    $tankgroesse,    // darf null sein
-    $bildname        // darf null sein
+    $baujahr,
+    $tankgroesse,
+    $tachostand,
+    $bildname            // kann null sein, wird korrekt als NULL gespeichert
 );
 
-if (!$stmt->execute()) {
-    die('Execute-Fehler: ' . $stmt->error);
+if ($stmt->execute()) {
+    $_SESSION['success_message'] = 'Fahrzeug erfolgreich angelegt.';
+    header('Location: ../index.php');
+    exit();
 }
-
-/* ------------------------------------------------------------------
-   4)  Fertig – weiterleiten
-   ------------------------------------------------------------------ */
-$newId = $stmt->insert_id;
-$stmt->close();
-$conn->close();
-
-header("Location: fahrzeug_detail.php?id=" . $newId);
-exit();
+die('Fehler: ' . $stmt->error);
 ?>
