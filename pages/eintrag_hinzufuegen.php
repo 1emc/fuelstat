@@ -45,7 +45,7 @@ $stmt->close();
 
 <div class="container mt-5">
     <h2>Neuen Eintrag hinzufügen</h2>
-    <form method="post" action="eintrag_speichern.php">
+    <form method="post" action="eintrag_speichern.php" class="mt-4">
         <input type="hidden" name="fahrzeug_id" value="<?php echo $fahrzeug_id; ?>">
 
         <!-- Typ-Auswahl -->

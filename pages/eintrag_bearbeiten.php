@@ -31,7 +31,7 @@ $stmt->close();
         <input type="hidden" name="fahrzeug_id" value="<?php echo $fahrzeug_id; ?>">
         <!-- Kategorie (readonly) -->
         <div class="mb-3">
-            <label class="form-label">Kategorie</label>
+            <label for="entryType" class="form-label">Eintragstyp</label>
             <input type="text" class="form-control" name="kategorie" value="<?php echo htmlspecialchars($eintrag['kategorie']); ?>" readonly>
         </div>
 
@@ -51,21 +51,71 @@ $stmt->close();
                 <label class="form-label">Standort</label>
                 <input type="text" class="form-control" name="standort" value="<?php echo htmlspecialchars($eintrag['standort']); ?>">
             </div>
-            <div class="mb-3">
-                <label class="form-label">Menge (Liter)</label>
-                <input type="number" step="0.01" class="form-control" name="menge" value="<?php echo $eintrag['menge']; ?>" required>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Kosten (€)</label>
-                <input type="number" step="0.01" class="form-control" name="kosten" value="<?php echo $eintrag['kosten']; ?>" required>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Preis pro Einheit (€)</label>
-                <input type="number" step="0.001" class="form-control" name="preis_pro_einheit" value="<?php echo $eintrag['preis_pro_einheit']; ?>" required>
-            </div>
+			<!-- Menge (Liter) -->
+			<div class="mb-3">
+			  <label for="menge" class="form-label">Menge (Liter)</label>
+			  <div class="input-group">
+				  <input type="number"
+                         value="<?php echo $eintrag['menge']; ?>"
+						 inputmode="decimal"
+						 id="menge"
+						 name="menge"
+						 class="form-control"
+						 min="0" step="0.01">
+				  <button type="button"
+						  class="btn btn-outline-success"
+						  id="btnUseMenge"
+						  title="Wert übernehmen">
+					  <i class="fas fa-circle-check"></i>
+				  </button>
+			  </div>
+			</div>
+
+			<!-- Preis pro Liter (€) -->
+			<div class="mb-3">
+			  <label for="preis_pro_einheit" class="form-label">Preis pro Liter (€)</label>
+			  <div class="input-group">
+				  <input type="number"
+                         value="<?php echo $eintrag['preis_pro_einheit']; ?>"
+						 inputmode="decimal"
+						 id="preis_pro_einheit"
+						 name="preis_pro_einheit"
+						 class="form-control"
+						 min="0" step="0.001">
+				  <button type="button"
+						  class="btn btn-outline-success"
+						  id="btnUsePreis"
+						  title="Wert übernehmen">
+					  <i class="fas fa-circle-check"></i>
+				  </button>
+			  </div>
+			</div>
+
+			<!-- Gesamtpreis (€) -->
+			<div class="mb-3">
+			  <label for="kosten" class="form-label">Gesamtpreis (€)</label>
+			  <div class="input-group">
+				  <input type="number"
+                         value="<?php echo $eintrag['kosten']; ?>"
+						 inputmode="decimal"
+						 id="kosten"
+						 name="kosten"
+						 class="form-control"
+						 min="0" step="0.01">
+				  <button type="button"
+						  class="btn btn-outline-success"
+						  id="btnUseKosten"
+						  title="Wert übernehmen">
+					  <i class="fas fa-circle-check"></i>
+				  </button>
+			  </div>
             <div class="form-check mb-3">
                 <input type="checkbox" class="form-check-input" name="vollgetankt" value="1" <?php echo $eintrag['vollgetankt'] ? 'checked' : ''; ?>>
                 <label class="form-check-label">Vollgetankt</label>
+            </div>
+            <div class="mb-3 form-check">
+                <input type="checkbox" id="skip_previous" name="skip_previous" class="form-check-input" value="1">
+                <label for="skip_previous" class="form-check-label">Vorherige Tankfüllungen ignorieren</label>
             </div>
         <?php elseif ($eintrag['kategorie'] === 'Andere Ausgabe'): ?>
             <!-- Andere Ausgabe-Felder -->
@@ -114,5 +164,86 @@ $stmt->close();
         <button type="submit" class="btn btn-danger">Eintrag löschen</button>
     </form>
 </div>
+
+<script>
+// Helper – Zahl oder null
+const val = id => {
+    const n = parseFloat(document.getElementById(id).value.replace(',', '.'));
+    return isFinite(n) ? n : null;
+};
+
+// Zugriffskarte auf Felder + Buttons
+const F = {
+    menge  : {input:'menge',  btn:'btnUseMenge',  step:0.01,  hint:'Menge automatisch berechnet.'},
+    preis  : {input:'preis_pro_einheit', btn:'btnUsePreis', step:0.001, hint:'Preis pro Liter automatisch berechnet.'},
+    kosten : {input:'kosten', btn:'btnUseKosten', step:0.01,  hint:'Gesamtpreis automatisch berechnet.'}
+};
+
+// Vorschlag in placeholder setzen und Button aktivieren
+function suggest(key, value, hintText) {
+    const {input, btn} = F[key];
+    const inp = document.getElementById(input);
+    inp.placeholder = value;
+    document.getElementById(btn).disabled = false;
+    document.getElementById('calcHint').textContent = hintText;
+}
+
+// Alle Placeholder + Buttons zurücksetzen
+function resetSuggestions() {
+    Object.values(F).forEach(({input, btn}) => {
+        const inp = document.getElementById(input);
+        inp.placeholder = '';
+        document.getElementById(btn).disabled = true;   // Button sperren
+    });
+    document.getElementById('calcHint').textContent = '';
+}
+
+// Übernahme-Buttons
+Object.values(F).forEach(({input, btn}) => {
+    const button = document.getElementById(btn);
+    button.disabled = true;                               // initial gesperrt
+    button.addEventListener('click', () => {
+        const inp = document.getElementById(input);
+        if (inp.placeholder) {
+            inp.value = inp.placeholder;
+            resetSuggestions();                           // nach Übernahme alles zurücksetzen
+            recalc();                                     // prüfen, ob neue Ableitungen möglich sind
+        }
+    });
+});
+
+// Hauptberechnung
+function recalc() {
+    resetSuggestions();
+
+    const menge  = val('menge');
+    const preis  = val('preis_pro_einheit');
+    const kosten = val('kosten');
+
+    // 1) Menge + Preis → Kosten
+    if (menge !== null && preis !== null && kosten === null) {
+        suggest('kosten', (menge * preis).toFixed(2), F.kosten.hint);
+    }
+    // 2) Menge + Kosten → Preis
+    else if (menge !== null && kosten !== null && preis === null) {
+        suggest('preis', (kosten / menge).toFixed(3), F.preis.hint);
+    }
+    // 3) Preis + Kosten → Menge
+    else if (preis !== null && kosten !== null && menge === null) {
+        suggest('menge', (kosten / preis).toFixed(2), F.menge.hint);
+    }
+}
+
+// Listener auf Eingabefelder
+['menge','preis_pro_einheit','kosten'].forEach(id =>
+    document.getElementById(id).addEventListener('input', recalc)
+);
+
+// Heute-Button
+document.getElementById('btnHeute').addEventListener('click', () => {
+    const heute = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    document.getElementById('datum').value = heute;
+});
+</script>
 
 <?php include '../includes/footer.php'; ?>
