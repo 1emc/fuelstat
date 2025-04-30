@@ -7,7 +7,7 @@ include '../includes/header.php';
 <div class="container mt-5">
   <h1>Impressum</h1>
   <p><strong>Angaben gemäß § 5 TMG:</strong></p>
-  <p>Max Mustermann<br>
+  <p>Mario Caraggiu<br>
      Musterstraße 1<br>
      12345 Musterstadt</p>
 
@@ -19,7 +19,7 @@ include '../includes/header.php';
   <p>USt-IdNr. gemäß §27 a Umsatzsteuergesetz: DE123456789</p>
 
   <h2>Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV</h2>
-  <p>Max Mustermann<br>
+  <p>Mario Caraggiu<br>
      Musterstraße 1<br>
      12345 Musterstadt</p>
 

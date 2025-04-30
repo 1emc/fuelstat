@@ -2,14 +2,33 @@
 
 /* Body Background Color */
 body {
-   min-height: calc(100% + env(safe-area-inset-top));
-   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-   background-color: var(--bs-body-bg);
- }
- 
- #offcanvas {
-   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
- }
+    min-height: calc(100% + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    background-color: var(--bs-body-bg);
+    display: flex;
+    flex-direction: column;
+}
+
+/* Footer Styling */
+html, body {
+    height: 100%;
+    margin: 0;
+}
+
+.container {
+    flex: 1 0 auto;
+}
+
+footer {
+    flex-shrink: 0;
+    width: 100%;
+    position: relative;
+    bottom: 0;
+}
+
+#offcanvas {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
 
 /* Hover-Effekt für Karten */
 .card:hover {
@@ -32,16 +51,49 @@ body {
 /* Füge oberhalb der Navbar-Padding für die Dynamic Island hinzu */
 .navbar.sticky-top,
 .navbar.fixed-top {
-  /* Fallback für ältere iOS */
-  padding-top: constant(safe-area-inset-top);
-  /* Standard für moderne Browser */
-  padding-top: env(safe-area-inset-top);
-  /* Gesamthöhe anpassen: 56px (Standard-Navbar-Höhe) + Safe-Area */
-  height: calc(56px + env(safe-area-inset-top));
-  /* Sicherstellen, dass der Content nicht darunter verschwindet */
-  z-index: 1020;
-}
-
-
-
-/* Weitere Anpassungen nach Bedarf */
+    /* Fallback für ältere iOS */
+    padding-top: constant(safe-area-inset-top);
+    /* Standard für moderne Browser */
+    padding-top: env(safe-area-inset-top);
+    /* Gesamthöhe anpassen: 56px (Standard-Navbar-Höhe) + Safe-Area */
+    height: calc(56px + env(safe-area-inset-top));
+  }
+  
+  #offcanvas {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+ 
+ /* Hover-Effekt für Karten */
+ .card:hover {
+     box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+     transform: scale(1.02);
+     transition: 0.3s;
+ }
+ 
+ /* Anpassung der Symbole */
+ .card-body .fas {
+     color: #007bff; /* Primärfarbe für Icons */
+ }
+ 
+ /* Responsives Bild innerhalb der Karte */
+ .card-img-top {
+     height: 200px;
+     object-fit: cover;
+ }
+ 
+ /* Füge oberhalb der Navbar-Padding für die Dynamic Island hinzu */
+ .navbar.sticky-top,
+ .navbar.fixed-top {
+   /* Fallback für ältere iOS */
+   padding-top: constant(safe-area-inset-top);
+   /* Standard für moderne Browser */
+   padding-top: env(safe-area-inset-top);
+   /* Gesamthöhe anpassen: 56px (Standard-Navbar-Höhe) + Safe-Area */
+   height: calc(56px + env(safe-area-inset-top));
+   /* Sicherstellen, dass der Content nicht darunter verschwindet */
+   z-index: 1020;
+ }
+ 
+ 
+ 
+ /* Weitere Anpassungen nach Bedarf */

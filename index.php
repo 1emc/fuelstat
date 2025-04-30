@@ -127,4 +127,3 @@ $result = $stmt->get_result();
 // Bootstrap‑Tooltip initialisieren
 document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
 </script>
-sd
