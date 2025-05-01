@@ -115,12 +115,12 @@ Die Anwendung ist in mehrere Module unterteilt, um eine klare Struktur und Wartb
 1. **Repository klonen**:
 
    ```bash
-   git clone https://github.com/dein-benutzername/fahrzeug-tracker.git
+   git clone https://github.com/1emc/fuelstat.git
    ```
 
 2. **Dateien auf den Webserver kopieren**:
 
-   Kopiere alle Dateien in das Dokumentenverzeichnis deines Webservers, z. B. in einen Unterordner `fahrzeug-tracker`.
+   Kopiere alle Dateien in das Dokumentenverzeichnis deines Webservers, z. B. in einen Unterordner `fuelstat`.
 
 3. **Datenbank einrichten**:
 
