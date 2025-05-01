@@ -1,9 +1,19 @@
 <?php
+// Debug-Parameter
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+
 // tabs/allgemein.php
 
 // Fahrzeugdetails werden von fahrzeug_detail.php bereitgestellt (via $fahrzeug)
 $initial_tachostand = $fahrzeug['tachostand']; // Initialer Tachostand aus dem Fahrzeugobjekt
 $aktueller_tachostand = getAktuellenTachostand($fahrzeug_id);
+
+// Hole die letzten Einträge
+$letzterReifen = getLetzterEintrag($fahrzeug_id, 'Reifen');
+$letzteWartung = getLetzterEintrag($fahrzeug_id, 'Wartung');
+$letzterTUV = getLetzterEintrag($fahrzeug_id, 'TUV');
 
 // Berechne die Fahrleistung (aktuelle km - initiale km)
 $fahrleistung = berechneFahrleistung($fahrzeug_id, $initial_tachostand);
@@ -73,6 +83,90 @@ $fahrleistung = berechneFahrleistung($fahrzeug_id, $initial_tachostand);
 				  ? number_format($kostenTanken, 2, ',', '.') . ' €/km'
 				  : 'Keine Daten';
 			?></p>
+            
+            <!-- Wartungshistorie -->
+            <div class="d-flex justify-content-between align-items-center mt-4">
+                <h3>Wartungshistorie</h3>
+                <a href="eintrag_hinzufuegen.php?fahrzeug_id=<?php echo $fahrzeug_id; ?>&kategorie=Wartung" class="btn btn-outline-primary btn-sm">
+                    <i class="fas fa-plus"></i> Eintrag hinzufügen
+                </a>
+            </div>
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">
+                                <i class="fas <?php echo getCategoryIcon('Reifen'); ?> text-primary me-2"></i>
+                                <?php echo getKategorieName('Reifen'); ?>
+                            </h5>
+                            <?php if ($letzterReifen): ?>
+                                <p class="card-text">
+                                    <strong>Letzter Wechsel:</strong><br>
+                                    <span class="text-muted">
+                                        <?php echo date('d.m.Y', strtotime($letzterReifen['datum'])); ?><br>
+                                        bei <?php echo number_format($letzterReifen['tachostand'], 0, ',', '.'); ?> km
+                                    </span>
+                                </p>
+                                <?php if ($letzterReifen['beschreibung']): ?>
+                                    <p class="card-text"><small class="text-muted"><?php echo htmlspecialchars($letzterReifen['beschreibung']); ?></small></p>
+                                <?php endif; ?>
+                            <?php else: ?>
+                                <p class="card-text text-muted">Keine Reifenwechsel erfasst</p>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">
+                                <i class="fas <?php echo getCategoryIcon('Wartung'); ?> text-primary me-2"></i>
+                                Kundendienst
+                            </h5>
+                            <?php if ($letzteWartung): ?>
+                                <p class="card-text">
+                                    <strong>Letzte Wartung:</strong><br>
+                                    <span class="text-muted">
+                                        <?php echo date('d.m.Y', strtotime($letzteWartung['datum'])); ?><br>
+                                        bei <?php echo number_format($letzteWartung['tachostand'], 0, ',', '.'); ?> km
+                                    </span>
+                                </p>
+                                <?php if ($letzteWartung['beschreibung']): ?>
+                                    <p class="card-text"><small class="text-muted"><?php echo htmlspecialchars($letzteWartung['beschreibung']); ?></small></p>
+                                <?php endif; ?>
+                            <?php else: ?>
+                                <p class="card-text text-muted">Keine Wartungen erfasst</p>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">
+                                <i class="fas <?php echo getCategoryIcon('TUV'); ?> text-primary me-2"></i>
+                                <?php echo getKategorieName('TUV'); ?>
+                            </h5>
+                            <?php if ($letzterTUV): ?>
+                                <p class="card-text">
+                                    <strong>Letzter TÜV:</strong><br>
+                                    <span class="text-muted">
+                                        <?php echo date('d.m.Y', strtotime($letzterTUV['datum'])); ?><br>
+                                        bei <?php echo number_format($letzterTUV['tachostand'], 0, ',', '.'); ?> km
+                                    </span>
+                                </p>
+                                <?php if ($letzterTUV['beschreibung']): ?>
+                                    <p class="card-text"><small class="text-muted"><?php echo htmlspecialchars($letzterTUV['beschreibung']); ?></small></p>
+                                <?php endif; ?>
+                            <?php else: ?>
+                                <p class="card-text text-muted">Keine TÜV-Einträge erfasst</p>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
     <!-- Bearbeiten- und Löschen-Buttons -->

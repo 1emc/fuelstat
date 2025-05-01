@@ -387,3 +387,38 @@ function getPreviousVerbrauch($eintrag, $fahrzeug_id) {
 
     return $verbrauch;
 }
+
+/**
+ * Holt den letzten Eintrag einer bestimmten Kategorie für ein Fahrzeug
+ * 
+ * @param int $fahrzeug_id Die ID des Fahrzeugs
+ * @param string $kategorie Die Kategorie des Eintrags (z.B. 'Reifen', 'Wartung', 'TUV')
+ * @return array|null Der letzte Eintrag oder null, wenn keiner gefunden wurde
+ */
+function getLetzterEintrag($fahrzeug_id, $kategorie) {
+    global $conn;
+    $stmt = $conn->prepare("
+        SELECT datum, tachostand, kosten, beschreibung 
+        FROM eintraege 
+        WHERE fahrzeug_id = ? AND kategorie = ? 
+        ORDER BY datum DESC 
+        LIMIT 1
+    ");
+    $stmt->bind_param("is", $fahrzeug_id, $kategorie);
+    $stmt->execute();
+    return $stmt->get_result()->fetch_assoc();
+}
+
+/**
+ * Übersetzt interne Kategorienamen in benutzerfreundliche Namen mit Umlauten
+ * 
+ * @param string $kategorie Der interne Kategoriename
+ * @return string Der benutzerfreundliche Name mit Umlauten
+ */
+function getKategorieName($kategorie) {
+    $uebersetzung = [
+        'Tankfuellung' => 'Tankfüllung',
+        'TUV' => 'TÜV'
+    ];
+    return $uebersetzung[$kategorie] ?? $kategorie;
+}

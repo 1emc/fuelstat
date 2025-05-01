@@ -11,6 +11,9 @@ if (!isset($_GET['fahrzeug_id'])) {
 $fahrzeug_id = intval($_GET['fahrzeug_id']);
 $aktuellerTacho = getAktuellenTachostand($fahrzeug_id);   // kann null sein
 
+// Prüfe, ob eine Kategorie übergeben wurde
+$vorgegebeneKategorie = isset($_GET['kategorie']) ? $_GET['kategorie'] : null;
+
 $allCategories = [
     'Versicherung', 'Werkstatt', 'Inspektion', 'Steuer',
     'Reparatur', 'Reifen', 'TUV', 'Wartung', 'Dekor'
@@ -53,8 +56,8 @@ $stmt->close();
             <label for="entryType" class="form-label">Eintragstyp</label>
             <select id="entryType" name="eintragstyp" class="form-select" required>
                 <option value="" disabled>Bitte auswählen</option>
-                <option value="Tankfuellung" selected>Tankfuellung</option>
-                <option value="Andere Ausgabe">Andere Ausgabe</option>
+                <option value="Tankfuellung" <?php echo $vorgegebeneKategorie ? '' : 'selected'; ?>>Tankfuellung</option>
+                <option value="Andere Ausgabe" <?php echo $vorgegebeneKategorie ? 'selected' : ''; ?>>Andere Ausgabe</option>
                 <option value="Fahrt">Fahrt</option>
             </select>
         </div>
@@ -169,7 +172,7 @@ $stmt->close();
                 <select id="kategorie" name="kategorie" class="form-select">
                     <option value="">Bitte auswählen</option>
                     <?php foreach ($allCategories as $cat): ?>
-                        <option value="<?php echo $cat; ?>"><?php echo $cat; ?></option>
+                        <option value="<?php echo $cat; ?>" <?php echo ($vorgegebeneKategorie === $cat) ? 'selected' : ''; ?>><?php echo getKategorieName($cat); ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -216,6 +219,19 @@ const sections = {
     'Andere Ausgabe': document.getElementById('fields_other'),
     'Fahrt': document.getElementById('fields_trip')
 };
+
+// Wenn eine Kategorie vorgegeben ist, zeige direkt die "Andere Ausgabe" Felder
+<?php if ($vorgegebeneKategorie): ?>
+window.addEventListener('DOMContentLoaded', () => {
+    toggleFields();
+    document.getElementById('fields_common').style.display = 'block';
+    document.getElementById('fields_other').style.display = 'block';
+    enableSection(document.getElementById('fields_common'));
+    enableSection(document.getElementById('fields_other'));
+});
+<?php else: ?>
+window.addEventListener('DOMContentLoaded', () => toggleFields());
+<?php endif; ?>
 
 function toggleFields() {
     // Verstecke alle Sektionen
@@ -324,10 +340,7 @@ function recalc() {
     document.getElementById(id).addEventListener('input', recalc)
 );
 
-
-
 typeSelect.addEventListener('change', toggleFields);
-window.addEventListener('DOMContentLoaded', () => toggleFields());
 </script>
 
 <?php include '../includes/footer.php'; ?>

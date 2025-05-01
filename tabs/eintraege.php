@@ -133,7 +133,7 @@ $farben = [
                             </div>
                             <div class="flex-grow-1">
                                 <div class="d-flex justify-content-between">
-                                    <h6 class="mb-1"><?= htmlspecialchars($e['kategorie']) ?></h6>
+                                    <h6 class="mb-1"><?= getKategorieName(htmlspecialchars($e['kategorie'])) ?></h6>
                                 </div>
                                 <small class="text-muted">
                                     <?= number_format($e['tachostand'],0,',','.') ?> km<?= $e['standort']? ' · '.htmlspecialchars($e['standort']):'' ?>
