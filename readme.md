@@ -25,6 +25,11 @@ Willkommen zum **Fahrzeug-Tracker-Projekt**! Diese Webanwendung ermöglicht es B
 
 - **Allgemeine Informationen**: Anzeige von Bild, Tachostand und Fahrleistung.
 - **Bearbeitungsfunktion**: Über einen Stift-Button können Fahrzeugdetails bearbeitet werden.
+- **Wartungshistorie**: Übersicht der letzten Einträge für:
+  - Reifenwechsel
+  - Kundendienst
+  - TÜV
+  - Mit direkter Möglichkeit, neue Einträge hinzuzufügen
 - **Kraftstoffverbrauch**:
   - **Gesamtverbrauch**: Durchschnittlicher Verbrauch über die gesamte Fahrzeugnutzung.
   - **Aktueller Verbrauch**: Verbrauch basierend auf den neuesten Daten, mit Tendenz (steigend, sinkend, gleichbleibend).
@@ -41,7 +46,18 @@ Willkommen zum **Fahrzeug-Tracker-Projekt**! Diese Webanwendung ermöglicht es B
   - Über ein "+" Symbol können neue Ausgaben hinzugefügt werden.
   - Bei Tankfüllungen werden spezifische Daten abgefragt, z. B. Tachostand, Datum, Gesamtpreis, Preis pro Liter/kWh, Tankmenge und ob vollgetankt wurde.
 - **Kategorien**:
-  - **Tankfüllung**, **Versicherung**, **Werkstatt**, **Inspektion**, **Steuer**, **Reparatur**, **Reifen**, **TÜV**, **Wartung**, **Dekor**.
+  - **Tankfüllung** (intern: Tankfuellung)
+  - **Versicherung**
+  - **Werkstatt**
+  - **Inspektion**
+  - **Steuer**
+  - **Reparatur**
+  - **Reifen**
+  - **TÜV** (intern: TUV)
+  - **Wartung**
+  - **Dekor**
+  - **Verbrauch**
+  - *Hinweis: Kategorienamen werden intern ohne Umlaute gespeichert, für den Benutzer aber mit Umlauten angezeigt*
 
 ### 4. Statistiken (Reiter 3)
 
