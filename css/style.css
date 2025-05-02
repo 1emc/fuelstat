@@ -30,11 +30,14 @@ footer {
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
-/* Hover-Effekt für Karten */
+/* Karten-Animation deaktivieren */
+.card {
+    transition: scale(1) !important;
+}
+
 .card:hover {
-    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-    transform: scale(1.02);
-    transition: 0.3s;
+    transform: none !important;
+    /* box-shadow: var(--bs-card-box-shadow, 0 .125rem .25rem rgba(0,0,0,.075)) !important; */
 }
 
 /* Anpassung der Symbole */
@@ -57,43 +60,40 @@ footer {
     padding-top: env(safe-area-inset-top);
     /* Gesamthöhe anpassen: 56px (Standard-Navbar-Höhe) + Safe-Area */
     height: calc(56px + env(safe-area-inset-top));
+    /* Sicherstellen, dass der Content nicht darunter verschwindet */
+    z-index: 1020;
+}
+
+/* Weitere Anpassungen nach Bedarf */
+
+@media (max-width: 991.98px) {
+  .navbar-collapse {
+    background: #fff !important;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+    border-radius: 0 0 18px 18px;
+    margin-top: 8px;
+    padding: 12px 0 12px 0;
+    z-index: 2000;
   }
-  
-  #offcanvas {
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  .navbar-nav {
+    margin-bottom: 8px;
   }
- 
- /* Hover-Effekt für Karten */
- .card:hover {
-     box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-     transform: scale(1.02);
-     transition: 0.3s;
- }
- 
- /* Anpassung der Symbole */
- .card-body .fas {
-     color: #007bff; /* Primärfarbe für Icons */
- }
- 
- /* Responsives Bild innerhalb der Karte */
- .card-img-top {
-     height: 200px;
-     object-fit: cover;
- }
- 
- /* Füge oberhalb der Navbar-Padding für die Dynamic Island hinzu */
- .navbar.sticky-top,
- .navbar.fixed-top {
-   /* Fallback für ältere iOS */
-   padding-top: constant(safe-area-inset-top);
-   /* Standard für moderne Browser */
-   padding-top: env(safe-area-inset-top);
-   /* Gesamthöhe anpassen: 56px (Standard-Navbar-Höhe) + Safe-Area */
-   height: calc(56px + env(safe-area-inset-top));
-   /* Sicherstellen, dass der Content nicht darunter verschwindet */
-   z-index: 1020;
- }
- 
- 
- 
- /* Weitere Anpassungen nach Bedarf */
+  .dropdown-menu {
+    background: #f8f9fa !important;
+    border-radius: 12px;
+    margin-bottom: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.10);
+  }
+  .navbar-nav .nav-item {
+    margin-bottom: 6px;
+  }
+  .navbar-nav .nav-link {
+    padding: 10px 18px;
+    border-radius: 8px;
+  }
+}
+
+.navbar-toggler {
+  border: 2px solid #007bff;
+  border-radius: 8px;
+}

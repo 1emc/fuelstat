@@ -11,7 +11,7 @@ if (isset($_SESSION['success_message'])) {
     unset($_SESSION['success_message']);
 }
 
-$benutzer_id = 1; // TODO: ersetzen, sobald Login-System steht
+$benutzer_id = $_SESSION['user_id']; // TODO: ersetzen, sobald Login-System steht
 
 $sql  = 'SELECT * FROM fahrzeuge WHERE benutzer_id = ?';
 $stmt = $conn->prepare($sql);

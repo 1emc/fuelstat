@@ -1,3 +1,48 @@
+<?php
+// Datenbankverbindung herstellen
+include 'db_connect.php';
+
+// Funktion zum Abrufen der Fahrzeuge eines Benutzers
+function getUserVehicles($user_id) {
+    global $conn;
+    $vehicles = array();
+    
+    $stmt = $conn->prepare("SELECT id, marke, modell FROM fahrzeuge WHERE benutzer_id = ?");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    while ($row = $result->fetch_assoc()) {
+        $vehicles[] = $row;
+    }
+    
+    return $vehicles;
+}
+
+if (isset($_SESSION['user_id'])) {
+    $sessionId = session_id();
+    $now = date('Y-m-d H:i:s');
+    // Prüfen, ob die Session noch gültig ist
+    $stmt = $conn->prepare("SELECT id FROM benutzer_sessions WHERE user_id = ? AND session_id = ?");
+    $stmt->bind_param("is", $_SESSION['user_id'], $sessionId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    if ($result->num_rows === 0) {
+        // Session ist nicht mehr gültig -> alles löschen und umleiten
+        $_SESSION = array();
+        if (isset($_COOKIE[session_name()])) {
+            setcookie(session_name(), '', time() - 3600, '/', '', true, true);
+        }
+        session_destroy();
+        header('Location: /fuelstat/pages/login.php');
+        exit;
+    }
+    // last_activity aktualisieren
+    $stmt = $conn->prepare("UPDATE benutzer_sessions SET last_activity = ? WHERE session_id = ?");
+    $stmt->bind_param("ss", $now, $sessionId);
+    $stmt->execute();
+}
+?>
 <!doctype html>
 <html lang="de" class="light-style layout-menu-fixed layout-compact" dir="ltr">
 <head>
@@ -38,14 +83,11 @@
             aria-controls="navbarNav" aria-expanded="false" aria-label="Navigation umschalten">
             <span class="navbar-toggler-icon"></span>
         </button>
-        <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
+        <div class="collapse navbar-collapse justify-content-end bg-light" id="navbarNav">
             <ul class="navbar-nav">
                 <!-- Menüelemente -->
                 <li class="nav-item">
                     <a class="nav-link" href="/fuelstat/">Home</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="/fuelstat/pages/fahrzeug_hinzufuegen.php">Fahrzeug hinzufügen</a>
                 </li>
                 <?php if (isset($_SESSION['user_id'])): ?>
                     <!-- Dropdown für Fahrzeuge -->
@@ -69,14 +111,39 @@
                             <li><a class="dropdown-item" href="/fuelstat/pages/fahrzeug_hinzufuegen.php">Fahrzeug hinzufügen</a></li>
                         </ul>
                     </li>
-                    <!-- Abmelden -->
-                    <li class="nav-item">
-                        <a class="nav-link" href="/fuelstat/pages/logout.php">Abmelden</a>
+                    <!-- Benutzereinstellungen -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="userSettingsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-user-cog"></i> Einstellungen
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userSettingsDropdown">
+                            <li>
+                                <a class="dropdown-item" href="/fuelstat/pages/einstellungen.php">
+                                    <i class="fas fa-user-edit me-2"></i> Profil bearbeiten
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/fuelstat/pages/passwort_aendern.php">
+                                    <i class="fas fa-key me-2"></i> Passwort ändern
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/fuelstat/pages/mfa_einrichten.php">
+                                    <i class="fas fa-shield-alt me-2"></i> 2FA einrichten
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item" href="/fuelstat/pages/logout.php">
+                                    <i class="fas fa-sign-out-alt me-2"></i> Abmelden
+                                </a>
+                            </li>
+                        </ul>
                     </li>
                 <?php else: ?>
                     <!-- Anmelden -->
                     <li class="nav-item">
-                        <a class="nav-link" href="#">Anmelden</a>
+                        <a class="nav-link" href="/fuelstat/pages/login.php">Anmelden</a>
                     </li>
                 <?php endif; ?>
             </ul>
