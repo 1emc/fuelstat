@@ -117,6 +117,27 @@ INSERT INTO `fahrzeuge` (`id`, `benutzer_id`, `marke`, `modell`, `baujahr`, `bil
 (10, 1, 'Renault', 'Clio', 1998, '6812a664118ba_6811f9f12354e_file_00000000983461f7b3434775ac0659ed.jpg', 0, 0, '42'),
 (13, 1, 'Volkswagen', 'Golf', 2012, '', 89000, 0, '55');
 
+-- --------------------------------------------------------
+
+--
+-- Tabellenstruktur für Tabelle `benutzer_sessions`
+--
+
+CREATE TABLE `benutzer_sessions` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `user_id` INT NOT NULL,
+  `session_id` VARCHAR(128) NOT NULL,
+  `user_agent` VARCHAR(255) NOT NULL,
+  `ip_address` VARCHAR(45) NOT NULL,
+  `login_time` DATETIME NOT NULL,
+  `last_activity` DATETIME NOT NULL,
+  UNIQUE KEY `session_id_UNIQUE` (`session_id`),
+  KEY `user_id_idx` (`user_id`),
+  CONSTRAINT `fk_benutzer_sessions_user`
+    FOREIGN KEY (`user_id`) REFERENCES `benutzer` (`id`)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 --
 -- Indizes der exportierten Tabellen
 --
