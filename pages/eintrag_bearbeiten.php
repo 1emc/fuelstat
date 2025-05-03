@@ -117,20 +117,6 @@ $stmt->close();
                 <input type="checkbox" id="skip_previous" name="skip_previous" class="form-check-input" value="1">
                 <label for="skip_previous" class="form-check-label">Vorherige Tankfüllungen ignorieren</label>
             </div>
-        <?php elseif ($eintrag['kategorie'] === 'Andere Ausgabe'): ?>
-            <!-- Andere Ausgabe-Felder -->
-            <div class="mb-3">
-                <label class="form-label">Kategorie</label>
-                <input type="text" class="form-control" value="<?php echo htmlspecialchars($eintrag['kategorie']); ?>" readonly>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Kosten (€)</label>
-                <input type="number" step="0.01" class="form-control" name="kosten" value="<?php echo $eintrag['kosten']; ?>" required>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Beschreibung</label>
-                <textarea class="form-control" name="beschreibung"><?php echo htmlspecialchars($eintrag['beschreibung']); ?></textarea>
-            </div>
         <?php elseif ($eintrag['kategorie'] === 'Fahrt'): ?>
             <!-- Fahrt-Felder -->
             <div class="mb-3">
@@ -148,6 +134,20 @@ $stmt->close();
             <div class="mb-3">
                 <label class="form-label">Gefahrene Kilometer</label>
                 <input type="number" step="0.1" class="form-control" name="gefahrene_km" value="<?php echo $eintrag['gefahrene_km']; ?>" required>
+            </div>
+        <?php else: ?>
+            <!-- Alle anderen Kategorien: Kosten und Beschreibung -->
+            <div class="mb-3">
+                <label class="form-label">Kategorie</label>
+                <input type="text" class="form-control" value="<?php echo htmlspecialchars($eintrag['kategorie']); ?>" readonly>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Kosten (€)</label>
+                <input type="number" step="0.01" class="form-control" name="kosten" value="<?php echo $eintrag['kosten']; ?>" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Beschreibung</label>
+                <textarea class="form-control" name="beschreibung"><?php echo htmlspecialchars($eintrag['beschreibung']); ?></textarea>
             </div>
         <?php endif; ?>
 

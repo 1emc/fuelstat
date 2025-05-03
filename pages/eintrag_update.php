@@ -38,16 +38,6 @@ switch ($kategorie) {
         $stmt->bind_param('sidddii', $datum, $tachostand, $menge, $kosten, $preis_pro_einheit, $vollgetankt, $eintrag_id);
         break;
 
-    case 'Andere Ausgabe':
-        $kosten       = isset($_POST['kosten']) ? floatval($_POST['kosten']) : null;
-        $beschreibung = trim($_POST['beschreibung'] ?? '');
-        
-        $sql = "UPDATE eintraege SET datum = ?, tachostand = ?, kosten = ?, beschreibung = ? WHERE id = ?";
-        $stmt = $conn->prepare($sql);
-        if (!$stmt) { die('Prepare-Fehler: ' . $conn->error); }
-        $stmt->bind_param('sidsi', $datum, $tachostand, $kosten, $beschreibung, $eintrag_id);
-        break;
-
     case 'Fahrt':
         $startort      = trim($_POST['startort'] ?? '');
         $zielort       = trim($_POST['zielort'] ?? '');
@@ -58,6 +48,26 @@ switch ($kategorie) {
         $stmt = $conn->prepare($sql);
         if (!$stmt) { die('Prepare-Fehler: ' . $conn->error); }
         $stmt->bind_param('sidssdi', $datum, $tachostand, $startort, $zielort, $zweck, $gefahrene_km, $eintrag_id);
+        break;
+
+    // Alle anderen Kategorien wie 'Andere Ausgabe' behandeln
+    case 'Andere Ausgabe':
+    case 'Versicherung':
+    case 'Steuer':
+    case 'Inspektion':
+    case 'Reparatur':
+    case 'Reifen':
+    case 'TUV':
+    case 'Wartung':
+    case 'Dekor':
+    case 'Verbrauch':
+        $kosten       = isset($_POST['kosten']) ? floatval($_POST['kosten']) : null;
+        $beschreibung = trim($_POST['beschreibung'] ?? '');
+        
+        $sql = "UPDATE eintraege SET datum = ?, tachostand = ?, kosten = ?, beschreibung = ? WHERE id = ?";
+        $stmt = $conn->prepare($sql);
+        if (!$stmt) { die('Prepare-Fehler: ' . $conn->error); }
+        $stmt->bind_param('sidsi', $datum, $tachostand, $kosten, $beschreibung, $eintrag_id);
         break;
 
     default:
