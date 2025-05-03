@@ -4,6 +4,16 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
+// Session-Cookie auf 7 Tage setzen (in Sekunden)
+session_set_cookie_params([
+    'lifetime' => 60 * 60 * 24 * 7, // 7 Tage
+    'path' => '/',
+    'domain' => '', // Standard: aktueller Host
+    'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on',
+    'httponly' => true,
+    'samesite' => 'Lax'
+]);
+
 // Session starten
 session_start();
 
