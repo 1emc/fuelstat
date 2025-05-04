@@ -7,7 +7,7 @@ function getUserVehicles($user_id) {
     global $conn;
     $vehicles = array();
     
-    $stmt = $conn->prepare("SELECT id, marke, modell FROM fahrzeuge WHERE benutzer_id = ?");
+    $stmt = $conn->prepare("SELECT id, marke, modell FROM fahrzeuge WHERE benutzer_id = ? ORDER BY sortierung ASC, id ASC");
     $stmt->bind_param("i", $user_id);
     $stmt->execute();
     $result = $stmt->get_result();

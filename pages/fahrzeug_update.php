@@ -42,9 +42,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if ($bild['error'] !== UPLOAD_ERR_OK) {
             die("Fehler beim Hochladen des Bildes.");
         }
-        // Dateigrößenbegrenzung (max. 2 MB)
-        if ($bild['size'] > 2 * 1024 * 1024) {
-            die("Maximale Dateigröße von 2 MB überschritten.");
+        // Dateigrößenbegrenzung (max. 20 MB)
+        if ($bild['size'] > 20 * 1024 * 1024) {
+            die("Maximale Dateigröße von 20 MB überschritten.");
         }
         // Überprüfe den Dateityp (nur Bilder erlauben)
         $erlaubte_typen = ['image/jpeg', 'image/png', 'image/gif'];

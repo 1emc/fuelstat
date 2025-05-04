@@ -96,4 +96,57 @@ $stmt->close();
     </form>
 </div>
 
+
+
+<!-- Fahrzeug-Reihenfolge ändern (Drag&Drop) -->
+<?php
+if (isset($_SESSION['user_id'])) {
+    $stmt = $conn->prepare("SELECT id, marke, modell FROM fahrzeuge WHERE benutzer_id = ? ORDER BY sortierung ASC, id ASC");
+    $stmt->bind_param("i", $_SESSION['user_id']);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $fahrzeuge = $result->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+    if (count($fahrzeuge) > 1):
+?>
+<div class="container mt-5">
+    <h4>Fahrzeug-Reihenfolge ändern</h4>
+    <ul id="fahrzeugSortList" class="list-group mb-3">
+        <?php foreach ($fahrzeuge as $fz): ?>
+            <li class="list-group-item d-flex align-items-center" data-id="<?= $fz['id'] ?>">
+                <span class="me-2"><i class="fas fa-arrows-alt"></i></span>
+                <?= htmlspecialchars($fz['marke'] . ' ' . $fz['modell']) ?>
+                <?php if ($fz['id'] == $fahrzeug_id): ?>
+                    <span class="badge bg-primary ms-auto">Bearbeitet</span>
+                <?php endif; ?>
+            </li>
+        <?php endforeach; ?>
+    </ul>
+    <button id="saveSortBtn" class="btn btn-success">Reihenfolge speichern</button>
+    <div id="sortFeedback" class="mt-2"></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script>
+const list = document.getElementById('fahrzeugSortList');
+const sortable = Sortable.create(list, {animation: 150});
+
+document.getElementById('saveSortBtn').onclick = function() {
+    const order = Array.from(list.children).map(li => li.getAttribute('data-id'));
+    fetch('../includes/fahrzeug_sortieren.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: order.map(id => 'order[]=' + encodeURIComponent(id)).join('&')
+    })
+    .then(r => r.text())
+    .then(txt => {
+        document.getElementById('sortFeedback').innerHTML = '<div class="alert alert-success">' + txt + '</div>';
+        setTimeout(() => location.reload(), 1000);
+    })
+    .catch(() => {
+        document.getElementById('sortFeedback').innerHTML = '<div class="alert alert-danger">Fehler beim Speichern!</div>';
+    });
+};
+</script>
+<?php endif; } ?>
+
 <?php include '../includes/footer.php'; ?>

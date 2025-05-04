@@ -17,7 +17,7 @@ if (isset($_SESSION['success_message'])) {
 
 $benutzer_id = $_SESSION['user_id']; // TODO: ersetzen, sobald Login-System steht
 
-$sql  = 'SELECT * FROM fahrzeuge WHERE benutzer_id = ?';
+$sql  = 'SELECT * FROM fahrzeuge WHERE benutzer_id = ? ORDER BY sortierung ASC, id ASC';
 $stmt = $conn->prepare($sql);
 $stmt->bind_param('i', $benutzer_id);
 $stmt->execute();
