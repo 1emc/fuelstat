@@ -14,7 +14,7 @@ $radius = intval($_GET['radius']);
 $type = $_GET['type'];
 
 // API-Key nur hier im Backend!
-$apikey = '7169ad93-5669-9fb0-47da-f146cbb835b6';
+$apikey = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx';
 
 $stations = getNearbyStationsTankerkoenig($lat, $lng, $radius, $type, $apikey);
 
