@@ -1,12 +1,9 @@
 <?php
-ini_set('display_errors', 1);          // Fehler direkt im Browser ausgeben
-ini_set('display_startup_errors', 1);  // auch Startup-Errors zeigen
-error_reporting(E_ALL);                // wirklich alle Fehlertypen melden
-
-// optional, wenn du MySQLi nutzt:
-mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 // pages/fahrzeug_speichern.php
-session_start();
+
+// Session-Handling
+include '../includes/session.php';
+// Andere Includes
 include '../includes/db_connect.php';
 include '../includes/functions.php';   // falls du hier später gemeinsame Helfer nutzt
 

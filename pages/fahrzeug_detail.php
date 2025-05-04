@@ -1,6 +1,8 @@
 <?php
 // pages/fahrzeug_detail.php
-session_start();
+// Session-Handling
+include '../includes/session.php';
+// Andere Includes
 include '../includes/db_connect.php';
 include '../includes/header.php';
 include '../includes/functions.php';

@@ -1,8 +1,8 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
-session_start();
+// pages/fahrzeug_update.php
+// Session-Handling
+include '../includes/session.php';
+// Andere Includes
 include '../includes/db_connect.php';
 include '../includes/functions.php';
 

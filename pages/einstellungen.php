@@ -4,8 +4,8 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-// Session starten
-session_start();
+// Session-Handling
+include '../includes/session.php';
 
 // Prüfen ob Benutzer eingeloggt ist
 if (!isset($_SESSION['user_id'])) {

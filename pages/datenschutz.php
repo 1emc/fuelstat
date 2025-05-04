@@ -1,6 +1,8 @@
 <?php
 // pages/datenschutz.php
-session_start();
+// Session-Handling
+include '../includes/session.php';
+// Header
 include '../includes/header.php';
 ?>
 

@@ -3,9 +3,10 @@
 ini_set('display_errors', 0);
 error_reporting(0);
 
-// Session starten und beenden
-session_start();
-include '../includes/db_connect.php'; // DB-Verbindung sicherstellen
+
+// Session-Handling
+include '../includes/session.php';
+include '../includes/db_connect.php';
 
 // CSRF-Token überprüfen, falls vorhanden
 if (isset($_POST['csrf_token']) && isset($_SESSION['csrf_token'])) {

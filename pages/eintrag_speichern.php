@@ -1,6 +1,8 @@
 <?php
 // pages/eintrag_speichern.php
-session_start();
+// Session-Handling
+include '../includes/session.php';
+// Andere Includes
 include '../includes/db_connect.php';
 
 // Daten aus dem Formular abrufen

@@ -1,6 +1,8 @@
 <?php
 // pages/eintrag_update.php
-session_start();
+// Session-Handling
+include '../includes/session.php';
+// Andere Includes
 include '../includes/db_connect.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {

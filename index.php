@@ -1,6 +1,10 @@
 <?php
 // index.php – Startseite
-session_start();
+
+// Session-Handling
+include 'includes/session.php';
+
+// Andere Includes
 include 'includes/db_connect.php';
 include 'includes/functions.php';
 include 'includes/header.php';

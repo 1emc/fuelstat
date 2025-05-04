@@ -1,6 +1,8 @@
 <?php
 // pages/eintrag_loeschen.php
-session_start();
+// Session-Handling
+include '../includes/session.php';
+// Andere Includes
 include '../includes/db_connect.php';
 
 // Nur POST erlauben

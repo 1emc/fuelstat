@@ -1,6 +1,8 @@
 <?php
 // pages/impressum.php
-session_start();
+// Session-Handling
+include '../includes/session.php';
+// Andere Includes
 include '../includes/header.php';
 ?>
 

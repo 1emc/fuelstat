@@ -1,11 +1,8 @@
 <?php
-// Debug-Einstellungen
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
+// pages/register.php
 
-// Session starten
-session_start();
+// Session-Handling
+include '../includes/session.php';
 
 // Output-Bufferung starten
 ob_start();
