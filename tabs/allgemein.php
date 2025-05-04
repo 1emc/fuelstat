@@ -49,7 +49,21 @@ $fahrleistung = berechneFahrleistung($fahrzeug_id, $initial_tachostand);
             
             <!-- Kraftstoffverbrauch -->
             <h3>Kraftstoffverbrauch</h3>
-            <p><strong>Art:</strong> <?php echo htmlspecialchars($fahrzeug['kraftstoff']); ?></p>
+            <p><strong>Kraftstoff:</strong> <?php
+                $kraftstoffTexte = [
+                    'diesel'   => 'Diesel',
+                    'e5'       => 'Benzin (E5)',
+                    'e10'      => 'Benzin (E10)',
+                    'lpg'      => 'Autogas (LPG)',
+                    'cng'      => 'Erdgas (CNG)',
+                    'electric' => 'Elektro',
+                    'hybrid'   => 'Hybrid',
+                    'hydrogen' => 'Wasserstoff',
+                    'other'    => 'Andere',
+                ];
+                $art = $fahrzeug['kraftstoff'] ?? '';
+                echo isset($kraftstoffTexte[$art]) ? $kraftstoffTexte[$art] : ucfirst($art);
+            ?></p>
             <p><strong>Gesamt:</strong>
 			<?php
 				$gesamt = berechneGesamtverbrauch($fahrzeug_id);

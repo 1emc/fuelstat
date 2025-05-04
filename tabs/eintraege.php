@@ -17,8 +17,8 @@ $yearStmt->close();
 
 // 2) Einträge abrufen
 $sql = $jahr
-    ? "SELECT * FROM eintraege WHERE fahrzeug_id = ? AND YEAR(datum) = ? ORDER BY datum DESC"
-    : "SELECT * FROM eintraege WHERE fahrzeug_id = ? ORDER BY datum DESC";
+    ? "SELECT * FROM eintraege WHERE fahrzeug_id = ? AND YEAR(datum) = ? ORDER BY datum DESC, tachostand DESC"
+    : "SELECT * FROM eintraege WHERE fahrzeug_id = ? ORDER BY datum DESC, tachostand DESC";
 $stmt = $conn->prepare($sql);
 $jahr ? $stmt->bind_param("ii", $fahrzeug_id, $jahr)
       : $stmt->bind_param("i",  $fahrzeug_id);
