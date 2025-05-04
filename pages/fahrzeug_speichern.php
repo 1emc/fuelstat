@@ -37,7 +37,7 @@ if (isset($_FILES['bild']) && $_FILES['bild']['error'] !== UPLOAD_ERR_NO_FILE) {
 
     // a) Basis-Checks
     if ($upload['error'] !== UPLOAD_ERR_OK)          die('Fehler beim Hochladen des Bildes.');
-    if ($upload['size']  > 2 * 1024 * 1024)          die('Maximale Dateigröße von 2 MB überschritten.');
+    if ($upload['size']  > 20 * 1024 * 1024)        die('Maximale Dateigröße von 20 MB überschritten.');
 
     $erlaubteTypen = ['image/jpeg', 'image/png', 'image/gif'];
     if (!in_array($upload['type'], $erlaubteTypen))  die('Nur JPEG, PNG oder GIF erlaubt.');
