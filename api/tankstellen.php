@@ -14,7 +14,18 @@ $radius = intval($_GET['radius']);
 $type = $_GET['type'];
 
 // API-Key nur hier im Backend!
-$apikey = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx';
+$keyfile = __DIR__ . '/key.key';
+if (!file_exists($keyfile)) {
+    http_response_code(500);
+    echo json_encode(['error' => 'API-Key-Datei fehlt: key.key'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+$apikey = trim(file_get_contents($keyfile));
+if (!$apikey) {
+    http_response_code(500);
+    echo json_encode(['error' => 'API-Key in key.key ist leer'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 
 $stations = getNearbyStationsTankerkoenig($lat, $lng, $radius, $type, $apikey);
 
