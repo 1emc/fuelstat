@@ -20,10 +20,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $modell      = trim($_POST['modell']);
     $baujahr     = isset($_POST['baujahr']) ? intval($_POST['baujahr']) : null;
     $tankgroesse = isset($_POST['tankgroesse']) ? floatval($_POST['tankgroesse']) : null;
+    $tachostand  = isset($_POST['tachostand']) ? intval($_POST['tachostand']) : null;
+    $kraftstoff  = isset($_POST['kraftstoff']) ? $_POST['kraftstoff'] : 'diesel';
 
     // Validierung der erforderlichen Felder
     if (empty($marke) || empty($modell)) {
         die("Marke und Modell sind erforderlich.");
+    }
+    if (!in_array($kraftstoff, ['diesel','e5','e10','lpg','cng','electric','hybrid','hydrogen','other'])) {
+        die('Ungültiger Kraftstofftyp.');
     }
 
     // Initialisiere die Variable für den Bildnamen
@@ -108,6 +113,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                    modell      = ?,
                    baujahr     = ?,
                    tankgroesse = ?,
+                   tachostand  = ?,
+                   kraftstoff  = ?,
                    bild        = ?
              WHERE id = ?
         ";
@@ -116,11 +123,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             die("Prepare-Fehler: " . $conn->error);
         }
         $stmt->bind_param(
-            "ssidsi",
+            "ssidsssi",
             $marke,
             $modell,
             $baujahr,
             $tankgroesse,
+            $tachostand,
+            $kraftstoff,
             $bildname,
             $fahrzeug_id
         );
@@ -131,7 +140,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                SET marke       = ?,
                    modell      = ?,
                    baujahr     = ?,
-                   tankgroesse = ?
+                   tankgroesse = ?,
+                   tachostand  = ?,
+                   kraftstoff  = ?
              WHERE id = ?
         ";
         $stmt = $conn->prepare($sql);
@@ -139,11 +150,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             die("Prepare-Fehler: " . $conn->error);
         }
         $stmt->bind_param(
-            "ssidi",
+            "ssidssi",
             $marke,
             $modell,
             $baujahr,
             $tankgroesse,
+            $tachostand,
+            $kraftstoff,
             $fahrzeug_id
         );
     }

@@ -49,6 +49,7 @@ $fahrleistung = berechneFahrleistung($fahrzeug_id, $initial_tachostand);
             
             <!-- Kraftstoffverbrauch -->
             <h3>Kraftstoffverbrauch</h3>
+            <p><strong>Art:</strong> <?php echo htmlspecialchars($fahrzeug['kraftstoff']); ?></p>
             <p><strong>Gesamt:</strong>
 			<?php
 				$gesamt = berechneGesamtverbrauch($fahrzeug_id);

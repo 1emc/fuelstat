@@ -11,6 +11,18 @@ if (!isset($_GET['fahrzeug_id'])) {
 $fahrzeug_id = intval($_GET['fahrzeug_id']);
 $aktuellerTacho = getAktuellenTachostand($fahrzeug_id);   // kann null sein
 
+// Kraftstofftyp des Fahrzeugs laden
+$fahrzeugKraftstoff = 'diesel';
+$stmt = $conn->prepare("SELECT kraftstoff FROM fahrzeuge WHERE id = ? LIMIT 1");
+$stmt->bind_param("i", $fahrzeug_id);
+$stmt->execute();
+$res = $stmt->get_result();
+if ($row = $res->fetch_assoc()) {
+    $fahrzeugKraftstoff = $row['kraftstoff'];
+    //echo "<script>alert('Kraftstoff des Fahrzeugs: " . $row['kraftstoff'] . "');</script>";
+}
+$stmt->close();
+
 // Prüfe, ob eine Kategorie übergeben wurde
 $vorgegebeneKategorie = isset($_GET['kategorie']) ? $_GET['kategorie'] : null;
 
@@ -88,15 +100,33 @@ $stmt->close();
         <!-- Tankfuellung -->
         <div id="fields_tank" style="display:none;">
             <div class="mb-3">
+                <label class="form-label">Kraftstoff</label>
+                <select name="kraftstoff" class="form-select" required>
+                    <option value="diesel"   <?php if($fahrzeugKraftstoff==='diesel')   echo 'selected'; ?>>Diesel</option>
+                    <option value="e5"      <?php if($fahrzeugKraftstoff==='e5')      echo 'selected'; ?>>Benzin (E5)</option>
+                    <option value="e10"     <?php if($fahrzeugKraftstoff==='e10')     echo 'selected'; ?>>Benzin (E10)</option>
+                    <option value="lpg"     <?php if($fahrzeugKraftstoff==='lpg')     echo 'selected'; ?>>Autogas (LPG)</option>
+                    <option value="cng"     <?php if($fahrzeugKraftstoff==='cng')     echo 'selected'; ?>>Erdgas (CNG)</option>
+                    <option value="electric"<?php if($fahrzeugKraftstoff==='electric')echo 'selected'; ?>>Elektro</option>
+                    <option value="hybrid"  <?php if($fahrzeugKraftstoff==='hybrid')  echo 'selected'; ?>>Hybrid</option>
+                    <option value="hydrogen"<?php if($fahrzeugKraftstoff==='hydrogen')echo 'selected'; ?>>Wasserstoff</option>
+                    <option value="other"   <?php if($fahrzeugKraftstoff==='other')   echo 'selected'; ?>>Andere</option>
+                </select>
+            </div>
+            <div class="mb-3">
                 <label for="standort" class="form-label">Standort</label>
-                <input type="text" list="stationen" placeholder="z. B. Aral München Nord" autocomplete="address-level2" autocapitalize="words" enterkeyhint="done" id="standort" name="standort" class="form-control">
-
-				<datalist id="stationen">
-				<?php foreach ($standortOptionen as $opt): ?>
-					<option value="<?= $opt ?>">
-				<?php endforeach; ?>
-				</datalist>
-				
+                <div class="input-group">
+                    <input type="text" list="stationen" placeholder="z. B. Aral München Nord" autocomplete="address-level2" autocapitalize="words" enterkeyhint="done" id="standort" name="standort" class="form-control">
+                    <button type="button" class="btn btn-outline-primary" id="btnTankstellenSuche" title="Tankstellen in der Nähe suchen">
+                        <i class="fas fa-map-marker-alt"></i>
+                    </button>
+                </div>
+                <datalist id="stationen">
+                <?php foreach ($standortOptionen as $opt): ?>
+                    <option value="<?= $opt ?>">
+                <?php endforeach; ?>
+                </datalist>
+                <div id="tankstellenVorschlaege" class="mt-2"></div>
             </div>
 			<!-- Menge (Liter) -->
 			<div class="mb-3">
@@ -220,6 +250,9 @@ const sections = {
     'Fahrt': document.getElementById('fields_trip')
 };
 
+// PHP-Variable für JS bereitstellen
+const fahrzeugKraftstoff = <?php echo json_encode($fahrzeugKraftstoff); ?>;
+
 // Wenn eine Kategorie vorgegeben ist, zeige direkt die "Andere Ausgabe" Felder
 <?php if ($vorgegebeneKategorie): ?>
 window.addEventListener('DOMContentLoaded', () => {
@@ -341,6 +374,246 @@ function recalc() {
 );
 
 typeSelect.addEventListener('change', toggleFields);
+
+// Tankstellen-Suche (nur bei Tankfuellung sichtbar)
+function toggleTankstellenButton() {
+    const show = typeSelect.value === 'Tankfuellung';
+    const btn = document.getElementById('btnTankstellenSuche');
+    const vorschlaege = document.getElementById('tankstellenVorschlaege');
+    if (btn) btn.style.display = show ? '' : 'none';
+    if (vorschlaege) vorschlaege.style.display = show ? '' : 'none';
+}
+typeSelect.addEventListener('change', toggleTankstellenButton);
+window.addEventListener('DOMContentLoaded', toggleTankstellenButton);
+
+// Hilfsfunktion: aktuellen Kraftstofftyp auslesen
+function getSelectedKraftstoff() {
+    const select = document.querySelector('select[name="kraftstoff"]');
+    return select ? select.value : fahrzeugKraftstoff;
+}
+
+// Hilfsfunktion: Erlaubte Typen für Preisabfrage
+function isPreisTyp(type) {
+    return ['e5', 'e10', 'diesel'].includes(type);
+}
+
+document.getElementById('btnTankstellenSuche').addEventListener('click', function() {
+    const vorschlaege = document.getElementById('tankstellenVorschlaege');
+    let type = getSelectedKraftstoff();
+    const showPrice = isPreisTyp(type);
+    if (!showPrice) type = 'all';
+    if (!navigator.geolocation) {
+        // Fallback: Manuelle PLZ/Ort-Eingabe mit Geocoding
+        const plz = prompt('Standortermittlung nicht möglich. Bitte geben Sie die Postleitzahl (PLZ) oder den Ort ein:');
+        if (!plz) return;
+        let type = getSelectedKraftstoff();
+        const showPrice = isPreisTyp(type);
+        if (!showPrice) type = 'all';
+        vorschlaege.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Standort wird gesucht...';
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=de&addressdetails=1&q=${encodeURIComponent(plz)}`)
+            .then(res => res.json())
+            .then(geo => {
+                if (!geo.length) {
+                    vorschlaege.innerHTML = `<div class="alert alert-warning">Keine Tankstellen gefunden.<br><small>PLZ/Ort: ${plz}</small></div>`;
+                    return;
+                }
+                const lat = geo[0].lat;
+                const lng = geo[0].lon;
+                const fetchUrl = `../api/tankstellen.php?lat=${lat}&lng=${lng}&radius=15&type=${type}`;
+                console.log('API-URL:', fetchUrl);
+                vorschlaege.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Tankstellen werden gesucht...';
+                fetch(fetchUrl)
+                    .then(response => {
+                        return response.text().then(txt => {
+                            if (!response.ok) throw {status: response.status, statusText: response.statusText, text: txt};
+                            return JSON.parse(txt);
+                        });
+                    })
+                    .then(data => {
+                        vorschlaege.innerHTML = '';
+                        if (data.stations && data.stations.length > 0) {
+                            let html = '';
+                            html += '<ul class="list-group">';
+                            data.stations.forEach(station => {
+                                const priceAvailable = showPrice && typeof station.price === 'number';
+                                const priceFixed = priceAvailable ? station.price.toFixed(3) : '';
+                                const brand  = station.brand ? station.brand + ' – ' : '';
+                                const place  = station.place ? ' (' + station.place + ')' : '';
+                                const name   = station.name;
+                                const entry  = (station.brand && station.brand.trim() === name.trim())
+                                    ? `${station.brand}${place}`
+                                    : `${station.brand ?? ''}${place} ${name}`.trim()
+                                        .replace(/'/g, "\\'"); // für onclick escapen
+                                html += `\n<li class=\"list-group-item list-group-item-action\"\n    style=\"cursor:pointer\"\n    onclick=\"document.getElementById('standort').value='${entry}';\n             ${priceAvailable ? `document.getElementById('preis_pro_einheit').value='${priceFixed}';` : ''}\n             setTimeout(()=>document.getElementById('tankstellenVorschlaege').innerHTML='',2000);\">\n    ${brand}${name} – ${priceAvailable ? priceFixed + ' €/L' : 'Preis n/a'}\n</li>`;
+                            });
+                            html += '</ul>';
+                            vorschlaege.innerHTML = html;
+                        } else {
+                            vorschlaege.innerHTML = `<div class="alert alert-warning">Keine Tankstellen gefunden.<br><small>PLZ/Ort: ${plz}</small></div>`;
+                        }
+                    })
+                    .catch(err => {
+                        let msg = 'Fehler bei der Tankstellenabfrage.';
+                        if (err.status) {
+                            msg += `<br><small>Status: ${err.status} ${err.statusText}</small>`;
+                        }
+                        if (err.text) {
+                            try {
+                                const errObj = JSON.parse(err.text);
+                                if (errObj.error) msg += `<br><small>API: ${errObj.error}</small>`;
+                            } catch (e) {
+                                msg += `<br><small>Antwort: ${err.text}</small>`;
+                            }
+                        }
+                        vorschlaege.innerHTML = `<div class='alert alert-danger'>${msg}</div>`;
+                    })
+                    .finally(() => {
+                        document.getElementById('btnTankstellenSuche').disabled = false;
+                        document.getElementById('btnTankstellenSuche').innerHTML = '<i class="fas fa-map-marker-alt"></i>';
+                    });
+            });
+    }
+    this.disabled = true;
+    this.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+    navigator.geolocation.getCurrentPosition(function(position) {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const radius = 5; // 5 km Umkreis
+        let type = getSelectedKraftstoff();
+        const showPrice = isPreisTyp(type);
+        if (!showPrice) type = 'all';
+
+        const fetchUrl = `../api/tankstellen.php?lat=${lat}&lng=${lng}&radius=5&type=${type}`;
+        console.log('API-URL:', fetchUrl);
+        fetch(fetchUrl)
+            .then(response => {
+                return response.text().then(txt => {
+                    if (!response.ok) throw {status: response.status, statusText: response.statusText, text: txt};
+                    return JSON.parse(txt);
+                });
+            })
+            .then(data => {
+                vorschlaege.innerHTML = '';
+                if (data.stations && data.stations.length > 0) {
+                    let html = '';
+                    html += '<ul class="list-group">';
+                    data.stations.forEach(station => {
+                        const priceAvailable = showPrice && typeof station.price === 'number';
+                        const priceFixed = priceAvailable ? station.price.toFixed(3) : '';
+                        const brand  = station.brand ? station.brand + ' – ' : '';
+                        const place  = station.place ? ' (' + station.place + ')' : '';
+                        const name   = station.name;
+                        const entry  = (station.brand && station.brand.trim() === name.trim())
+                            ? `${station.brand}${place}`
+                            : `${station.brand ?? ''}${place} ${name}`.trim()
+                                .replace(/'/g, "\\'"); // für onclick escapen
+                        html += `\n<li class=\"list-group-item list-group-item-action\"\n    style=\"cursor:pointer\"\n    onclick=\"document.getElementById('standort').value='${entry}';\n             ${priceAvailable ? `document.getElementById('preis_pro_einheit').value='${priceFixed}';` : ''}\n             setTimeout(()=>document.getElementById('tankstellenVorschlaege').innerHTML='',2000);\">\n    ${brand}${name} – ${priceAvailable ? priceFixed + ' €/L' : 'Preis n/a'}\n</li>`;
+                    });
+                    html += '</ul>';
+                    vorschlaege.innerHTML = html;
+                } else {
+                    vorschlaege.innerHTML = `<div class=\"alert alert-warning\">Keine Tankstellen gefunden.<br><small>Koordinaten: Lat ${lat}, Lng ${lng}</small></div>`;
+                }
+            })
+            .catch(err => {
+                let msg = 'Fehler bei der Tankstellenabfrage.';
+                if (err.status) {
+                    msg += `<br><small>Status: ${err.status} ${err.statusText}</small>`;
+                }
+                if (err.text) {
+                    try {
+                        const errObj = JSON.parse(err.text);
+                        if (errObj.error) msg += `<br><small>API: ${errObj.error}</small>`;
+                    } catch (e) {
+                        msg += `<br><small>Antwort: ${err.text}</small>`;
+                    }
+                }
+                vorschlaege.innerHTML = `<div class='alert alert-danger'>${msg}</div>`;
+            })
+            .finally(() => {
+                document.getElementById('btnTankstellenSuche').disabled = false;
+                document.getElementById('btnTankstellenSuche').innerHTML = '<i class="fas fa-map-marker-alt"></i>';
+            });
+    }, function() {
+        // Fallback: Manuelle PLZ/Ort-Eingabe mit Geocoding
+        const plz = prompt('Standort konnte nicht ermittelt werden. Bitte geben Sie die Postleitzahl (PLZ) oder den Ort ein:');
+        if (!plz) {
+            document.getElementById('btnTankstellenSuche').disabled = false;
+            document.getElementById('btnTankstellenSuche').innerHTML = '<i class="fas fa-map-marker-alt"></i>';
+            return;
+        }
+        let type = getSelectedKraftstoff();
+        const showPrice = isPreisTyp(type);
+        if (!showPrice) type = 'all';
+        const vorschlaege = document.getElementById('tankstellenVorschlaege');
+        vorschlaege.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Standort wird gesucht...';
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=de&addressdetails=1&q=${encodeURIComponent(plz)}`)
+            .then(res => res.json())
+            .then(geo => {
+                if (!geo.length) {
+                    vorschlaege.innerHTML = `<div class="alert alert-warning">Keine Tankstellen gefunden.<br><small>PLZ/Ort: ${plz}</small></div>`;
+                    document.getElementById('btnTankstellenSuche').disabled = false;
+                    document.getElementById('btnTankstellenSuche').innerHTML = '<i class="fas fa-map-marker-alt"></i>';
+                    return;
+                }
+                const lat = geo[0].lat;
+                const lng = geo[0].lon;
+                const fetchUrl = `../api/tankstellen.php?lat=${lat}&lng=${lng}&radius=15&type=${type}`;
+                console.log('API-URL:', fetchUrl);
+                vorschlaege.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Tankstellen werden gesucht...';
+                fetch(fetchUrl)
+                    .then(response => {
+                        return response.text().then(txt => {
+                            if (!response.ok) throw {status: response.status, statusText: response.statusText, text: txt};
+                            return JSON.parse(txt);
+                        });
+                    })
+                    .then(data => {
+                        vorschlaege.innerHTML = '';
+                        if (data.stations && data.stations.length > 0) {
+                            let html = '';
+                            html += '<ul class="list-group">';
+                            data.stations.forEach(station => {
+                                const priceAvailable = showPrice && typeof station.price === 'number';
+                                const priceFixed = priceAvailable ? station.price.toFixed(3) : '';
+                                const brand  = station.brand ? station.brand + ' – ' : '';
+                                const place  = station.place ? ' (' + station.place + ')' : '';
+                                const name   = station.name;
+                                const entry  = (station.brand && station.brand.trim() === name.trim())
+                                    ? `${station.brand}${place}`
+                                    : `${station.brand ?? ''}${place} ${name}`.trim()
+                                        .replace(/'/g, "\\'"); // für onclick escapen
+                                html += `\n<li class=\"list-group-item list-group-item-action\"\n    style=\"cursor:pointer\"\n    onclick=\"document.getElementById('standort').value='${entry}';\n             ${priceAvailable ? `document.getElementById('preis_pro_einheit').value='${priceFixed}';` : ''}\n             setTimeout(()=>document.getElementById('tankstellenVorschlaege').innerHTML='',2000);\">\n    ${brand}${name} – ${priceAvailable ? priceFixed + ' €/L' : 'Preis n/a'}\n</li>`;
+                            });
+                            html += '</ul>';
+                            vorschlaege.innerHTML = html;
+                        } else {
+                            vorschlaege.innerHTML = `<div class="alert alert-warning">Keine Tankstellen gefunden.<br><small>PLZ/Ort: ${plz}</small></div>`;
+                        }
+                    })
+                    .catch(err => {
+                        let msg = 'Fehler bei der Tankstellenabfrage.';
+                        if (err.status) {
+                            msg += `<br><small>Status: ${err.status} ${err.statusText}</small>`;
+                        }
+                        if (err.text) {
+                            try {
+                                const errObj = JSON.parse(err.text);
+                                if (errObj.error) msg += `<br><small>API: ${errObj.error}</small>`;
+                            } catch (e) {
+                                msg += `<br><small>Antwort: ${err.text}</small>`;
+                            }
+                        }
+                        vorschlaege.innerHTML = `<div class='alert alert-danger'>${msg}</div>`;
+                    })
+                    .finally(() => {
+                        document.getElementById('btnTankstellenSuche').disabled = false;
+                        document.getElementById('btnTankstellenSuche').innerHTML = '<i class="fas fa-map-marker-alt"></i>';
+                    });
+            });
+    });
+});
 </script>
 
 <?php include '../includes/footer.php'; ?>

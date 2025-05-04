@@ -53,6 +53,27 @@ $stmt->close();
         </div>
 
         <div class="mb-3">
+            <label for="kraftstoff" class="form-label">Kraftstoff (bevorzugt)</label>
+            <select id="kraftstoff" name="kraftstoff" class="form-select" required>
+                <option value="diesel"   <?php if($fahrzeug['kraftstoff']==='diesel')   echo 'selected'; ?>>Diesel</option>
+                <option value="e5"      <?php if($fahrzeug['kraftstoff']==='e5')      echo 'selected'; ?>>Benzin (E5)</option>
+                <option value="e10"     <?php if($fahrzeug['kraftstoff']==='e10')     echo 'selected'; ?>>Benzin (E10)</option>
+                <option value="lpg"     <?php if($fahrzeug['kraftstoff']==='lpg')     echo 'selected'; ?>>Autogas (LPG)</option>
+                <option value="cng"     <?php if($fahrzeug['kraftstoff']==='cng')     echo 'selected'; ?>>Erdgas (CNG)</option>
+                <option value="electric"<?php if($fahrzeug['kraftstoff']==='electric')echo 'selected'; ?>>Elektro</option>
+                <option value="hybrid"  <?php if($fahrzeug['kraftstoff']==='hybrid')  echo 'selected'; ?>>Hybrid</option>
+                <option value="hydrogen"<?php if($fahrzeug['kraftstoff']==='hydrogen')echo 'selected'; ?>>Wasserstoff</option>
+                <option value="other"   <?php if($fahrzeug['kraftstoff']==='other')   echo 'selected'; ?>>Andere</option>
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label for="tachostand" class="form-label">Tachostand (km)</label>
+            <input type="number" id="tachostand" name="tachostand" class="form-control"
+                   value="<?php echo htmlspecialchars($fahrzeug['tachostand']); ?>" min="0">
+        </div>
+
+        <div class="mb-3">
             <label class="form-label">Aktuelles Fahrzeugbild</label><br>
             <?php if (!empty($fahrzeug['bild'])): ?>
                 <img src="../images/<?php echo htmlspecialchars($fahrzeug['bild']); ?>" 

@@ -19,10 +19,14 @@ $modell       = trim($_POST['modell']);
 $baujahr      = isset($_POST['baujahr'])      ? intval($_POST['baujahr'])      : null;
 $tankgroesse  = isset($_POST['tankgroesse'])  ? floatval($_POST['tankgroesse']) : null;
 $tachostand   = isset($_POST['tachostand'])   ? intval($_POST['tachostand'])   : null;
+$kraftstoff   = isset($_POST['kraftstoff'])   ? $_POST['kraftstoff'] : 'diesel';
 
 // Minimal-Validierung
 if ($marke === '' || $modell === '' || $tachostand === null) {
     die('Marke, Modell und Tachostand sind Pflichtfelder.');
+}
+if (!in_array($kraftstoff, ['diesel','e5','e10','lpg','cng','electric','hybrid','hydrogen','other'])) {
+    die('Ungültiger Kraftstofftyp.');
 }
 
 /* ------------------------------------------------------------------
@@ -87,22 +91,23 @@ if ($bildname === null) {
    ------------------------------------------------------------------ */
 $sql = "
     INSERT INTO fahrzeuge
-        (benutzer_id, marke, modell, baujahr, tankgroesse, tachostand, bild)
+        (benutzer_id, marke, modell, baujahr, tankgroesse, tachostand, bild, kraftstoff)
     VALUES
-        (?,            ?,     ?,      ?,       ?,           ?,          ?)
+        (?,            ?,     ?,      ?,       ?,           ?,          ?,    ?)
 ";
 $stmt = $conn->prepare($sql);
 if (!$stmt) { die('Prepare-Fehler: ' . $conn->error); }
 
 $stmt->bind_param(
-    'issidis',
+    'issidiss',
     $benutzer_id,
     $marke,
     $modell,
     $baujahr,
     $tankgroesse,
     $tachostand,
-    $bildname            // kann null sein, wird korrekt als NULL gespeichert
+    $bildname,
+    $kraftstoff
 );
 
 if ($stmt->execute()) {

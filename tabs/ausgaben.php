@@ -88,7 +88,7 @@ $farben = array_map('getCategoryColor', $kategorien);
             <tr>
                 <td><?php echo htmlspecialchars($kategorie); ?></td>
                 <td><?php echo $daten['anzahl']; ?></td>
-                <td><?php echo number_format(($daten['summe'] / $gesamtKosten) * 100, 2, ',', '.'); ?>%</td>
+                <td><?php echo $gesamtKosten > 0 ? number_format(($daten['summe'] / $gesamtKosten) * 100, 2, ',', '.') : '0,00'; ?>%</td>
                 <td><?php echo number_format($daten['summe'], 2, ',', '.'); ?> €</td>
             </tr>
             <?php endforeach; ?>

@@ -48,8 +48,18 @@ $stmt->close();
         <?php if ($eintrag['kategorie'] === 'Tankfuellung'): ?>
             <!-- Tankfüllungs-Felder -->
             <div class="mb-3">
-                <label class="form-label">Standort</label>
-                <input type="text" class="form-control" name="standort" value="<?php echo htmlspecialchars($eintrag['standort']); ?>">
+                <label class="form-label">Kraftstoff</label>
+                <select name="kraftstoff" class="form-select" required>
+                    <option value="diesel"   <?php if($eintrag['kraftstoff']==='diesel')   echo 'selected'; ?>>Diesel</option>
+                    <option value="e5"      <?php if($eintrag['kraftstoff']==='e5')      echo 'selected'; ?>>Benzin (E5)</option>
+                    <option value="e10"     <?php if($eintrag['kraftstoff']==='e10')     echo 'selected'; ?>>Benzin (E10)</option>
+                    <option value="lpg"     <?php if($eintrag['kraftstoff']==='lpg')     echo 'selected'; ?>>Autogas (LPG)</option>
+                    <option value="cng"     <?php if($eintrag['kraftstoff']==='cng')     echo 'selected'; ?>>Erdgas (CNG)</option>
+                    <option value="electric"<?php if($eintrag['kraftstoff']==='electric')echo 'selected'; ?>>Elektro</option>
+                    <option value="hybrid"  <?php if($eintrag['kraftstoff']==='hybrid')  echo 'selected'; ?>>Hybrid</option>
+                    <option value="hydrogen"<?php if($eintrag['kraftstoff']==='hydrogen')echo 'selected'; ?>>Wasserstoff</option>
+                    <option value="other"   <?php if($eintrag['kraftstoff']==='other')   echo 'selected'; ?>>Andere</option>
+                </select>
             </div>
 			<!-- Menge (Liter) -->
 			<div class="mb-3">

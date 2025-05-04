@@ -33,6 +33,7 @@ $data = [
 switch ($eintragstyp) {
     case 'Tankfuellung':
         $data['kategorie']    = 'Tankfuellung';
+        $data['kraftstoff']   = $_POST['kraftstoff'] ?? null;
         $data['standort']     = $_POST['standort'] ?? '';
         $data['menge']        = floatval($_POST['menge'] ?? 0);
         $data['kosten']       = floatval($_POST['kosten'] ?? 0);

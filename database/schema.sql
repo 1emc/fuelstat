@@ -46,6 +46,7 @@ CREATE TABLE `benutzer` (
 CREATE TABLE `eintraege` (
   `id` int(32) NOT NULL,
   `fahrzeug_id` int(32) NOT NULL,
+  `kraftstoff` ENUM('diesel','e5','e10','lpg','cng','electric','hybrid','hydrogen','other') DEFAULT NULL,
   `kategorie` enum('Tankfuellung','Versicherung','Steuer','Inspektion','Reparatur','Reifen','TUV','Wartung','Dekor','Verbrauch') NOT NULL,
   `datum` date NOT NULL,
   `tachostand` int(64) NOT NULL,
@@ -63,30 +64,30 @@ CREATE TABLE `eintraege` (
 -- Daten für Tabelle `eintraege`
 --
 
-INSERT INTO `eintraege` (`id`, `fahrzeug_id`, `kategorie`, `datum`, `tachostand`, `standort`, `kosten`, `preis_pro_einheit`, `menge`, `vollgetankt`, `standort_bezeichnung`, `beschreibung`, `skip_previous`) VALUES
-(5, 4, 'Tankfuellung', '2018-03-01', 21065, 'Sigmaringen', '59.2800', 1.2500, '47.4600', b'1', '', '', b'0'),
-(6, 4, 'Tankfuellung', '2018-03-03', 21663, 'Sigmaringen', '43.5900', 1.2700, '34.3500', b'1', '', '', b'0'),
-(7, 4, 'Tankfuellung', '2018-03-05', 22178, 'Sigmaringen', '33.6500', 1.1890, '28.3000', b'1', '', '', b'0'),
-(8, 4, 'Tankfuellung', '2018-03-10', 23037, 'Albstadt', '61.4100', 1.1790, '52.0900', b'1', '', '', b'0'),
-(9, 4, 'Tankfuellung', '2018-03-17', 23488, 'Tuttlingen', '26.1500', 1.1490, '22.7600', b'1', '', '', b'0'),
-(10, 4, 'Tankfuellung', '2018-03-24', 24267, 'Sigmaringen', '52.4200', 1.1990, '43.7200', b'1', '', '', b'0'),
+INSERT INTO `eintraege` (`id`, `fahrzeug_id`, `kraftstoff`, `kategorie`, `datum`, `tachostand`, `standort`, `kosten`, `preis_pro_einheit`, `menge`, `vollgetankt`, `standort_bezeichnung`, `beschreibung`, `skip_previous`) VALUES
+(5, 4, 'diesel', 'Tankfuellung', '2018-03-01', 21065, 'Sigmaringen', '59.2800', 1.2500, '47.4600', b'1', '', '', b'0'),
+(6, 4, 'diesel', 'Tankfuellung', '2018-03-03', 21663, 'Sigmaringen', '43.5900', 1.2700, '34.3500', b'1', '', '', b'0'),
+(7, 4, 'diesel', 'Tankfuellung', '2018-03-05', 22178, 'Sigmaringen', '33.6500', 1.1890, '28.3000', b'1', '', '', b'0'),
+(8, 4, 'diesel', 'Tankfuellung', '2018-03-10', 23037, 'Albstadt', '61.4100', 1.1790, '52.0900', b'1', '', '', b'0'),
+(9, 4, 'diesel', 'Tankfuellung', '2018-03-17', 23488, 'Tuttlingen', '26.1500', 1.1490, '22.7600', b'1', '', '', b'0'),
+(10, 4, 'diesel', 'Tankfuellung', '2018-03-24', 24267, 'Sigmaringen', '52.4200', 1.1990, '43.7200', b'1', '', '', b'0'),
 (11, 4, 'Versicherung', '2018-03-24', 24267, 'Sigmaringen', '615.6500', 0.0000, '0.0000', b'0', '', 'AachenMünchener', b'0'),
-(12, 4, 'Tankfuellung', '2018-03-28', 25160, 'Fridingen', '58.7700', 1.2290, '47.8200', b'1', '', '', b'0'),
-(13, 4, 'Tankfuellung', '2018-04-06', 25949, 'Fridingen', '10.0000', 1.2090, '8.2700', b'0', '', '', b'0'),
-(18, 4, 'Tankfuellung', '2018-04-07', 26090, 'Sigmaringen', '58.0000', 1.2090, '47.9700', b'1', '', '', b'0'),
-(19, 4, 'Tankfuellung', '2018-04-11', 26792, 'Tuttlingen', '25.0000', 1.2690, '19.7000', b'0', '', '', b'0'),
-(20, 4, 'Tankfuellung', '2018-04-12', 27178, 'Sigmaringen', '35.0100', 1.1990, '29.2000', b'0', '', '', b'0'),
-(21, 4, 'Tankfuellung', '2018-04-16', 27797, 'Autobahn', '67.8400', 1.4590, '46.5000', b'1', '', '', b'0'),
-(22, 4, 'Tankfuellung', '2018-04-24', 28568, 'Tuttlingen', '35.0000', 1.2390, '28.2500', b'0', '', '', b'0'),
-(23, 4, 'Tankfuellung', '2018-04-29', 29047, 'Sigmaringen', '56.6300', 1.2100, '46.8000', b'1', '', '', b'0'),
-(24, 4, 'Tankfuellung', '2018-05-06', 29785, 'Sigmaringen', '65.3300', 1.4990, '43.5800', b'1', '', '', b'0'),
-(27, 4, 'Tankfuellung', '2025-04-26', 31261, '', '65.3300', 1.4990, '43.5800', b'1', '', '', b'0'),
-(29, 4, 'Tankfuellung', '2025-04-25', 30523, 'Tuttlingen', '65.3300', 1.4990, '43.5800', b'1', '', '', b'0'),
-(30, 4, 'Tankfuellung', '2025-04-29', 31333, 'Tuttlingen', '62.3000', 1.7800, '35.0000', b'1', '', '', b'0'),
-(31, 4, 'TUV', '2025-04-29', 31333, '', '785.0000', 0.0000, '0.0000', b'0', '', 'TÃœV halt', b'0'),
-(32, 6, 'Tankfuellung', '2025-03-29', 80, 'Tuttlingen', '199.0000', 1.9900, '100.0000', b'1', '', '', b'0'),
-(33, 6, 'Tankfuellung', '2025-04-30', 160, 'Tuttlingen', '155.4700', 1.7870, '87.0000', b'1', '', '', b'0'),
-(34, 6, 'Tankfuellung', '2025-04-29', 200, 'Tuttlingen', '15.0000', 1.2500, '12.0000', b'1', '', '', b'0');
+(12, 4, 'diesel', 'Tankfuellung', '2018-03-28', 25160, 'Fridingen', '58.7700', 1.2290, '47.8200', b'1', '', '', b'0'),
+(13, 4, 'diesel', 'Tankfuellung', '2018-04-06', 25949, 'Fridingen', '10.0000', 1.2090, '8.2700', b'0', '', '', b'0'),
+(18, 4, 'diesel', 'Tankfuellung', '2018-04-07', 26090, 'Sigmaringen', '58.0000', 1.2090, '47.9700', b'1', '', '', b'0'),
+(19, 4, 'diesel', 'Tankfuellung', '2018-04-11', 26792, 'Tuttlingen', '25.0000', 1.2690, '19.7000', b'0', '', '', b'0'),
+(20, 4, 'diesel', 'Tankfuellung', '2018-04-12', 27178, 'Sigmaringen', '35.0100', 1.1990, '29.2000', b'0', '', '', b'0'),
+(21, 4, 'diesel', 'Tankfuellung', '2018-04-16', 27797, 'Autobahn', '67.8400', 1.4590, '46.5000', b'1', '', '', b'0'),
+(22, 4, 'diesel', 'Tankfuellung', '2018-04-24', 28568, 'Tuttlingen', '35.0000', 1.2390, '28.2500', b'0', '', '', b'0'),
+(23, 4, 'diesel', 'Tankfuellung', '2018-04-29', 29047, 'Sigmaringen', '56.6300', 1.2100, '46.8000', b'1', '', '', b'0'),
+(24, 4, 'diesel', 'Tankfuellung', '2018-05-06', 29785, 'Sigmaringen', '65.3300', 1.4990, '43.5800', b'1', '', '', b'0'),
+(27, 4, 'diesel', 'Tankfuellung', '2025-04-26', 31261, '', '65.3300', 1.4990, '43.5800', b'1', '', '', b'0'),
+(29, 4, 'diesel', 'Tankfuellung', '2025-04-25', 30523, 'Tuttlingen', '65.3300', 1.4990, '43.5800', b'1', '', '', b'0'),
+(30, 4, 'diesel', 'Tankfuellung', '2025-04-29', 31333, 'Tuttlingen', '62.3000', 1.7800, '35.0000', b'1', '', '', b'0'),
+(31, 4, 'diesel', 'TUV', '2025-04-29', 31333, '', '785.0000', 0.0000, '0.0000', b'0', '', 'TÃœV halt', b'0'),
+(32, 6, 'diesel', 'Tankfuellung', '2025-03-29', 80, 'Tuttlingen', '199.0000', 1.9900, '100.0000', b'1', '', '', b'0'),
+(33, 6, 'diesel', 'Tankfuellung', '2025-04-30', 160, 'Tuttlingen', '155.4700', 1.7870, '87.0000', b'1', '', '', b'0'),
+(34, 6, 'diesel', 'Tankfuellung', '2025-04-29', 200, 'Tuttlingen', '15.0000', 1.2500, '12.0000', b'1', '', '', b'0');
 
 -- --------------------------------------------------------
 
@@ -103,7 +104,8 @@ CREATE TABLE `fahrzeuge` (
   `bild` varchar(256) NOT NULL,
   `tachostand` int(16) NOT NULL,
   `fahrleistung` int(16) NOT NULL,
-  `tankgroesse` decimal(16,0) NOT NULL
+  `tankgroesse` decimal(16,0) NOT NULL,
+  `kraftstoff` ENUM('diesel','e5','e10','lpg','cng','electric','hybrid','hydrogen','other') NOT NULL DEFAULT 'diesel'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --

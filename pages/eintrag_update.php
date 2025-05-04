@@ -27,15 +27,16 @@ if (!$datum || !$tachostand) {
 // SQL-Aufbau je nach Kategorie
 switch ($kategorie) {
     case 'Tankfuellung':
-        $menge            = isset($_POST['menge']) ? floatval($_POST['menge']) : null;
-        $kosten           = isset($_POST['kosten']) ? floatval($_POST['kosten']) : null;
-        $preis_pro_einheit= isset($_POST['preis_pro_einheit']) ? floatval($_POST['preis_pro_einheit']) : null;
-        $vollgetankt      = isset($_POST['vollgetankt']) ? 1 : 0;
+        $kraftstoff        = isset($_POST['kraftstoff']) ? $_POST['kraftstoff'] : null;
+        $menge             = isset($_POST['menge']) ? floatval($_POST['menge']) : null;
+        $kosten            = isset($_POST['kosten']) ? floatval($_POST['kosten']) : null;
+        $preis_pro_einheit = isset($_POST['preis_pro_einheit']) ? floatval($_POST['preis_pro_einheit']) : null;
+        $vollgetankt       = isset($_POST['vollgetankt']) ? 1 : 0;
         
-        $sql = "UPDATE eintraege SET datum = ?, tachostand = ?, menge = ?, kosten = ?, preis_pro_einheit = ?, vollgetankt = ? WHERE id = ?";
+        $sql = "UPDATE eintraege SET datum = ?, tachostand = ?, kraftstoff = ?, menge = ?, kosten = ?, preis_pro_einheit = ?, vollgetankt = ? WHERE id = ?";
         $stmt = $conn->prepare($sql);
         if (!$stmt) { die('Prepare-Fehler: ' . $conn->error); }
-        $stmt->bind_param('sidddii', $datum, $tachostand, $menge, $kosten, $preis_pro_einheit, $vollgetankt, $eintrag_id);
+        $stmt->bind_param('sissddii', $datum, $tachostand, $kraftstoff, $menge, $kosten, $preis_pro_einheit, $vollgetankt, $eintrag_id);
         break;
 
     case 'Fahrt':

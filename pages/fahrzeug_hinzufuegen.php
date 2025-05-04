@@ -54,6 +54,22 @@ include '../includes/header.php';
                    class="form-control"
                    placeholder="z. B. 55">
         </div>
+
+        <!-- Kraftstofftyp -->
+        <div class="mb-3">
+            <label for="kraftstoff" class="form-label">Kraftstoff (bevorzugt)</label>
+            <select id="kraftstoff" name="kraftstoff" class="form-select" required>
+                <option value="diesel">Diesel</option>
+                <option value="e5">Benzin (E5)</option>
+                <option value="e10">Benzin (E10)</option>
+                <option value="lpg">Autogas (LPG)</option>
+                <option value="cng">Erdgas (CNG)</option>
+                <option value="electric">Elektro</option>
+                <option value="hybrid">Hybrid</option>
+                <option value="hydrogen">Wasserstoff</option>
+                <option value="other">Andere</option>
+            </select>
+        </div>
 		
 		<!-- Initialer Tachostand -->
 		<div class="mb-3">
