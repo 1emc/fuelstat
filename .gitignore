@@ -28,15 +28,10 @@ $RECYCLE.BIN/
 /tmp/
 /storage/
 
-# --- Laufzeit-Uploads (scoped) ---
-/images/uploads/
-/uploads/
-
 # Falls du aktuell direkt /images/ für Uploads benutzt:
-# /images/*    # <- nur aktivieren, wenn du unten Ausnahmen definierst
-# !/images/platzhalter.jpg
-# !/images/**/*.svg
-# !/images/**/*.ico
+/images/*    # <- nur aktivieren, wenn du unten Ausnahmen definierst
+!/images/.gitkeep
+!/images/platzhalter.jpg
 
 # --- Secrets ---
 includes/db_connect.php
