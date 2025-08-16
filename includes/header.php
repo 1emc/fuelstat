@@ -34,7 +34,7 @@ if (isset($_SESSION['user_id'])) {
             setcookie(session_name(), '', time() - 3600, '/', '', true, true);
         }
         session_destroy();
-        header('Location: /fuelstat/pages/login.php');
+        header('Location: /pages/login.php');
         exit;
     }
     // last_activity aktualisieren
@@ -87,7 +87,7 @@ if (isset($_SESSION['user_id'])) {
             <ul class="navbar-nav">
                 <!-- Menüelemente -->
                 <li class="nav-item">
-                    <a class="nav-link" href="/fuelstat/">Home</a>
+                    <a class="nav-link" href="https://tanken.1emc.de">Home</a>
                 </li>
                 <?php if (isset($_SESSION['user_id'])): ?>
                     <!-- Dropdown für Fahrzeuge -->
@@ -102,13 +102,13 @@ if (isset($_SESSION['user_id'])) {
                             foreach ($userVehicles as $vehicle):
                             ?>
                                 <li>
-                                    <a class="dropdown-item" href="/fuelstat/pages/fahrzeug_detail.php?id=<?php echo $vehicle['id']; ?>">
+                                    <a class="dropdown-item" href="/pages/fahrzeug_detail.php?id=<?php echo $vehicle['id']; ?>">
                                         <?php echo htmlspecialchars($vehicle['marke'] . ' ' . $vehicle['modell']); ?>
                                     </a>
                                 </li>
                             <?php endforeach; ?>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="/fuelstat/pages/fahrzeug_hinzufuegen.php">Fahrzeug hinzufügen</a></li>
+                            <li><a class="dropdown-item" href="/pages/fahrzeug_hinzufuegen.php">Fahrzeug hinzufügen</a></li>
                         </ul>
                     </li>
                     <!-- Benutzereinstellungen -->
@@ -118,23 +118,23 @@ if (isset($_SESSION['user_id'])) {
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userSettingsDropdown">
                             <li>
-                                <a class="dropdown-item" href="/fuelstat/pages/einstellungen.php">
+                                <a class="dropdown-item" href="/pages/einstellungen.php">
                                     <i class="fas fa-user-edit me-2"></i> Profil bearbeiten
                                 </a>
                             </li>
                             <li>
-                                <a class="dropdown-item" href="/fuelstat/pages/passwort_aendern.php">
+                                <a class="dropdown-item" href="/pages/passwort_aendern.php">
                                     <i class="fas fa-key me-2"></i> Passwort ändern
                                 </a>
                             </li>
                             <li>
-                                <a class="dropdown-item" href="/fuelstat/pages/mfa_einrichten.php">
+                                <a class="dropdown-item" href="/pages/mfa_einrichten.php">
                                     <i class="fas fa-shield-alt me-2"></i> 2FA einrichten
                                 </a>
                             </li>
                             <li><hr class="dropdown-divider"></li>
                             <li>
-                                <a class="dropdown-item" href="/fuelstat/pages/logout.php">
+                                <a class="dropdown-item" href="/pages/logout.php">
                                     <i class="fas fa-sign-out-alt me-2"></i> Abmelden
                                 </a>
                             </li>
@@ -143,7 +143,7 @@ if (isset($_SESSION['user_id'])) {
                 <?php else: ?>
                     <!-- Anmelden -->
                     <li class="nav-item">
-                        <a class="nav-link" href="/fuelstat/pages/login.php">Anmelden</a>
+                        <a class="nav-link" href="/pages/login.php">Anmelden</a>
                     </li>
                 <?php endif; ?>
             </ul>
