@@ -43,3 +43,11 @@ images/
 *.key
 
 # End
+
+# local secrets / runtime
+includes/db_connect.php
+.env
+*.log
+cache/
+vendor/         # nur wenn du Composer nutzt und vendor nicht versionierst
+images/uploads/ # falls es einen Uploads-Ordner gibt

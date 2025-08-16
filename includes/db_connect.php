@@ -1,8 +1,8 @@
 <?php
 $servername = "localhost";
-$db_username = "d0417106";
-$db_password = "oNKLFiex4AqwizHt9msE";
-$dbname = "d0417106";
+$db_username = "fuelstat";
+$db_password = "viey!hh4zaH0ee.Cu";
+$dbname = "fuelstat";
 
 // Verbindung herstellen
 $conn = new mysqli($servername, $db_username, $db_password, $dbname);
