@@ -1,7 +1,7 @@
 <?php
 $servername = "localhost";
 $db_username = "fuelstat";
-$db_password = "viey!hh4zaH0ee.Cu";
+$db_password = "** starkes Kennwort **";
 $dbname = "fuelstat";
 
 // Verbindung herstellen
