@@ -1,8 +1,8 @@
 <?php
 $servername = "localhost";
-$db_username = "fuelstat";
+$db_username = "** Datenbank Username **";
 $db_password = "** starkes Kennwort **";
-$dbname = "fuelstat";
+$dbname = "** Datenbank Name **";
 
 // Verbindung herstellen
 $conn = new mysqli($servername, $db_username, $db_password, $dbname);
