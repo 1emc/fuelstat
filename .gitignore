@@ -1,53 +1,48 @@
-# Created by https://www.toptal.com/developers/gitignore/api/windows
-# Edit at https://www.toptal.com/developers/gitignore?templates=windows
-
-### Windows ###
-# Windows thumbnail cache files
+# --- OS/Editor-Cruft ---
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
 Thumbs.db
 Thumbs.db:encryptable
 ehthumbs.db
 ehthumbs_vista.db
-
-# Dump file
-*.stackdump
-
-# Folder config file
 [Dd]esktop.ini
-
-# Ignore usergenerated Conten
-*.enc
-*.csv
-config.ini
-php-error.log
-
-# Recycle Bin used on file shares
 $RECYCLE.BIN/
-
-# Windows Installer files
-*.cab
-*.msi
-*.msix
-*.msm
-*.msp
-
-# Windows shortcuts
+*.stackdump
 *.lnk
+.DS_Store
+.idea/
+.vscode/
 
-# Ignore Images
-images/
+# --- Build/Deps (falls genutzt) ---
+/vendor/          # nur falls du vendor NICHT versionierst
+/node_modules/
+/dist/
+/build/
 
-# Ignore .old-Files
-*.old
+# --- Logs/Runtime ---
+*.log
+/cache/
+/tmp/
+/storage/
 
-# Ignore API Key
-*.key
+# --- Laufzeit-Uploads (scoped) ---
+/images/uploads/
+/uploads/
 
-# End
+# Falls du aktuell direkt /images/ für Uploads benutzt:
+# /images/*    # <- nur aktivieren, wenn du unten Ausnahmen definierst
+# !/images/platzhalter.jpg
+# !/images/**/*.svg
+# !/images/**/*.ico
 
-# local secrets / runtime
+# --- Secrets ---
 includes/db_connect.php
 .env
-*.log
-cache/
-vendor/         # nur wenn du Composer nutzt und vendor nicht versionierst
-images/uploads/ # falls es einen Uploads-Ordner gibt
+.user.ini
+
+# --- Projekt-spezifische Demos ---
+target/
+
