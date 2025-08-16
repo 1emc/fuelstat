@@ -29,9 +29,9 @@ $RECYCLE.BIN/
 /storage/
 
 # Falls du aktuell direkt /images/ für Uploads benutzt:
-/images/*    # <- nur aktivieren, wenn du unten Ausnahmen definierst
-!/images/.gitkeep
-!/images/platzhalter.jpg
+images/*    # <- nur aktivieren, wenn du unten Ausnahmen definierst
+!images/.gitkeep
+!images/platzhalter.jpg
 
 # --- Secrets ---
 includes/db_connect.php
