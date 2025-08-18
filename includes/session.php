@@ -18,7 +18,7 @@ if ($basePath === '' || $basePath[0] !== '/') {
 $cookiePath = ($basePath === '/' ? '/' : $basePath . '/');
 
 session_set_cookie_params([
-    'lifetime' => 60 * 60 * 24 * 7,
+    'lifetime' => 60 * 60 * 24 * 28, // 28 Tage
     'path' => $cookiePath,
     // keine feste Domain -> host-only Cookie, funktioniert auf beliebigen Hosts/Subdomains
     'secure' => $isHttps,
