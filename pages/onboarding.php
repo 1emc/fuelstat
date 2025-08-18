@@ -4,7 +4,6 @@
 // Session handling and DB connection
 include '../includes/session.php';
 include '../includes/db_connect.php';
-include '../includes/header.php';
 
 // Helper function to count rows
 function getCount($conn, $sql, $param) {
@@ -15,6 +14,31 @@ function getCount($conn, $sql, $param) {
     return (int)$result['cnt'];
 }
 
+// Pre-calculate onboarding state and redirect before output
+$vehicleCount = 0;
+$vehicleId = null;
+if (isset($_SESSION['user_id'])) {
+    $userId = $_SESSION['user_id'];
+    $vehicleCount = getCount($conn, 'SELECT COUNT(*) AS cnt FROM fahrzeuge WHERE benutzer_id = ?', $userId);
+    if ($vehicleCount > 0) {
+        $entryCountStmt = $conn->prepare('SELECT COUNT(e.id) AS cnt FROM eintraege e JOIN fahrzeuge f ON e.fahrzeug_id = f.id WHERE f.benutzer_id = ?');
+        $entryCountStmt->bind_param('i', $userId);
+        $entryCountStmt->execute();
+        $entryCount = (int)$entryCountStmt->get_result()->fetch_assoc()['cnt'];
+        if ($entryCount > 0) {
+            header('Location: ../index.php');
+            exit;
+        }
+        // Get first vehicle id for entry link
+        $vehicleStmt = $conn->prepare('SELECT id FROM fahrzeuge WHERE benutzer_id = ? ORDER BY id ASC LIMIT 1');
+        $vehicleStmt->bind_param('i', $userId);
+        $vehicleStmt->execute();
+        $vehicleId = $vehicleStmt->get_result()->fetch_assoc()['id'];
+    }
+}
+
+include '../includes/header.php';
+
 ?>
 <div class="container mt-5">
     <?php if (!isset($_SESSION['user_id'])): ?>
@@ -24,37 +48,18 @@ function getCount($conn, $sql, $param) {
             <i class="fas fa-user-plus me-2"></i>Jetzt registrieren
         </a>
     <?php else: ?>
-        <?php
-            $userId = $_SESSION['user_id'];
-            $vehicleCount = getCount($conn, 'SELECT COUNT(*) AS cnt FROM fahrzeuge WHERE benutzer_id = ?', $userId);
-            if ($vehicleCount === 0):
-        ?>
+        <?php if ($vehicleCount === 0): ?>
             <h1 class="mb-3">Erstes Fahrzeug anlegen</h1>
             <p class="mb-4">Fügen Sie Ihr erstes Fahrzeug hinzu, um loszulegen.</p>
             <a href="fahrzeug_hinzufuegen.php" class="btn btn-primary">
                 <i class="fas fa-car-side me-2"></i>Fahrzeug hinzufügen
             </a>
         <?php else: ?>
-            <?php
-                $entryCountStmt = $conn->prepare('SELECT COUNT(e.id) AS cnt FROM eintraege e JOIN fahrzeuge f ON e.fahrzeug_id = f.id WHERE f.benutzer_id = ?');
-                $entryCountStmt->bind_param('i', $userId);
-                $entryCountStmt->execute();
-                $entryCount = (int)$entryCountStmt->get_result()->fetch_assoc()['cnt'];
-                if ($entryCount === 0):
-                    // Get first vehicle id
-                    $vehicleStmt = $conn->prepare('SELECT id FROM fahrzeuge WHERE benutzer_id = ? ORDER BY id ASC LIMIT 1');
-                    $vehicleStmt->bind_param('i', $userId);
-                    $vehicleStmt->execute();
-                    $vehicleId = $vehicleStmt->get_result()->fetch_assoc()['id'];
-            ?>
-                <h1 class="mb-3">Ersten Eintrag erfassen</h1>
-                <p class="mb-4">Erfassen Sie eine Tankfüllung oder andere Ausgabe, um Statistiken zu erhalten.</p>
-                <a href="eintrag_hinzufuegen.php?fahrzeug_id=<?= intval($vehicleId) ?>" class="btn btn-primary">
-                    <i class="fas fa-plus me-2"></i>Eintrag hinzufügen
-                </a>
-            <?php else: ?>
-                <?php header('Location: ../index.php'); exit; ?>
-            <?php endif; ?>
+            <h1 class="mb-3">Ersten Eintrag erfassen</h1>
+            <p class="mb-4">Erfassen Sie eine Tankfüllung oder andere Ausgabe, um Statistiken zu erhalten.</p>
+            <a href="eintrag_hinzufuegen.php?fahrzeug_id=<?= intval($vehicleId) ?>" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>Eintrag hinzufügen
+            </a>
         <?php endif; ?>
     <?php endif; ?>
 </div>
