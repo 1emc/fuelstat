@@ -19,7 +19,7 @@ $basePath   = rtrim(str_replace($docRoot, '', $appRootFs), '/');
 if ($basePath === '' || $basePath[0] !== '/') {
     $basePath = '/' . ltrim($basePath, '/');
 }
-$baseUrl = $scheme . '://' . $host . $basePath . '/';
+$baseUrl = $scheme . '://' . $host . ($basePath === '/' ? '' : $basePath) . '/';
 
 // Funktion zum Abrufen der Fahrzeuge eines Benutzers
 function getUserVehicles($user_id) {
@@ -53,7 +53,7 @@ if (isset($_SESSION['user_id'])) {
             setcookie(session_name(), '', time() - 3600, '/', '', true, true);
         }
         session_destroy();
-        header('Location: ' . $basePath . '/pages/login.php');
+        header('Location: ' . $baseUrl . 'pages/login.php');
         exit;
     }
     // last_activity aktualisieren
@@ -71,12 +71,12 @@ if (isset($_SESSION['user_id'])) {
     <meta name="description" content="" />
 
     <!-- Apple Information and PWA-Function -->
-    <link rel="manifest" href="<?= htmlspecialchars($basePath) ?>/manifest.json">
+    <link rel="manifest" href="<?= htmlspecialchars($baseUrl) ?>manifest.json">
     <meta name="apple-mobile-web-app-capable" content="yes">
 	<meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="apple-touch-icon" href="<?= htmlspecialchars($basePath) ?>/images/new-icon-512x512.png">
-	<link rel="icon" type="image/x-icon" href="<?= htmlspecialchars($basePath) ?>/images/new-icon.ico">
+    <link rel="apple-touch-icon" href="<?= htmlspecialchars($baseUrl) ?>images/new-icon-512x512.png">
+	<link rel="icon" type="image/x-icon" href="<?= htmlspecialchars($baseUrl) ?>images/new-icon.ico">
 	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 
 
@@ -87,7 +87,7 @@ if (isset($_SESSION['user_id'])) {
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
 
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="<?= htmlspecialchars($basePath) ?>/css/style.css" />
+    <link rel="stylesheet" href="<?= htmlspecialchars($baseUrl) ?>css/style.css" />
 </head>
 
 <body>
@@ -121,13 +121,13 @@ if (isset($_SESSION['user_id'])) {
                             foreach ($userVehicles as $vehicle):
                             ?>
                                 <li>
-                                    <a class="dropdown-item" href="<?= htmlspecialchars($basePath) ?>/pages/fahrzeug_detail.php?id=<?php echo $vehicle['id']; ?>">
+                                    <a class="dropdown-item" href="<?= htmlspecialchars($baseUrl) ?>pages/fahrzeug_detail.php?id=<?php echo $vehicle['id']; ?>">
                                         <?php echo htmlspecialchars($vehicle['marke'] . ' ' . $vehicle['modell']); ?>
                                     </a>
                                 </li>
                             <?php endforeach; ?>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="<?= htmlspecialchars($basePath) ?>/pages/fahrzeug_hinzufuegen.php">Fahrzeug hinzufügen</a></li>
+                            <li><a class="dropdown-item" href="<?= htmlspecialchars($baseUrl) ?>pages/fahrzeug_hinzufuegen.php">Fahrzeug hinzufügen</a></li>
                         </ul>
                     </li>
                     <!-- Benutzereinstellungen -->
@@ -137,23 +137,23 @@ if (isset($_SESSION['user_id'])) {
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userSettingsDropdown">
                             <li>
-                                <a class="dropdown-item" href="<?= htmlspecialchars($basePath) ?>/pages/einstellungen.php">
+                                <a class="dropdown-item" href="<?= htmlspecialchars($baseUrl) ?>pages/einstellungen.php">
                                     <i class="fas fa-user-edit me-2"></i> Profil bearbeiten
                                 </a>
                             </li>
                             <li>
-                                <a class="dropdown-item" href="<?= htmlspecialchars($basePath) ?>/pages/passwort_aendern.php">
+                                <a class="dropdown-item" href="<?= htmlspecialchars($baseUrl) ?>pages/passwort_aendern.php">
                                     <i class="fas fa-key me-2"></i> Passwort ändern
                                 </a>
                             </li>
                             <li>
-                                <a class="dropdown-item" href="<?= htmlspecialchars($basePath) ?>/pages/mfa_einrichten.php">
+                                <a class="dropdown-item" href="<?= htmlspecialchars($baseUrl) ?>pages/mfa_einrichten.php">
                                     <i class="fas fa-shield-alt me-2"></i> 2FA einrichten
                                 </a>
                             </li>
                             <li><hr class="dropdown-divider"></li>
                             <li>
-                                <a class="dropdown-item" href="<?= htmlspecialchars($basePath) ?>/pages/logout.php">
+                                <a class="dropdown-item" href="<?= htmlspecialchars($baseUrl) ?>pages/logout.php">
                                     <i class="fas fa-sign-out-alt me-2"></i> Abmelden
                                 </a>
                             </li>
@@ -162,7 +162,7 @@ if (isset($_SESSION['user_id'])) {
                 <?php else: ?>
                     <!-- Anmelden -->
                     <li class="nav-item">
-                        <a class="nav-link" href="<?= htmlspecialchars($basePath) ?>/pages/login.php">Anmelden</a>
+                        <a class="nav-link" href="<?= htmlspecialchars($baseUrl) ?>pages/login.php">Anmelden</a>
                     </li>
                 <?php endif; ?>
             </ul>
