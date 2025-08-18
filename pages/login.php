@@ -109,7 +109,7 @@ try {
                             $stmt->execute();
                         }
                         
-                        header('Location: ../index.php');
+                        header('Location: onboarding.php');
                         exit;
                     }
                 } else {
@@ -160,7 +160,7 @@ try {
                     $stmt->execute();
                 }
                 
-                header('Location: ../index.php');
+                header('Location: onboarding.php');
                 exit;
             } else {
                 $error = "Ungültiger 2FA-Code";

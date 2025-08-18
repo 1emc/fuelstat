@@ -109,7 +109,7 @@ $stmt->bind_param(
 
 if ($stmt->execute()) {
     $_SESSION['success_message'] = 'Fahrzeug erfolgreich angelegt.';
-    header('Location: ../index.php');
+    header('Location: onboarding.php');
     exit();
 }
 die('Fehler: ' . $stmt->error);
