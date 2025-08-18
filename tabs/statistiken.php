@@ -17,6 +17,8 @@ $verbrauchswerte              = holeVerbrauchswerte($fahrzeug_id) ?: [];
 $verbrauchProMonat             = holeVerbrauchProMonat($fahrzeug_id) ?: [];
 $kostenProMonat                = holeKostenProMonat($fahrzeug_id) ?: [];
 $jahresdaten                   = holeJahresdaten($fahrzeug_id) ?: [];
+$kraftstoffKostenProKm         = berechneKraftstoffkostenProKm($fahrzeug_id);
+$durchschnittPreis             = berechneDurchschnittPreisProLiter($fahrzeug_id);
 
 // Kennzahlen berechnen
 $minVerbrauch                  = $verbrauchswerte ? min($verbrauchswerte) : 0;
@@ -85,6 +87,34 @@ $teuersterMonatWert  = !empty($kostenProMonatFormatted)    ? max($kostenProMonat
                 <?php
                     echo $teuersterMonatWert !== null
                          ? $teuersterKey.' ('.number_format($teuersterMonatWert, 2, ',', '.').' €)'
+                         : '–';
+                ?>
+            </span>
+        </div>
+    </div>
+</div>
+
+<!-- Zusätzliche Kennzahlen -->
+<div class="row mb-4">
+    <div class="col-md-6 mb-2">
+        <div class="card p-2 text-center">
+            <strong>Kraftstoffkosten pro km</strong><br>
+            <span>
+                <?php
+                    echo $kraftstoffKostenProKm !== null
+                         ? number_format($kraftstoffKostenProKm, 2, ',', '.').' €'
+                         : '–';
+                ?>
+            </span>
+        </div>
+    </div>
+    <div class="col-md-6 mb-2">
+        <div class="card p-2 text-center">
+            <strong>Ø Kraftstoffpreis</strong><br>
+            <span>
+                <?php
+                    echo $durchschnittPreis !== null
+                         ? number_format($durchschnittPreis, 3, ',', '.').' €/l'
                          : '–';
                 ?>
             </span>
