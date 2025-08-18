@@ -406,7 +406,9 @@ function getLetzterEintrag($fahrzeug_id, $kategorie) {
     ");
     $stmt->bind_param("is", $fahrzeug_id, $kategorie);
     $stmt->execute();
-    return $stmt->get_result()->fetch_assoc();
+    $eintrag = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    return $eintrag;
 }
 
 /**
