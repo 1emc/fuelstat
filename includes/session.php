@@ -20,11 +20,12 @@ $cookiePath = ($basePath === '/' ? '/' : $basePath . '/');
 session_set_cookie_params([
     'lifetime' => 60 * 60 * 24 * 28, // 28 Tage
     'path' => $cookiePath,
-    'domain' => $SERVER['HTTP_HOST'],
+    'domain' => $_SERVER['HTTP_HOST'],
     'secure' => $isHttps,
     'httponly' => true,
     'samesite' => 'Lax'
 ]);
+
 session_start();
 
 ?>
