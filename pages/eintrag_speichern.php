@@ -1,20 +1,4 @@
 <?php
-// Debug-Ausgabe aktivieren (temporär für Fehlersuche)
-ini_set('display_errors', '1');
-ini_set('display_startup_errors', '1');
-error_reporting(E_ALL);
-// Fatale Fehler sichtbar machen
-register_shutdown_function(function () {
-    $e = error_get_last();
-    if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
-        if (!headers_sent()) {
-            header('Content-Type: text/plain; charset=utf-8');
-            http_response_code(500);
-        }
-        echo "Fatal error: {$e['message']} in {$e['file']} on line {$e['line']}\n";
-    }
-});
-// pages/eintrag_speichern.php
 // Session-Handling
 include '../includes/session.php';
 // Andere Includes
