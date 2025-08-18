@@ -1,4 +1,19 @@
 <?php
+// Debug-Ausgabe aktivieren (temporär für Fehlersuche)
+ini_set('display_errors', '1');
+ini_set('display_startup_errors', '1');
+error_reporting(E_ALL);
+// Fatale Fehler sichtbar machen
+register_shutdown_function(function () {
+    $e = error_get_last();
+    if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        if (!headers_sent()) {
+            header('Content-Type: text/plain; charset=utf-8');
+            http_response_code(500);
+        }
+        echo "Fatal error: {$e['message']} in {$e['file']} on line {$e['line']}\n";
+    }
+});
 // pages/eintrag_speichern.php
 // Session-Handling
 include '../includes/session.php';
@@ -28,7 +43,9 @@ $data = [
     'menge'        => 0,
     'vollgetankt'  => 0,
     'skip_previous'=> 0,
-    'beschreibung' => ''
+    'beschreibung' => '',
+    // Schema verlangt NOT NULL für standort_bezeichnung
+    'standort_bezeichnung' => ''
 ];
 
 // Verarbeitung nach Typ
@@ -51,11 +68,11 @@ switch ($eintragstyp) {
         break;
 
     case 'Fahrt':
-        $data['kategorie']    = 'Fahrt';
-        $data['startort']     = trim($_POST['startort'] ?? '');
-        $data['zielort']      = trim($_POST['zielort'] ?? '');
-        $data['zweck']        = trim($_POST['zweck'] ?? '');
-        $data['gefahrene_km'] = floatval($_POST['gefahrene_km'] ?? 0);
+        // Hinweis: Die aktuelle Tabellenstruktur enthält keine Spalten für Fahrt-Details.
+        // Wir speichern daher nur eine Ausgabe unter Kategorie 'Wartung' mit Beschreibung.
+        $data['kategorie']    = 'Wartung';
+        $data['beschreibung'] = trim($_POST['zweck'] ?? 'Fahrt');
+        $data['kosten']       = 0;
         break;
 
     default:
@@ -83,6 +100,7 @@ foreach ($data as $key => $value) {
 
 $stmt = $conn->prepare($sql);
 if (!$stmt) {
+    error_log('eintrag_speichern PREPARE-ERROR: ' . $conn->error . ' | SQL=' . $sql);
     die('Prepare-Fehler: ' . $conn->error);
 }
 $stmt->bind_param($types, ...$params);
@@ -91,6 +109,7 @@ if ($stmt->execute()) {
     header("Location: fahrzeug_detail.php?id=$fahrzeug_id");
     exit();
 } else {
+    error_log('eintrag_speichern EXEC-ERROR: ' . $stmt->error . ' | SQL=' . $sql . ' | TYPES=' . $types . ' | PARAMS=' . json_encode($params));
     die('Fehler beim Speichern des Eintrags: ' . $stmt->error);
 }
 ?>
