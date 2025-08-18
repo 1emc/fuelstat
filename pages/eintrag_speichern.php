@@ -90,7 +90,7 @@ if (!$stmt) {
 $stmt->bind_param($types, ...$params);
 
 if ($stmt->execute()) {
-    header("Location: fahrzeug_detail.php?id=$fahrzeug_id");
+    header('Location: ../index.php');
     exit();
 } else {
     error_log('eintrag_speichern EXEC-ERROR: ' . $stmt->error . ' | SQL=' . $sql . ' | TYPES=' . $types . ' | PARAMS=' . json_encode($params));
