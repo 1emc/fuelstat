@@ -15,7 +15,11 @@ if (isset($_SESSION['success_message'])) {
     unset($_SESSION['success_message']);
 }
 
-$benutzer_id = $_SESSION['user_id']; // TODO: ersetzen, sobald Login-System steht
+if(isset($_SESSION['user_id'])) {
+    $benutzer_id = $_SESSION['user_id'];
+} else {
+    $benutzer_id = NULL;
+}
 
 $sql  = 'SELECT * FROM fahrzeuge WHERE benutzer_id = ? ORDER BY sortierung ASC, id ASC';
 $stmt = $conn->prepare($sql);
