@@ -10,7 +10,10 @@ include '../includes/functions.php';   // falls du hier später gemeinsame Helfe
 /* ------------------------------------------------------------------
    1)  Formulareingaben auslesen & validieren
    ------------------------------------------------------------------ */
-$benutzer_id = 1;                                   // TODO: später $_SESSION['user_id']
+if (!isset($_SESSION['user_id'])) {
+    die('Benutzer nicht eingeloggt.');
+}
+$benutzer_id = intval($_SESSION['user_id']);
 $marke        = trim($_POST['marke']);
 $modell       = trim($_POST['modell']);
 $baujahr      = isset($_POST['baujahr'])      ? intval($_POST['baujahr'])      : null;
