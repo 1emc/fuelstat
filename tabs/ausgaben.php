@@ -20,6 +20,18 @@ $gesamtKosten = array_sum($beträge);
 // Detailtabelle vorbereiten
 $detailDaten = holeDetailAusgabenDaten($fahrzeug_id, $selectedYear);
 
+// Zusätzliche Kennzahlen
+$anzahlMonate = holeAnzahlMonate($fahrzeug_id, $selectedYear);
+$durchschnittMonat = $anzahlMonate > 0 ? $gesamtKosten / $anzahlMonate : 0;
+$topKategorie = '-';
+$topSumme = 0;
+foreach ($detailDaten as $k => $daten) {
+    if ($daten['summe'] > $topSumme) {
+        $topKategorie = $k;
+        $topSumme = $daten['summe'];
+    }
+}
+
 // Farben für Kategorien definieren
 function getCategoryColor($kategorie) {
     $colors = [
@@ -44,6 +56,27 @@ $farben = array_map('getCategoryColor', $kategorien);
 
 <div class="mt-4">
     <h3>Ausgabenanalyse</h3>
+
+    <div class="row mb-4">
+        <div class="col-md-4 mb-2">
+            <div class="card p-2 text-center">
+                <strong>Gesamtausgaben</strong><br>
+                <span><?php echo number_format($gesamtKosten, 2, ',', '.'); ?> €</span>
+            </div>
+        </div>
+        <div class="col-md-4 mb-2">
+            <div class="card p-2 text-center">
+                <strong>Ø Ausgaben pro Monat</strong><br>
+                <span><?php echo number_format($durchschnittMonat, 2, ',', '.'); ?> €</span>
+            </div>
+        </div>
+        <div class="col-md-4 mb-2">
+            <div class="card p-2 text-center">
+                <strong>Größte Kostenkategorie</strong><br>
+                <span><?php echo htmlspecialchars(getKategorieName($topKategorie)); ?></span>
+            </div>
+        </div>
+    </div>
     
     <!-- Filter nach Jahr -->
     <form method="get" action="" class="mb-3">
@@ -130,7 +163,7 @@ $farben = array_map('getCategoryColor', $kategorien);
                     <?php
                     // Aktuellen Tachostand und initialen Tachostand holen
                     $aktTachostand = getAktuellenTachostand($fahrzeug_id);
-                    $initialTachostand = 0; // TODO: Aus Datenbank holen
+                    $initialTachostand = getInitialTachostand($fahrzeug_id) ?? 0;
                     $gefahreneKm = $aktTachostand - $initialTachostand;
                     $kostenProKm = $gefahreneKm > 0 ? $gesamtKosten / $gefahreneKm : 0;
                     ?>
@@ -306,5 +339,25 @@ function holeVerfügbareJahre($fahrzeug_id) {
     }
     
     return $jahre;
+}
+
+function holeAnzahlMonate($fahrzeug_id, $jahr = null) {
+    global $conn;
+
+    $sql = "SELECT COUNT(DISTINCT DATE_FORMAT(datum, '%Y-%m')) AS monate FROM eintraege WHERE fahrzeug_id = ?";
+    if ($jahr !== null) {
+        $sql .= " AND YEAR(datum) = ?";
+    }
+
+    $stmt = $conn->prepare($sql);
+    if ($jahr !== null) {
+        $stmt->bind_param('ii', $fahrzeug_id, $jahr);
+    } else {
+        $stmt->bind_param('i', $fahrzeug_id);
+    }
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    return (int)($row['monate'] ?? 0);
 }
 ?>
