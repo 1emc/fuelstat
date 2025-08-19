@@ -45,7 +45,8 @@ function getCategoryColor($kategorie) {
         'TUV'          => 'rgba(255, 99, 71, 0.7)',     // Tomate
         'Wartung'      => 'rgba(60, 179, 113, 0.7)',    // Grün
         'Dekor'        => 'rgba(238, 130, 238, 0.7)',   // Violett
-        'Verbrauch'    => 'rgba(106, 90, 205, 0.7)'     // Slate Blue
+        'Verbrauch'    => 'rgba(106, 90, 205, 0.7)',    // Slate Blue
+        'Fahrt'        => 'rgba(30, 144, 255, 0.7)'     // DodgerBlue
     ];
     return $colors[$kategorie] ?? 'rgba(169, 169, 169, 0.7)'; // Standard: Dunkelgrau
 }
