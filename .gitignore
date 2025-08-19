@@ -29,7 +29,7 @@ $RECYCLE.BIN/
 /storage/
 
 # Falls du aktuell direkt /images/ für Uploads benutzt:
-/images/*
+/images/
 
 # --- Secrets ---
 includes/db_connect.php
