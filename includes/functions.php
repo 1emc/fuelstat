@@ -346,27 +346,43 @@ function holeVerbrauchProMonat(int $fahrzeug_id): array
     $stmt->bind_param('i', $fahrzeug_id);
     $stmt->execute();
     $res = $stmt->get_result();
+    $rows = [];
+    while ($row = $res->fetch_assoc()) {
+        $rows[] = $row;
+    }
+    $stmt->close();
+    return berechneVerbrauchProMonatAusTankfuellungen($rows);
+}
+
+function berechneVerbrauchProMonatAusTankfuellungen(array $rows): array
+{
     $zwischen = [];
     $letzteVoll = null;
-    $mengeSeitVoll = 0;
-    while ($row = $res->fetch_assoc()) {
-        $mengeSeitVoll += $row['menge'];
+    $mengeSeitVoll = 0.0;
+    foreach ($rows as $row) {
+        $mengeSeitVoll += (float)$row['menge'];
         if ($row['vollgetankt']) {
             if ($letzteVoll) {
                 $km = $row['tachostand'] - $letzteVoll['tachostand'];
                 if ($km > 0) {
                     $monat = date('Y-m', strtotime($row['datum']));
-                    $zwischen[$monat][] = ($mengeSeitVoll / $km) * 100;
+                    if (!isset($zwischen[$monat])) {
+                        $zwischen[$monat] = ['liter' => 0.0, 'km' => 0];
+                    }
+                    $zwischen[$monat]['liter'] += $mengeSeitVoll;
+                    $zwischen[$monat]['km']    += $km;
                 }
             }
             $letzteVoll = $row;
-            $mengeSeitVoll = 0;
+            $mengeSeitVoll = 0.0;
         }
     }
-    $stmt->close();
+
     $verbrauchProMonat = [];
-    foreach ($zwischen as $monat => $werte) {
-        $verbrauchProMonat[$monat] = round(array_sum($werte) / count($werte), 2);
+    foreach ($zwischen as $monat => $daten) {
+        $verbrauchProMonat[$monat] = $daten['km'] > 0
+            ? round(($daten['liter'] / $daten['km']) * 100, 2)
+            : 0.0;
     }
     return $verbrauchProMonat;
 }
