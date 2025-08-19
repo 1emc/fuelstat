@@ -30,6 +30,7 @@ $RECYCLE.BIN/
 
 # Falls du aktuell direkt /images/ für Uploads benutzt:
 /images/
+!/images/.gitkeep
 
 # --- Secrets ---
 includes/db_connect.php
