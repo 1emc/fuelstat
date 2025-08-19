@@ -268,21 +268,72 @@ function holeVerbrauchProMonat(int $fahrzeug_id): array
 function holeKostenProMonat(int $fahrzeug_id): array
 {
     global $conn;
+
     $kostenProMonat = [];
-    $stmt = $conn->prepare("
-        SELECT DATE_FORMAT(datum, '%Y-%m') AS monat, SUM(kosten) AS summe
-        FROM eintraege 
-        WHERE fahrzeug_id = ?
-        GROUP BY monat
-        ORDER BY monat ASC
-    ");
+
+    // 1) Gesamtkosten ermitteln
+    $stmt = $conn->prepare('SELECT SUM(kosten) AS summe FROM eintraege WHERE fahrzeug_id = ?');
+    $stmt->bind_param('i', $fahrzeug_id);
+    $stmt->execute();
+    $totalKosten = (float)($stmt->get_result()->fetch_assoc()['summe'] ?? 0);
+    $stmt->close();
+
+    if ($totalKosten <= 0) {
+        return $kostenProMonat;
+    }
+
+    // 2) Kilometer pro Monat aus Fahrten ermitteln
+    $stmt = $conn->prepare(
+        "SELECT DATE_FORMAT(datum, '%Y-%m') AS monat, SUM(gefahrene_km) AS km\n         FROM eintraege\n         WHERE fahrzeug_id = ? AND kategorie = 'Fahrt'\n         GROUP BY monat\n         ORDER BY monat ASC"
+    );
     $stmt->bind_param('i', $fahrzeug_id);
     $stmt->execute();
     $res = $stmt->get_result();
+    $kmData = [];
+    $totalKm = 0.0;
     while ($row = $res->fetch_assoc()) {
-        $kostenProMonat[$row['monat']] = round($row['summe'], 2);
+        $kmData[$row['monat']] = (float)$row['km'];
+        $totalKm += (float)$row['km'];
     }
     $stmt->close();
+
+    if ($totalKm > 0) {
+        foreach ($kmData as $monat => $km) {
+            $kostenProMonat[$monat] = round($totalKosten * ($km / $totalKm), 2);
+        }
+        return $kostenProMonat;
+    }
+
+    // 3) Fallback: Verteilung nach Tagen
+    $stmt = $conn->prepare('SELECT MIN(datum) AS min_datum, MAX(datum) AS max_datum FROM eintraege WHERE fahrzeug_id = ?');
+    $stmt->bind_param('i', $fahrzeug_id);
+    $stmt->execute();
+    $range = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$range['min_datum'] || !$range['max_datum']) {
+        return $kostenProMonat;
+    }
+
+    $minDate = new DateTime($range['min_datum']);
+    $maxDate = new DateTime($range['max_datum']);
+    $totalDays = $maxDate->diff($minDate)->days + 1;
+
+    $start = (clone $minDate)->modify('first day of this month');
+    $end = (clone $maxDate)->modify('first day of next month');
+    $interval = new DateInterval('P1M');
+    $period = new DatePeriod($start, $interval, $end);
+
+    foreach ($period as $dt) {
+        $monthStart = $dt > $minDate ? clone $dt : clone $minDate;
+        $monthEnd = (clone $dt)->modify('last day of this month');
+        if ($monthEnd > $maxDate) {
+            $monthEnd = $maxDate;
+        }
+        $days = $monthEnd->diff($monthStart)->days + 1;
+        $kostenProMonat[$dt->format('Y-m')] = round($totalKosten * ($days / $totalDays), 2);
+    }
+
     return $kostenProMonat;
 }
 
