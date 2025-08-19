@@ -32,8 +32,8 @@ $kostenProMonatFormatted       = formatLabels($kostenProMonat);
 
 // Zusammenfassung ermitteln mit Guards
 if ($verbrauchProMonatFormatted) {
-    $bestKey    = array_keys($verbrauchProMonatFormatted, max($verbrauchProMonatFormatted))[0];
-    $worstKey   = array_keys($verbrauchProMonatFormatted, min($verbrauchProMonatFormatted))[0];
+    $bestKey    = array_keys($verbrauchProMonatFormatted, min($verbrauchProMonatFormatted))[0];
+    $worstKey   = array_keys($verbrauchProMonatFormatted, max($verbrauchProMonatFormatted))[0];
 } else {
     $bestKey = $worstKey = '-';
 }
@@ -55,7 +55,8 @@ $teuersterMonatWert  = !empty($kostenProMonatFormatted)    ? max($kostenProMonat
     <!-- Bester Verbrauch -->
     <div class="col-md-4 mb-2">
         <div class="card p-2 text-center">
-            <strong>Bester Verbrauch</strong><br>
+            <strong>Bester Monatsverbrauch</strong><br>
+            <small>Basis: Full-to-Full, Monat = Enddatum</small><br>
             <span>
                 <?php
                     echo $besterVerbrauch !== null
@@ -69,7 +70,8 @@ $teuersterMonatWert  = !empty($kostenProMonatFormatted)    ? max($kostenProMonat
     <!-- Schlechtester Verbrauch -->
     <div class="col-md-4 mb-2">
         <div class="card p-2 text-center">
-            <strong>Schlechtester Verbrauch</strong><br>
+            <strong>Schlechtester Monatsverbrauch</strong><br>
+            <small>Basis: Full-to-Full, Monat = Enddatum</small><br>
             <span>
                 <?php
                     echo $schlechtesterVerbrauch !== null
