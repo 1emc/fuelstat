@@ -65,7 +65,7 @@ CREATE TABLE `eintraege` (
   `id` int(32) NOT NULL,
   `fahrzeug_id` int(32) NOT NULL,
   `kraftstoff` enum('diesel','e5','e10','lpg','cng','electric','hybrid','hydrogen','other') DEFAULT NULL,
-  `kategorie` enum('Tankfuellung','Versicherung','Steuer','Inspektion','Reparatur','Reifen','TUV','Wartung','Dekor','Verbrauch') NOT NULL,
+  `kategorie` enum('Tankfuellung','Versicherung','Steuer','Inspektion','Reparatur','Reifen','TUV','Wartung','Dekor','Verbrauch','Fahrt') NOT NULL,
   `datum` date NOT NULL,
   `tachostand` int(64) NOT NULL,
   `standort` varchar(128) NOT NULL,
@@ -75,7 +75,11 @@ CREATE TABLE `eintraege` (
   `vollgetankt` bit(1) NOT NULL,
   `standort_bezeichnung` varchar(32) NOT NULL,
   `beschreibung` text NOT NULL,
-  `skip_previous` bit(1) NOT NULL
+  `skip_previous` bit(1) NOT NULL,
+  `startort` varchar(128) NOT NULL DEFAULT '',
+  `zielort` varchar(128) NOT NULL DEFAULT '',
+  `zweck` varchar(255) NOT NULL DEFAULT '',
+  `gefahrene_km` decimal(32,4) NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
   
