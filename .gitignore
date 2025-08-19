@@ -37,6 +37,7 @@ $RECYCLE.BIN/
 includes/db_connect.php
 .env
 .user.ini
+api/key.key
 
 # --- Projekt-spezifische Demos ---
 target/
