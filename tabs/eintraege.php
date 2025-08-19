@@ -108,6 +108,18 @@ body.dark .badge {
                 <i class="fas <?= $icon ?> me-2 text-<?= $farbe ?>"></i>
                 <?= htmlspecialchars($e['kategorie']) ?>
               </div>
+              <?php if ($e['kategorie'] === 'Fahrt'): ?>
+              <div class="text-muted small">
+                <i class="fas fa-map-marker-alt me-1"></i><?= htmlspecialchars($e['startort'] ?: '–') ?>
+                <i class="fas fa-arrow-right mx-1"></i>
+                <i class="fas fa-flag-checkered me-1"></i><?= htmlspecialchars($e['zielort'] ?: '–') ?>
+              </div>
+              <?php if (!empty($e['zweck'])): ?>
+              <div class="small mt-1 text-secondary">
+                <i class="fas fa-bullseye me-1"></i><?= htmlspecialchars($e['zweck']) ?>
+              </div>
+              <?php endif; ?>
+              <?php else: ?>
               <div class="text-muted small">
                 <?= number_format($e['tachostand'],0,',','.') ?> km<?= $e['standort'] ? ' · '.htmlspecialchars($e['standort']) : '' ?>
               </div>
@@ -119,11 +131,18 @@ body.dark .badge {
                 <?php if ($trend==='up'): ?><i class="fas fa-arrow-up text-danger"></i><?php elseif ($trend==='down'): ?><i class="fas fa-arrow-down text-success"></i><?php endif; ?>
               </div>
               <?php endif; ?>
+              <?php endif; ?>
             </div>
             <div class="text-end">
+              <?php if ($e['kategorie'] === 'Fahrt'): ?>
+              <div class="badge rounded-pill bg-<?= $farbe ?> text-white px-3 py-2">
+                <?= number_format($e['gefahrene_km']??0,0,',','.') ?> km
+              </div>
+              <?php else: ?>
               <div class="badge rounded-pill bg-<?= $farbe ?> text-white px-3 py-2">
                 <?= number_format($e['kosten']??0,2,',','.') ?> €
               </div>
+              <?php endif; ?>
               <div class="mt-2">
                 <a href="eintrag_bearbeiten.php?id=<?= $e['id'] ?>&fahrzeug_id=<?= $fahrzeug_id ?>" class="btn btn-sm btn-outline-success me-1">
                   <i class="fas fa-pen"></i>

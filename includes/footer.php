@@ -19,11 +19,21 @@
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('<?php echo htmlspecialchars($baseUrl); ?>js/service-worker.js', { scope: '<?php echo htmlspecialchars($basePath === '/' ? '/' : $basePath . '/'); ?>' }).then(registration => {
+      navigator.serviceWorker.register('<?php echo htmlspecialchars($baseUrl); ?>service-worker.js', { scope: '<?php echo htmlspecialchars($basePath === '/' ? '/' : $basePath . '/'); ?>' }).then(registration => {
         console.log('Service Worker registriert mit Scope: ', registration.scope);
       }, err => {
         console.log('Service Worker Registrierung fehlgeschlagen: ', err);
       });
+		// Alte Registrierungen unter /js/ bereinigen
+		navigator.serviceWorker.getRegistrations && navigator.serviceWorker.getRegistrations().then(registrations => {
+			registrations.forEach(reg => {
+				const sw = reg.active || reg.installing || reg.waiting;
+				const scriptURL = sw && sw.scriptURL ? sw.scriptURL : '';
+				if (scriptURL.endsWith('/js/service-worker.js')) {
+					reg.unregister();
+				}
+			});
+		});
     });
   }
 </script>

@@ -1,5 +1,7 @@
 # Icons
 new-icon-512x512.png
 icon-512x512.png
+icon-192x192.png
 new-icon-*.png
+icon-*x*.png
 *.ico
