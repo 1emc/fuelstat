@@ -1,4 +1,9 @@
 <?php
+// — Sofort sichtbare Fehler einschalten —
+error_reporting(E_ALL);
+ini_set('display_errors', '1');
+ini_set('display_startup_errors', '1');
+
 // pages/fahrzeug_update.php
 // Session-Handling
 include '../includes/session.php';
