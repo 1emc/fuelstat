@@ -66,6 +66,8 @@ Willkommen zum **Fahrzeug-Tracker-Projekt**! Diese Webanwendung ermöglicht es B
   - Anzeige von Minimal-, Durchschnitts- und Maximalverbrauchswerten.
 - **Jahresübersicht**:
   - Tabelle mit jährlichen Daten wie Anzahl der Tankstops, Gesamtmenge getankter Liter/kWh, durchschnittlicher Verbrauch und Gesamtausgaben.
+- **Monatliche Ausgaben**:
+  - Bei vorhandenen Fahrten werden die Gesamtkosten anhand der gefahrenen Kilometer auf die Monate verteilt; ohne Fahrten erfolgt die Verteilung weiterhin tagbasiert.
 
 ### 5. Ausgabenanalyse (Reiter 4)
 
