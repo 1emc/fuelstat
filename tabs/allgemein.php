@@ -65,13 +65,14 @@ $fahrleistung = berechneFahrleistung($fahrzeug_id, $initial_tachostand);
                 echo isset($kraftstoffTexte[$art]) ? $kraftstoffTexte[$art] : ucfirst($art);
             ?></p>
             <p><strong>Gesamt:</strong>
-			<?php
-				$gesamt = berechneGesamtverbrauch($fahrzeug_id);
-				echo $gesamt !== null
-				  ? number_format($gesamt, 2, ',', '.') . ' l/100km'
-				  : 'Keine Daten';
-			?>
-			</p>
+                        <?php
+                                $basisVerbrauch = getKmBasis($fahrzeug_id, 'since_first_full');
+                                $gesamt = berechneGesamtverbrauch($fahrzeug_id);
+                                echo $gesamt !== null
+                                  ? number_format($gesamt, 2, ',', '.') . ' l/100km (Basis: ' . number_format($basisVerbrauch,0,',','.') . ' km)'
+                                  : 'Keine Daten';
+                        ?>
+                        </p>
             <p><strong>Aktuell:</strong> 
 			<?php
 				$aktuell = berechneAktuellenVerbrauch($fahrzeug_id);
@@ -82,22 +83,24 @@ $fahrleistung = berechneFahrleistung($fahrzeug_id, $initial_tachostand);
             
             <!-- Kosten per Kilometer -->
             <h3>Kosten per Kilometer</h3>
-			<?php
-				$kostenGesamt = berechneKostenProKmGesamt($fahrzeug_id);
-				$kostenTanken = berechneKraftstoffkostenProKm($fahrzeug_id);
-			?>
-            <p><strong>Gesamt:</strong> 
-			<?php
-				echo $kostenGesamt !== null
-				  ? number_format($kostenGesamt, 2, ',', '.') . ' €/km'
-				  : 'Keine Daten';
-			?></p>
+                        <?php
+                                $basisGesamtKm = getKmBasis($fahrzeug_id, 'vehicle_since_created');
+                                $basisTankenKm = getKmBasis($fahrzeug_id, 'since_first_full');
+                                $kostenGesamt = berechneKostenProKmGesamt($fahrzeug_id, 'vehicle_since_created');
+                                $kostenTanken = berechneKraftstoffkostenProKm($fahrzeug_id, 'since_first_full');
+                        ?>
+            <p><strong>Gesamt:</strong>
+                        <?php
+                                echo $kostenGesamt !== null
+                                  ? number_format($kostenGesamt, 2, ',', '.') . ' €/km (Basis: ' . number_format($basisGesamtKm,0,',','.') . ' km)'
+                                  : 'Keine Daten';
+                        ?></p>
             <p><strong>Tanken:</strong>
-			<?php
-				echo $kostenTanken !== null
-				  ? number_format($kostenTanken, 2, ',', '.') . ' €/km'
-				  : 'Keine Daten';
-			?></p>
+                        <?php
+                                echo $kostenTanken !== null
+                                  ? number_format($kostenTanken, 2, ',', '.') . ' €/km (Basis: ' . number_format($basisTankenKm,0,',','.') . ' km)'
+                                  : 'Keine Daten';
+                        ?></p>
             
             <!-- Wartungshistorie -->
             <div class="d-flex justify-content-between align-items-center mt-4">
