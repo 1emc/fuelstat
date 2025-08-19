@@ -8,11 +8,13 @@ ini_set('display_startup_errors', 1);
 $selectedYear = isset($_GET['jahr']) && $_GET['jahr'] !== '' ? intval($_GET['jahr']) : null;
 
 // Daten für das Kuchendiagramm vorbereiten
+// Daten holen und Kategorien mit 0 € für das Diagramm ausblenden
 $ausgabenDaten = holeAusgabenDaten($fahrzeug_id, $selectedYear);
+$ausgabenDaten = array_filter($ausgabenDaten, fn($sum) => $sum > 0);
 
 // Aufbereitung der Daten für das Diagramm
 $kategorien = array_keys($ausgabenDaten);
-$beträge = array_values($ausgabenDaten);
+$beträge   = array_values($ausgabenDaten);
 
 // Gesamtkosten berechnen
 $gesamtKosten = array_sum($beträge);

@@ -71,28 +71,38 @@ function berechneVerbrauchEintrag(array $e, int $fid): ?float
     return round((($e['menge'] + $zwischen) / $km) * 100, 2);
 }
 
-function getPreviousVerbrauchByFahrzeug(int $fid): ?float
-{
-    global $conn;
-    $st = $conn->prepare("SELECT menge,
-          tachostand-(SELECT MAX(tachostand) FROM eintraege WHERE fahrzeug_id=? AND kategorie='Tankfuellung' AND vollgetankt=1 AND datum<e1.datum) AS km
-          FROM eintraege e1 WHERE fahrzeug_id=? AND kategorie='Tankfuellung' AND vollgetankt=1 ORDER BY datum DESC LIMIT 1");
-    $st->bind_param('ii', $fid, $fid);
-    $st->execute();
-    $r = $st->get_result()->fetch_assoc();
-    $st->close();
-    return ($r && $r['km'] > 0) ? round(($r['menge'] / $r['km']) * 100, 2) : null;
-}
-
 function berechneGesamtverbrauch(int $fid): ?float
 {
     global $conn;
-    $st = $conn->prepare("SELECT SUM(menge) AS m, MAX(tachostand)-MIN(tachostand) AS km FROM eintraege WHERE fahrzeug_id=? AND kategorie='Tankfuellung' AND vollgetankt=1");
-    $st->bind_param('i', $fid);
-    $st->execute();
-    $d = $st->get_result()->fetch_assoc();
-    $st->close();
-    return ($d['km'] > 0) ? round(($d['m'] / $d['km']) * 100, 2) : null;
+
+    $stmt = $conn->prepare(
+        "SELECT datum, menge, tachostand, vollgetankt\n         FROM eintraege\n         WHERE fahrzeug_id = ?\n           AND kategorie = 'Tankfuellung'\n         ORDER BY datum"
+    );
+    $stmt->bind_param('i', $fid);
+    $stmt->execute();
+    $res = $stmt->get_result();
+
+    $letzteVoll = null;
+    $mengeSeitVoll = 0;
+    $verbrauchGesamt = 0;
+
+    while ($row = $res->fetch_assoc()) {
+        $mengeSeitVoll += $row['menge'];
+        if ($row['vollgetankt']) {
+            if ($letzteVoll) {
+                $km = $row['tachostand'] - $letzteVoll['tachostand'];
+                if ($km > 0) {
+                    $verbrauchGesamt += $mengeSeitVoll;
+                }
+            }
+            $letzteVoll = $row;
+            $mengeSeitVoll = 0;
+        }
+    }
+    $stmt->close();
+
+    $kmBasis = getKmBasis($fid, 'since_first_full');
+    return ($kmBasis > 0) ? round(($verbrauchGesamt / $kmBasis) * 100, 2) : null;
 }
 
 function berechneAktuellenVerbrauch(int $fid): ?float
@@ -142,40 +152,127 @@ function berechneFahrleistung(int $fid, int $initial): ?int
     return $t !== null ? $t - $initial : null;
 }
 
+/**
+ * Liefert die Kilometerbasis je nach gewünschtem Modus.
+ *
+ *   - since_first_full: Distanz zwischen erster und letzter Vollbetankung
+ *   - vehicle_since_created: Distanz seit Anlegen des Fahrzeugs
+ *   - minmax_all_entries: Distanz zwischen erstem und letztem Eintrag
+ */
+function getKmBasis(int $fid, string $modus = 'since_first_full'): ?int
+{
+    global $conn;
+
+    switch ($modus) {
+        case 'vehicle_since_created':
+            $start = getInitialTachostand($fid);
+            $ende  = getAktuellenTachostand($fid);
+            if ($start === null || $ende === null) return null;
+            $km = $ende - $start;
+            return $km > 0 ? $km : null;
+
+        case 'minmax_all_entries':
+            $st = $conn->prepare("SELECT MAX(tachostand) AS max_t, MIN(tachostand) AS min_t FROM eintraege WHERE fahrzeug_id=?");
+            $st->bind_param('i', $fid);
+            $st->execute();
+            $row = $st->get_result()->fetch_assoc();
+            $st->close();
+            if (!$row) return null;
+            $km = ($row['max_t'] ?? 0) - ($row['min_t'] ?? 0);
+            return $km > 0 ? (int)$km : null;
+
+        case 'since_first_full':
+        default:
+            $st = $conn->prepare("SELECT MAX(tachostand) AS max_t, MIN(tachostand) AS min_t FROM eintraege WHERE fahrzeug_id=? AND kategorie='Tankfuellung' AND vollgetankt=1 AND skip_previous=0");
+            $st->bind_param('i', $fid);
+            $st->execute();
+            $row = $st->get_result()->fetch_assoc();
+            $st->close();
+            if (!$row) return null;
+            $km = ($row['max_t'] ?? 0) - ($row['min_t'] ?? 0);
+            return $km > 0 ? (int)$km : null;
+    }
+}
+
 function zeigeVerbrauchstendenz(int $fid): string
 {
-    $c = berechneAktuellenVerbrauch($fid);
-    $p = getPreviousVerbrauchByFahrzeug($fid);
-    if ($c !== null && $p !== null) {
-        if ($c > $p) return '<i class="fas fa-arrow-up text-danger"></i>';
-        if ($c < $p) return '<i class="fas fa-arrow-down text-success"></i>';
+    global $conn;
+    // Letzte vier volle Tanksegmente (aktuelles + drei vorherige)
+    $st = $conn->prepare(
+        "SELECT menge,
+                tachostand-(SELECT MAX(tachostand)
+                              FROM eintraege
+                              WHERE fahrzeug_id=?
+                                AND kategorie='Tankfuellung'
+                                AND vollgetankt=1
+                                AND datum<e1.datum) AS km
+         FROM eintraege e1
+         WHERE fahrzeug_id=?
+           AND kategorie='Tankfuellung'
+           AND vollgetankt=1
+         ORDER BY datum DESC
+         LIMIT 4"
+    );
+    $st->bind_param('ii', $fid, $fid);
+    $st->execute();
+    $res = $st->get_result();
+    $segments = [];
+    while ($row = $res->fetch_assoc()) {
+        if ($row['km'] > 0) {
+            $segments[] = ($row['menge'] / $row['km']) * 100;
+        }
     }
-    return '<i class="fas fa-minus text-muted"></i>';
+    $st->close();
+
+    if (count($segments) < 2) {
+        return '<i class="fas fa-minus text-muted"></i>';
+    }
+
+    $current = array_shift($segments);
+    $countPrev = min(3, count($segments));
+    $avgPrev = array_sum(array_slice($segments, 0, $countPrev)) / $countPrev;
+    $diff = $current - $avgPrev;
+
+    if (abs($diff) < 0.01) {
+        return '<i class="fas fa-minus text-muted"></i>';
+    }
+
+    $icon = $diff > 0 ? '<i class="fas fa-arrow-up text-danger"></i>' : '<i class="fas fa-arrow-down text-success"></i>';
+    $sign = $diff > 0 ? '+' : '-';
+    return $icon . ' ' . $sign . number_format(abs($diff), 2, ',', '.') . ' l/100km ggü. Ø der letzten ' . $countPrev;
 }
 
 // --------------------------------------------------
 // 3. Kostenfunktionen
 // --------------------------------------------------
-function berechneKostenProKmGesamt(int $fid): ?float
+function berechneKostenProKmGesamt(int $fid, string $basisModus = 'vehicle_since_created'): ?float
 {
     global $conn;
-    $st = $conn->prepare("SELECT SUM(kosten) AS k, MAX(tachostand)-MIN(tachostand) AS km FROM eintraege WHERE fahrzeug_id=?");
+    $km = getKmBasis($fid, $basisModus);
+    if ($km === null || $km <= 0) {
+        return null;
+    }
+    $st = $conn->prepare("SELECT SUM(kosten) AS k FROM eintraege WHERE fahrzeug_id=?");
     $st->bind_param('i', $fid);
     $st->execute();
     $d = $st->get_result()->fetch_assoc();
     $st->close();
-    return ($d['km'] > 0) ? round($d['k'] / $d['km'], 4) : null;
+    return ($d['k'] > 0) ? round($d['k'] / $km, 4) : null;
 }
 
-function berechneKraftstoffkostenProKm(int $fid): ?float
+function berechneKraftstoffkostenProKm(int $fid, string $basisModus = 'since_first_full'): ?float
 {
     global $conn;
-    $st = $conn->prepare("SELECT SUM(kosten) AS k, MAX(tachostand)-MIN(tachostand) AS km FROM eintraege WHERE fahrzeug_id=? AND kategorie='Tankfuellung'");
+    $km = getKmBasis($fid, $basisModus);
+    if ($km === null || $km <= 0) {
+        return null;
+    }
+    $st = $conn->prepare("SELECT SUM(kosten) AS k FROM eintraege WHERE fahrzeug_id=? AND kategorie='Tankfuellung'");
     $st->bind_param('i', $fid);
     $st->execute();
     $d = $st->get_result()->fetch_assoc();
     $st->close();
-    return ($d['km'] > 0) ? round($d['k'] / $d['km'], 4) : null;
+    return ($d['k'] > 0) ? round($d['k'] / $km, 4) : null;
 }
 
 function berechneDurchschnittPreisProLiter(int $fid): ?float
@@ -278,104 +375,90 @@ function holeKostenProMonat(int $fahrzeug_id): array
 {
     global $conn;
 
-    $kostenProMonat = [];
-
-    // 1) Gesamtkosten ermitteln
-    $stmt = $conn->prepare('SELECT SUM(kosten) AS summe FROM eintraege WHERE fahrzeug_id = ?');
-    $stmt->bind_param('i', $fahrzeug_id);
-    $stmt->execute();
-    $totalKosten = (float)($stmt->get_result()->fetch_assoc()['summe'] ?? 0);
-    $stmt->close();
-
-    if ($totalKosten <= 0) {
-        return $kostenProMonat;
-    }
-
-    // 2) Kilometer pro Monat aus Fahrten ermitteln
+    $result = [];
     $stmt = $conn->prepare(
-        "SELECT DATE_FORMAT(datum, '%Y-%m') AS monat, SUM(gefahrene_km) AS km\n         FROM eintraege\n         WHERE fahrzeug_id = ? AND kategorie = 'Fahrt'\n         GROUP BY monat\n         ORDER BY monat ASC"
+        "SELECT DATE_FORMAT(datum, '%Y-%m') AS monat, SUM(kosten) AS summe\n         FROM eintraege\n         WHERE fahrzeug_id = ? AND kategorie <> 'Fahrt'\n         GROUP BY monat\n         ORDER BY monat"
     );
     $stmt->bind_param('i', $fahrzeug_id);
     $stmt->execute();
     $res = $stmt->get_result();
-    $kmData = [];
-    $totalKm = 0.0;
     while ($row = $res->fetch_assoc()) {
-        $kmData[$row['monat']] = (float)$row['km'];
-        $totalKm += (float)$row['km'];
+        $result[$row['monat']] = (float)$row['summe'];
     }
     $stmt->close();
-
-    if ($totalKm > 0) {
-        foreach ($kmData as $monat => $km) {
-            $kostenProMonat[$monat] = round($totalKosten * ($km / $totalKm), 2);
-        }
-        return $kostenProMonat;
-    }
-
-    // 3) Fallback: Verteilung nach Tagen
-    $stmt = $conn->prepare('SELECT MIN(datum) AS min_datum, MAX(datum) AS max_datum FROM eintraege WHERE fahrzeug_id = ?');
-    $stmt->bind_param('i', $fahrzeug_id);
-    $stmt->execute();
-    $range = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-
-    if (!$range['min_datum'] || !$range['max_datum']) {
-        return $kostenProMonat;
-    }
-
-    $minDate = new DateTime($range['min_datum']);
-    $maxDate = new DateTime($range['max_datum']);
-    $totalDays = $maxDate->diff($minDate)->days + 1;
-
-    $start = (clone $minDate)->modify('first day of this month');
-    $end = (clone $maxDate)->modify('first day of next month');
-    $interval = new DateInterval('P1M');
-    $period = new DatePeriod($start, $interval, $end);
-
-    foreach ($period as $dt) {
-        $monthStart = $dt > $minDate ? clone $dt : clone $minDate;
-        $monthEnd = (clone $dt)->modify('last day of this month');
-        if ($monthEnd > $maxDate) {
-            $monthEnd = $maxDate;
-        }
-        $days = $monthEnd->diff($monthStart)->days + 1;
-        $kostenProMonat[$dt->format('Y-m')] = round($totalKosten * ($days / $totalDays), 2);
-    }
-
-    return $kostenProMonat;
+    return $result;
 }
 
 function holeJahresdaten(int $fahrzeug_id): array
 {
     global $conn;
+
     $jahresdaten = [];
+
+    // Gekaufte Mengen und Kosten je Jahr
     $stmt = $conn->prepare(
-        "SELECT YEAR(datum) AS jahr,
-                SUM(menge) AS gesamt_menge,
-                COUNT(*) AS stops,
-                SUM(kosten) AS gesamt_ausgaben,
-                MAX(tachostand) AS max_tacho,
-                MIN(tachostand) AS min_tacho
-         FROM eintraege
-         WHERE fahrzeug_id = ?
-           AND kategorie = 'Tankfuellung'
-         GROUP BY jahr
-         ORDER BY jahr DESC"
+        "SELECT YEAR(datum) AS jahr, SUM(menge) AS gekauft_menge, COUNT(*) AS stops, SUM(kosten) AS gekauft_ausgaben\n         FROM eintraege\n         WHERE fahrzeug_id = ? AND kategorie = 'Tankfuellung'\n         GROUP BY jahr"
     );
     $stmt->bind_param('i', $fahrzeug_id);
     $stmt->execute();
     $res = $stmt->get_result();
     while ($row = $res->fetch_assoc()) {
-        $gefahrene_km = ($row['max_tacho'] ?? 0) - ($row['min_tacho'] ?? 0);
         $jahresdaten[$row['jahr']] = [
-            'anzahl_tankstops' => $row['stops'],
-            'gesamt_menge' => $row['gesamt_menge'],
-            'durchschnitt_verbrauch' => ($gefahrene_km > 0) ? round(($row['gesamt_menge'] / $gefahrene_km) * 100, 2) : 0,
-            'gesamt_ausgaben' => $row['gesamt_ausgaben'],
+            'anzahl_tankstops'   => $row['stops'],
+            'gekauft_menge'      => (float)$row['gekauft_menge'],
+            'gekauft_ausgaben'   => (float)$row['gekauft_ausgaben'],
+            'verbrauch_menge'    => 0.0,
+            'verbrauch_km'       => 0.0,
+            'verbrauch_l100km'   => 0.0,
         ];
     }
     $stmt->close();
+
+    // Verbrauch (full-to-full) je Jahr berechnen
+    $stmt = $conn->prepare(
+        "SELECT datum, menge, tachostand, vollgetankt\n         FROM eintraege\n         WHERE fahrzeug_id = ? AND kategorie = 'Tankfuellung'\n         ORDER BY datum"
+    );
+    $stmt->bind_param('i', $fahrzeug_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+
+    $letzteVoll = null;
+    $mengeSeitVoll = 0;
+    while ($row = $res->fetch_assoc()) {
+        $mengeSeitVoll += $row['menge'];
+        if ($row['vollgetankt']) {
+            if ($letzteVoll) {
+                $km = $row['tachostand'] - $letzteVoll['tachostand'];
+                if ($km > 0) {
+                    $jahr = date('Y', strtotime($row['datum']));
+                    if (!isset($jahresdaten[$jahr])) {
+                        $jahresdaten[$jahr] = [
+                            'anzahl_tankstops' => 0,
+                            'gekauft_menge' => 0.0,
+                            'gekauft_ausgaben' => 0.0,
+                            'verbrauch_menge' => 0.0,
+                            'verbrauch_km' => 0.0,
+                            'verbrauch_l100km' => 0.0,
+                        ];
+                    }
+                    $jahresdaten[$jahr]['verbrauch_menge'] += $mengeSeitVoll;
+                    $jahresdaten[$jahr]['verbrauch_km'] += $km;
+                }
+            }
+            $letzteVoll = $row;
+            $mengeSeitVoll = 0;
+        }
+    }
+    $stmt->close();
+
+    foreach ($jahresdaten as &$daten) {
+        if ($daten['verbrauch_km'] > 0) {
+            $daten['verbrauch_l100km'] = round(($daten['verbrauch_menge'] / $daten['verbrauch_km']) * 100, 2);
+        }
+    }
+    unset($daten);
+
+    krsort($jahresdaten); // nach Jahr absteigend
     return $jahresdaten;
 }
 

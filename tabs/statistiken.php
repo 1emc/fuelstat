@@ -17,7 +17,8 @@ $verbrauchswerte              = holeVerbrauchswerte($fahrzeug_id) ?: [];
 $verbrauchProMonat             = holeVerbrauchProMonat($fahrzeug_id) ?: [];
 $kostenProMonat                = holeKostenProMonat($fahrzeug_id) ?: [];
 $jahresdaten                   = holeJahresdaten($fahrzeug_id) ?: [];
-$kraftstoffKostenProKm         = berechneKraftstoffkostenProKm($fahrzeug_id);
+$basisKraftstoffKm             = getKmBasis($fahrzeug_id, 'since_first_full');
+$kraftstoffKostenProKm         = berechneKraftstoffkostenProKm($fahrzeug_id, 'since_first_full');
 $durchschnittPreis             = berechneDurchschnittPreisProLiter($fahrzeug_id);
 
 // Kennzahlen berechnen
@@ -102,7 +103,7 @@ $teuersterMonatWert  = !empty($kostenProMonatFormatted)    ? max($kostenProMonat
             <span>
                 <?php
                     echo $kraftstoffKostenProKm !== null
-                         ? number_format($kraftstoffKostenProKm, 2, ',', '.').' €'
+                         ? number_format($kraftstoffKostenProKm, 2, ',', '.').' € (Basis: '.number_format($basisKraftstoffKm,0,',','.').' km)'
                          : '–';
                 ?>
             </span>
@@ -145,9 +146,10 @@ $teuersterMonatWert  = !empty($kostenProMonatFormatted)    ? max($kostenProMonat
                         <tr>
                             <th>Jahr</th>
                             <th># Stops</th>
-                            <th>l gesamt</th>
+                            <th>l gekauft</th>
+                            <th>€ gekauft</th>
+                            <th>l verbraucht</th>
                             <th>l/100km</th>
-                            <th>€ gesamt</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -155,9 +157,10 @@ $teuersterMonatWert  = !empty($kostenProMonatFormatted)    ? max($kostenProMonat
                         <tr>
                             <td><?php echo $jahr; ?></td>
                             <td><?php echo $daten['anzahl_tankstops']; ?></td>
-                            <td><?php echo number_format($daten['gesamt_menge'],2,',','.'); ?></td>
-                            <td><?php echo number_format($daten['durchschnitt_verbrauch'],2,',','.'); ?></td>
-                            <td><?php echo number_format($daten['gesamt_ausgaben'],2,',','.'); ?></td>
+                            <td><?php echo number_format($daten['gekauft_menge'],2,',','.'); ?></td>
+                            <td><?php echo number_format($daten['gekauft_ausgaben'],2,',','.'); ?></td>
+                            <td><?php echo number_format($daten['verbrauch_menge'],2,',','.'); ?></td>
+                            <td><?php echo $daten['verbrauch_l100km'] > 0 ? number_format($daten['verbrauch_l100km'],2,',','.').' (Basis: '.number_format($daten['verbrauch_km'],0,',','.').' km)' : '–'; ?></td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
