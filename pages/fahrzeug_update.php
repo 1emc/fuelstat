@@ -20,20 +20,40 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         die("Fahrzeug-ID fehlt.");
     }
 
-    // Felder aus dem Formular
-    $marke       = trim($_POST['marke']);
-    $modell      = trim($_POST['modell']);
-    $baujahr     = isset($_POST['baujahr']) ? intval($_POST['baujahr']) : null;
-    $tankgroesse = isset($_POST['tankgroesse']) ? floatval($_POST['tankgroesse']) : null;
-    $tachostand  = isset($_POST['tachostand']) ? intval($_POST['tachostand']) : null;
-    $kraftstoff  = isset($_POST['kraftstoff']) ? $_POST['kraftstoff'] : 'diesel';
+    // Aktuelle Fahrzeugdaten laden (für Defaults, wenn Form-Felder fehlen)
+    $curStmt = $conn->prepare("SELECT marke, modell, baujahr, tankgroesse, tachostand, kraftstoff, bild FROM fahrzeuge WHERE id = ?");
+    $curStmt->bind_param("i", $fahrzeug_id);
+    $curStmt->execute();
+    $curRes = $curStmt->get_result();
+    if ($curRes->num_rows === 0) {
+        $_SESSION['error_message'] = "Fahrzeug nicht gefunden.";
+        header("Location: fahrzeug_bearbeiten.php?id=" . $fahrzeug_id);
+        exit();
+    }
+    $current = $curRes->fetch_assoc();
+    $curStmt->close();
+
+    // Felder aus dem Formular (fehlende Felder behalten den vorhandenen DB-Wert)
+    $post_marke       = isset($_POST['marke']) ? trim($_POST['marke']) : null;
+    $post_modell      = isset($_POST['modell']) ? trim($_POST['modell']) : null;
+    $post_baujahr_raw = isset($_POST['baujahr']) ? trim((string)$_POST['baujahr']) : null;
+    $post_tank_raw    = isset($_POST['tankgroesse']) ? trim((string)$_POST['tankgroesse']) : null;
+    $post_tacho_raw   = isset($_POST['tachostand']) ? trim((string)$_POST['tachostand']) : null;
+    $post_kraftstoff  = isset($_POST['kraftstoff']) ? $_POST['kraftstoff'] : null;
+
+    $marke       = ($post_marke !== null && $post_marke !== '') ? $post_marke : (string)$current['marke'];
+    $modell      = ($post_modell !== null && $post_modell !== '') ? $post_modell : (string)$current['modell'];
+    $baujahr     = ($post_baujahr_raw !== null && $post_baujahr_raw !== '') ? intval($post_baujahr_raw) : (isset($current['baujahr']) ? (int)$current['baujahr'] : 0);
+    $tankgroesse = ($post_tank_raw !== null && $post_tank_raw !== '') ? floatval(str_replace(',', '.', $post_tank_raw)) : (isset($current['tankgroesse']) ? (float)$current['tankgroesse'] : 0.0);
+    $tachostand  = ($post_tacho_raw !== null && $post_tacho_raw !== '') ? intval($post_tacho_raw) : (isset($current['tachostand']) ? (int)$current['tachostand'] : 0);
+    $kraftstoff  = ($post_kraftstoff !== null) ? $post_kraftstoff : (string)$current['kraftstoff'];
 
     // Validierung der erforderlichen Felder
     if (empty($marke) || empty($modell)) {
         die("Marke und Modell sind erforderlich.");
     }
     if (!in_array($kraftstoff, ['diesel','e5','e10','lpg','cng','electric','hybrid','hydrogen','other'])) {
-        die('Ungültiger Kraftstofftyp.');
+        $kraftstoff = (string)$current['kraftstoff'];
     }
 
     // Initialisiere die Variable für den Bildnamen
@@ -137,7 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             die("Prepare-Fehler: " . $conn->error);
         }
         $stmt->bind_param(
-            "ssidsssi",
+            "ssidissi",
             $marke,
             $modell,
             $baujahr,
@@ -164,7 +184,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             die("Prepare-Fehler: " . $conn->error);
         }
         $stmt->bind_param(
-            "ssidssi",
+            "ssidisi",
             $marke,
             $modell,
             $baujahr,
@@ -176,8 +196,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 
     // Führe die Abfrage aus und prüfe auf Fehler
-    if (!$stmt->execute()) {
-        die("Execute-Fehler: " . $stmt->error);
+    try {
+        $ok = $stmt->execute();
+        if (!$ok) {
+            $_SESSION['error_message'] = 'Aktualisierung fehlgeschlagen: ' . $stmt->error;
+            header('Location: fahrzeug_bearbeiten.php?id=' . $fahrzeug_id);
+            exit();
+        }
+    } catch (mysqli_sql_exception $ex) {
+        $_SESSION['error_message'] = 'Aktualisierung fehlgeschlagen: ' . $ex->getMessage();
+        header('Location: fahrzeug_bearbeiten.php?id=' . $fahrzeug_id);
+        exit();
     }
 
     $_SESSION['success_message'] = "Fahrzeugdaten erfolgreich aktualisiert.";
