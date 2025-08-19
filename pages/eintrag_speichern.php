@@ -29,7 +29,12 @@ $data = [
     'skip_previous'=> 0,
     'beschreibung' => '',
     // Schema verlangt NOT NULL für standort_bezeichnung
-    'standort_bezeichnung' => ''
+    'standort_bezeichnung' => '',
+    // Felder für Fahrten
+    'startort'       => '',
+    'zielort'        => '',
+    'zweck'          => '',
+    'gefahrene_km'   => 0
 ];
 
 // Verarbeitung nach Typ
@@ -52,11 +57,11 @@ switch ($eintragstyp) {
         break;
 
     case 'Fahrt':
-        // Hinweis: Die aktuelle Tabellenstruktur enthält keine Spalten für Fahrt-Details.
-        // Wir speichern daher nur eine Ausgabe unter Kategorie 'Wartung' mit Beschreibung.
-        $data['kategorie']    = 'Wartung';
-        $data['beschreibung'] = trim($_POST['zweck'] ?? 'Fahrt');
-        $data['kosten']       = 0;
+        $data['kategorie']    = 'Fahrt';
+        $data['startort']     = trim($_POST['startort'] ?? '');
+        $data['zielort']      = trim($_POST['zielort'] ?? '');
+        $data['zweck']        = trim($_POST['zweck'] ?? '');
+        $data['gefahrene_km'] = isset($_POST['gefahrene_km']) ? floatval($_POST['gefahrene_km']) : 0;
         break;
 
     default:

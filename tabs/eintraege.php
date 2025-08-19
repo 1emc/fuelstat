@@ -29,9 +29,18 @@ while ($row = $res->fetch_assoc()) {
 $stmt->close();
 
 $farben = [
-    'Tankfuellung' => 'primary','Versicherung'=>'success','Werkstatt'=>'warning',
-    'Inspektion'=>'info','Reparatur'=>'danger','Reifen'=>'secondary',
-    'TUV'=>'dark','Wartung'=>'warning','Dekor'=>'info','Verbrauch'=>'secondary'];
+    'Tankfuellung' => 'primary',
+    'Versicherung' => 'success',
+    'Werkstatt'    => 'warning',
+    'Inspektion'   => 'info',
+    'Reparatur'    => 'danger',
+    'Reifen'       => 'secondary',
+    'TUV'          => 'dark',
+    'Wartung'      => 'warning',
+    'Dekor'        => 'info',
+    'Verbrauch'    => 'secondary',
+    'Fahrt'        => 'info'
+];
 ?>
 
 <style>

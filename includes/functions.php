@@ -17,6 +17,7 @@ function getCategoryIcon(string $kategorie): string
         'Wartung'      => 'fa-cogs',
         'Dekor'        => 'fa-paint-roller',
         'Verbrauch'    => 'fa-chart-line',
+        'Fahrt'        => 'fa-route',
     ];
     return $icons[$kategorie] ?? 'fa-question-circle';
 }
