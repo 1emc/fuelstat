@@ -1,5 +1,14 @@
 <?php
-// includes/functions.php  — vollständige, lauffähige Version (alle Helfer + Statistikfunktionen)
+// includes/functions.php  — vollständige, lauffähige Version (alle Helfer + Statistikfunktionen)
+
+// --------------------------------------------------
+// 0. System-Checks
+// --------------------------------------------------
+function isGdExtensionAvailable(): bool
+{
+    return extension_loaded('gd') && function_exists('imagecreatefromjpeg');
+}
+
 // --------------------------------------------------
 // 1. Icons
 // --------------------------------------------------

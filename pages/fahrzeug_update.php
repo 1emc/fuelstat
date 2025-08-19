@@ -61,46 +61,55 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             die("Fehler beim Speichern des Bildes: " . $zielpfad);
         }
 
-        // Bild komprimieren / skalieren
-        list($origWidth, $origHeight, $format) = getimagesize($zielpfad);
-        $maxWidth  = 1200;
-        $maxHeight = 800;
-        $ratio = min($maxWidth / $origWidth, $maxHeight / $origHeight, 1);
-        $newW = (int) ($origWidth * $ratio);
-        $newH = (int) ($origHeight * $ratio);
+        // Bild komprimieren / skalieren (nur wenn GD-Extension verfügbar)
+        if (isGdExtensionAvailable()) {
+            list($origWidth, $origHeight, $format) = getimagesize($zielpfad);
+            $maxWidth  = 1200;
+            $maxHeight = 800;
+            $ratio = min($maxWidth / $origWidth, $maxHeight / $origHeight, 1);
+            $newW = (int) ($origWidth * $ratio);
+            $newH = (int) ($origHeight * $ratio);
 
-        switch ($format) {
-            case IMAGETYPE_JPEG:
-                $src = imagecreatefromjpeg($zielpfad);
-                break;
-            case IMAGETYPE_PNG:
-                $src = imagecreatefrompng($zielpfad);
-                break;
-            case IMAGETYPE_GIF:
-                $src = imagecreatefromgif($zielpfad);
-                break;
-            default:
-                $src = null;
-        }
-        if ($src) {
-            $dst = imagecreatetruecolor($newW, $newH);
-            // Erhalte Transparenz für PNG/GIF
-            if (in_array($format, [IMAGETYPE_PNG, IMAGETYPE_GIF])) {
-                imagecolortransparent($dst, imagecolorallocatealpha($dst, 0, 0, 0, 127));
-                imagealphablending($dst, false);
-                imagesavealpha($dst, true);
+            switch ($format) {
+                case IMAGETYPE_JPEG:
+                    $src = imagecreatefromjpeg($zielpfad);
+                    break;
+                case IMAGETYPE_PNG:
+                    $src = imagecreatefrompng($zielpfad);
+                    break;
+                case IMAGETYPE_GIF:
+                    $src = imagecreatefromgif($zielpfad);
+                    break;
+                default:
+                    $src = null;
             }
-            imagecopyresampled($dst, $src, 0, 0, 0, 0, $newW, $newH, $origWidth, $origHeight);
-            // Speichere komprimiert
-            if ($format === IMAGETYPE_JPEG) {
-                imagejpeg($dst, $zielpfad, 85);
-            } elseif ($format === IMAGETYPE_PNG) {
-                imagepng($dst, $zielpfad, 6);
-            } elseif ($format === IMAGETYPE_GIF) {
-                imagegif($dst, $zielpfad);
+            if ($src) {
+                $dst = imagecreatetruecolor($newW, $newH);
+                // Erhalte Transparenz für PNG/GIF
+                if (in_array($format, [IMAGETYPE_PNG, IMAGETYPE_GIF])) {
+                    imagecolortransparent($dst, imagecolorallocatealpha($dst, 0, 0, 0, 127));
+                    imagealphablending($dst, false);
+                    imagesavealpha($dst, true);
+                }
+                imagecopyresampled($dst, $src, 0, 0, 0, 0, $newW, $newH, $origWidth, $origHeight);
+                // Speichere komprimiert
+                if ($format === IMAGETYPE_JPEG) {
+                    imagejpeg($dst, $zielpfad, 85);
+                } elseif ($format === IMAGETYPE_PNG) {
+                    imagepng($dst, $zielpfad, 6);
+                } elseif ($format === IMAGETYPE_GIF) {
+                    imagegif($dst, $zielpfad);
+                }
+                imagedestroy($src);
+                imagedestroy($dst);
             }
-            imagedestroy($src);
-            imagedestroy($dst);
+        } else {
+            // GD-Extension nicht verfügbar - Bild wird unverändert gespeichert
+            // Optional: Warnung in Session speichern
+            if (!isset($_SESSION['gd_warning_shown'])) {
+                $_SESSION['gd_warning_shown'] = true;
+                $_SESSION['warning_message'] = "Hinweis: Bildkomprimierung nicht verfügbar (GD-Extension fehlt). Bilder werden in Originalgröße gespeichert.";
+            }
         }
     }
 

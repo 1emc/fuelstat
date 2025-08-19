@@ -172,3 +172,30 @@ if (isset($_SESSION['user_id'])) {
 
 <!-- Hauptinhalt -->
 <div class="container mt-4">
+
+<?php
+// Erfolgs- und Warnmeldungen anzeigen
+if (isset($_SESSION['success_message'])) {
+    echo '<div class="alert alert-success alert-dismissible fade show" role="alert">';
+    echo '<i class="fas fa-check-circle me-2"></i>' . htmlspecialchars($_SESSION['success_message']);
+    echo '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Schließen"></button>';
+    echo '</div>';
+    unset($_SESSION['success_message']);
+}
+
+if (isset($_SESSION['warning_message'])) {
+    echo '<div class="alert alert-warning alert-dismissible fade show" role="alert">';
+    echo '<i class="fas fa-exclamation-triangle me-2"></i>' . htmlspecialchars($_SESSION['warning_message']);
+    echo '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Schließen"></button>';
+    echo '</div>';
+    unset($_SESSION['warning_message']);
+}
+
+if (isset($_SESSION['error_message'])) {
+    echo '<div class="alert alert-danger alert-dismissible fade show" role="alert">';
+    echo '<i class="fas fa-times-circle me-2"></i>' . htmlspecialchars($_SESSION['error_message']);
+    echo '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Schließen"></button>';
+    echo '</div>';
+    unset($_SESSION['error_message']);
+}
+?>
