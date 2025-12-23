@@ -143,6 +143,34 @@ app.get('/api/v1/vehicles', auth, async (req, res) => {
   }
 });
 
+// Get single vehicle with details
+app.get('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
+  const vehicleId = String(req.params.vehicleId || '').trim();
+
+  if (!vehicleId) return res.status(400).json({ error: 'missing_vehicleId' });
+
+  try {
+    const r = await pool.query(
+      `SELECT
+         id,
+         name,
+         fuel_type,
+         created_at
+       FROM vehicles
+       WHERE id = $1 AND user_id = $2`,
+      [vehicleId, req.user.sub]
+    );
+
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: 'vehicle_not_found' });
+    }
+
+    res.json(r.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
 // Add fillup (generalisiert: amount + unit)
 app.post('/api/v1/fillups', auth, async (req, res) => {
   const vehicleId = String(req.body?.vehicleId || '').trim();
