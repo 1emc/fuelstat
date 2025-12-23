@@ -1,0 +1,1279 @@
+openapi: 3.0.3
+info:
+  title: Fuelstat API
+  version: "1.0.0"
+  description: >
+    Fuelstat Backend API (v1). Base URL ist produktiv auf tanken.1emc.de.
+servers:
+  - url: https://tanken.1emc.de
+
+tags:
+  - name: Health
+  - name: Auth
+  - name: Tokens
+  - name: Users
+  - name: Vehicles
+  - name: Fillups
+  - name: Stats
+  - name: Entries
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/v1/health:
+    get:
+      tags: [Health]
+      summary: Health
+      operationId: getHealth
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: healthy
+                timestamp: "2025-12-23T13:47:17.641Z"
+                service: fuelstat-api-v2
+
+  /api/v1/db-ping:
+    get:
+      tags: [Health]
+      summary: Health DB
+      operationId: getDbPing
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DbPingResponse"
+              example:
+                ok: true
+                result:
+                  ok: 1
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/whoami:
+    get:
+      tags: [Health]
+      summary: Health whoami
+      description: Gibt den eingeloggten User aus dem JWT zurück.
+      operationId: getWhoAmI
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhoAmIResponse"
+              example:
+                user:
+                  id: "97f6407a-b317-4715-ae74-f03885125c88"
+                  email: "mario@test.local"
+                token:
+                  issuedAt: "2025-12-23T08:34:47.135Z"
+                  expiresAt: "2025-12-30T08:34:47.135Z"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/auth/register:
+    post:
+      tags: [Auth]
+      summary: User Register
+      operationId: postAuthRegister
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+            example:
+              email: "mario@test.local"
+              password: "SuperSecret123!"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+              example:
+                token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                user:
+                  id: "97f6407a-b317-4715-ae74-f03885125c88"
+                  email: "mario@test.local"
+                  createdAt: "2025-12-23T08:34:47.135Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: Conflict (email_already_exists)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: email_already_exists
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: User Login
+      operationId: postAuthLogin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            example:
+              email: "mario@test.local"
+              password: "SuperSecret123!"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: Unauthorized (invalid_credentials)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: invalid_credentials
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/auth/tokens/revoke:
+    post:
+      tags: [Tokens]
+      summary: Revoke Login Token
+      operationId: postAuthTokensRevoke
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RevokeTokenRequest"
+            example:
+              token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+              reason: "lost"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevokeTokenResponse"
+              example:
+                ok: true
+                revoked:
+                  jti: "e253e319-17ae-4378-b68e-b07784cd4f39"
+                  reason: "lost"
+                  revokedAt: "2025-12-23T12:00:00.000Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/auth/tokens:
+    get:
+      tags: [Tokens]
+      summary: Get revoked Login Tokens (list)
+      operationId: getAuthTokens
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevokedTokenListResponse"
+              example:
+                items:
+                  - jti: "e253e319-17ae-4378-b68e-b07784cd4f39"
+                    userId: "46c597e1-0f50-4bd7-a02b-088c91842c76"
+                    reason: "lost"
+                    revokedAt: "2025-12-23T12:00:00.000Z"
+                nextCursor: null
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/auth/users/{userId}/revoke-all:
+    post:
+      tags: [Tokens, Users]
+      summary: Revoke all Tokens of User
+      operationId: postAuthUsersRevokeAll
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RevokeAllTokensRequest"
+            example:
+              reason: "reset"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevokeAllTokensResponse"
+              example:
+                ok: true
+                userId: "46c597e1-0f50-4bd7-a02b-088c91842c76"
+                revokedCount: 3
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/auth/users:
+    get:
+      tags: [Users]
+      summary: Get Users (list)
+      operationId: getUsers
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/auth/users/{userId}:
+    get:
+      tags: [Users]
+      summary: Get User (details)
+      operationId: getUser
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+    patch:
+      tags: [Users]
+      summary: Patch User (details)
+      operationId: patchUser
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserPatchRequest"
+            example:
+              email: "newmail@test.local"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict (email_already_exists)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: email_already_exists
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+    delete:
+      tags: [Users]
+      summary: Delete User
+      operationId: deleteUser
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "204":
+          description: No Content
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/vehicles:
+    post:
+      tags: [Vehicles]
+      summary: Create Vehicle
+      operationId: postVehicles
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VehicleCreateRequest"
+            example:
+              name: "Kia Ceed"
+              fuelType: "diesel"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vehicle"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+    get:
+      tags: [Vehicles]
+      summary: Get Vehicles (list)
+      operationId: getVehicles
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VehicleListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/vehicles/{vehicleId}:
+    get:
+      tags: [Vehicles]
+      summary: Get Vehicle (details)
+      operationId: getVehicle
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vehicle"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+    patch:
+      tags: [Vehicles]
+      summary: Patch Vehicle (details)
+      operationId: patchVehicle
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VehiclePatchRequest"
+            example:
+              name: "Cooles Auto"
+              fuelType: "petrol"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vehicle"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+    delete:
+      tags: [Vehicles]
+      summary: Delete Vehicle
+      operationId: deleteVehicle
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      responses:
+        "204":
+          description: No Content
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/fillups:
+    post:
+      tags: [Fillups]
+      summary: Create Fillup
+      description: >
+        Für Verbrenner typischerweise unit=l und amount=Liter.
+        Für Elektro typischerweise unit=kWh und amount=geladene kWh.
+      operationId: postFillups
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FillupCreateRequest"
+            example:
+              vehicleId: "24d22d87-8242-4fd2-8aa1-d2fa2c8ee43c"
+              odometerKm: 699
+              unit: "l"
+              amount: 47.2
+              totalCostEur: 86.3
+              station: "Aral"
+              filledAt: "2025-12-23T09:16:29.029Z"
+              isFull: true
+              skipPrevious: false
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fillup"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Vehicle not found (for user)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: vehicle_not_found
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/vehicles/{vehicleId}/fillups:
+    get:
+      tags: [Fillups]
+      summary: Get Fillups (list by vehicle)
+      operationId: getVehicleFillups
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FillupListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/fillups/{fillupId}:
+    get:
+      tags: [Fillups]
+      summary: Get Fillup (details)
+      operationId: getFillup
+      parameters:
+        - $ref: "#/components/parameters/FillupId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fillup"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+    patch:
+      tags: [Fillups]
+      summary: Patch Fillup (details)
+      operationId: patchFillup
+      parameters:
+        - $ref: "#/components/parameters/FillupId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FillupPatchRequest"
+            example:
+              odometerKm: 125600
+              unit: "l"
+              amount: 55.2
+              totalCostEur: 92.45
+              station: "Shell Tankstelle Musterstraße"
+              filledAt: "2023-10-27T14:30:00Z"
+              isFull: true
+              skipPrevious: false
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fillup"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+    delete:
+      tags: [Fillups]
+      summary: Delete Fillup
+      operationId: deleteFillup
+      parameters:
+        - $ref: "#/components/parameters/FillupId"
+      responses:
+        "204":
+          description: No Content
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/vehicles/{vehicleId}/stats:
+    get:
+      tags: [Stats]
+      summary: Get Vehicle Stats
+      operationId: getVehicleStats
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VehicleStatsResponse"
+              example:
+                currentOdo: 12845
+                avgPricePerUnit: 1.828
+                segments:
+                  - fullId: "5546f0ac-b9f7-4d31-92c1-7886aba01701"
+                    fullAt: "2025-12-23T09:11:23.890Z"
+                    km: 300
+                    unit: "l"
+                    amountSegment: 47.2
+                    per100: 15.73
+                trend:
+                  current: 15.73
+                  avgPrev: 23.6
+                  diff: -7.87
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/entries:
+    post:
+      tags: [Entries]
+      summary: Create Entry (expense/maintenance/etc.)
+      description: >
+        Generischer Eintrag für Kosten und Ereignisse (Werkstatt, Steuer, Versicherung, Reifen, TUEV, ...).
+      operationId: postEntries
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EntryCreateRequest"
+            example:
+              vehicleId: "e3585b92-e620-470e-ae96-f11bc3baf1d1"
+              category: "Repair"
+              amountEur: 65.5
+              odometerKm: 45200
+              occurredAt: "2023-10-27T14:30:00Z"
+              vendor: "Shell"
+              description: "Repair"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/vehicles/{vehicleId}/entries:
+    get:
+      tags: [Entries]
+      summary: Get Entries (list by vehicle)
+      operationId: getVehicleEntries
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntryListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    VehicleId:
+      name: vehicleId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    FillupId:
+      name: fillupId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        nullable: true
+
+  responses:
+    BadRequest:
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: invalid_request
+            detail: "Validation failed"
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: invalid_token
+    NotFound:
+      description: Not Found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: not_found
+    ServerError:
+      description: Server Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: server_error
+            detail: "Unexpected error"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        error:
+          type: string
+        detail:
+          type: string
+          nullable: true
+      required: [error]
+
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [healthy]
+        timestamp:
+          type: string
+          format: date-time
+        service:
+          type: string
+      required: [status, timestamp, service]
+
+    DbPingResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        ok:
+          type: boolean
+        result:
+          type: object
+          additionalProperties: true
+      required: [ok]
+
+    WhoAmIResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        token:
+          type: object
+          additionalProperties: false
+          properties:
+            issuedAt:
+              type: string
+              format: date-time
+            expiresAt:
+              type: string
+              format: date-time
+          required: [issuedAt, expiresAt]
+      required: [user, token]
+
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+      required: [email, password]
+
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+      required: [email, password]
+
+    AuthResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+      required: [token, user]
+
+    User:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, email]
+
+    UserPatchRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+
+    UserListResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        nextCursor:
+          type: string
+          nullable: true
+      required: [items]
+
+    VehicleFuelType:
+      type: string
+      description: Kraftstoffart des Fahrzeugs.
+      enum: [diesel, petrol, electric, hybrid, cng, lpg, other]
+
+    VehicleCreateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+        fuelType:
+          $ref: "#/components/schemas/VehicleFuelType"
+      required: [name, fuelType]
+
+    VehiclePatchRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+        fuelType:
+          $ref: "#/components/schemas/VehicleFuelType"
+
+    Vehicle:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        fuelType:
+          $ref: "#/components/schemas/VehicleFuelType"
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, fuelType]
+
+    VehicleListResponse:
+      type: array
+      items:
+        $ref: "#/components/schemas/Vehicle"
+
+    FillupUnit:
+      type: string
+      description: Einheit der Menge (Verbrenner meist l, Elektro meist kWh).
+      enum: [l, kwh, kg, m3, other]
+
+    FillupCreateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        vehicleId:
+          type: string
+          format: uuid
+        odometerKm:
+          type: integer
+          minimum: 0
+        unit:
+          $ref: "#/components/schemas/FillupUnit"
+        amount:
+          type: number
+          minimum: 0
+        totalCostEur:
+          type: number
+          minimum: 0
+        station:
+          type: string
+          nullable: true
+        filledAt:
+          type: string
+          format: date-time
+          nullable: true
+        isFull:
+          type: boolean
+          default: true
+        skipPrevious:
+          type: boolean
+          default: false
+      required: [vehicleId, odometerKm, unit, amount, totalCostEur]
+
+    FillupPatchRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        odometerKm:
+          type: integer
+          minimum: 0
+        unit:
+          $ref: "#/components/schemas/FillupUnit"
+        amount:
+          type: number
+          minimum: 0
+        totalCostEur:
+          type: number
+          minimum: 0
+        station:
+          type: string
+          nullable: true
+        filledAt:
+          type: string
+          format: date-time
+          nullable: true
+        isFull:
+          type: boolean
+        skipPrevious:
+          type: boolean
+
+    Fillup:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        vehicleId:
+          type: string
+          format: uuid
+        odometerKm:
+          type: integer
+        unit:
+          $ref: "#/components/schemas/FillupUnit"
+        amount:
+          type: number
+        totalCostEur:
+          type: number
+        station:
+          type: string
+          nullable: true
+        filledAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        isFull:
+          type: boolean
+        skipPrevious:
+          type: boolean
+      required: [id, vehicleId, odometerKm, unit, amount, totalCostEur, filledAt, createdAt, isFull, skipPrevious]
+
+    FillupListResponse:
+      type: array
+      items:
+        $ref: "#/components/schemas/Fillup"
+
+    VehicleStatsSegment:
+      type: object
+      additionalProperties: false
+      properties:
+        fullId:
+          type: string
+          format: uuid
+        fullAt:
+          type: string
+          format: date-time
+        km:
+          type: integer
+          minimum: 0
+        unit:
+          $ref: "#/components/schemas/FillupUnit"
+        amountSegment:
+          type: number
+          minimum: 0
+        per100:
+          type: number
+          nullable: true
+          description: Verbrauch je 100km (z.B. l/100km oder kWh/100km). Null wenn km=0.
+      required: [fullId, fullAt, km, unit, amountSegment]
+
+    VehicleStatsTrend:
+      type: object
+      additionalProperties: false
+      properties:
+        current:
+          type: number
+        avgPrev:
+          type: number
+        diff:
+          type: number
+      required: [current, avgPrev, diff]
+
+    VehicleStatsResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        currentOdo:
+          type: integer
+          nullable: true
+        avgPricePerUnit:
+          type: number
+          nullable: true
+        segments:
+          type: array
+          items:
+            $ref: "#/components/schemas/VehicleStatsSegment"
+        trend:
+          $ref: "#/components/schemas/VehicleStatsTrend"
+      required: [segments]
+
+    EntryCategory:
+      type: string
+      description: Kategorie für generische Einträge (Expenses/Entries).
+      enum:
+        - Fillup
+        - Insurance
+        - Workshop
+        - Inspection
+        - Tax
+        - Repair
+        - Tires
+        - TUEV
+        - Maintenance
+        - Decoration
+        - Trip
+        - Other
+
+    EntryCreateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        vehicleId:
+          type: string
+          format: uuid
+        category:
+          $ref: "#/components/schemas/EntryCategory"
+        amountEur:
+          type: number
+          minimum: 0
+        odometerKm:
+          type: integer
+          minimum: 0
+          nullable: true
+        occurredAt:
+          type: string
+          format: date-time
+        vendor:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+      required: [vehicleId, category, amountEur, occurredAt]
+
+    Entry:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        vehicleId:
+          type: string
+          format: uuid
+        category:
+          $ref: "#/components/schemas/EntryCategory"
+        amountEur:
+          type: number
+        odometerKm:
+          type: integer
+          nullable: true
+        occurredAt:
+          type: string
+          format: date-time
+        vendor:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, vehicleId, category, amountEur, occurredAt, createdAt]
+
+    EntryListResponse:
+      type: array
+      items:
+        $ref: "#/components/schemas/Entry"
+
+    RevokeTokenRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        token:
+          type: string
+          minLength: 20
+        reason:
+          type: string
+          nullable: true
+      required: [token]
+
+    RevokeTokenResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        ok:
+          type: boolean
+        revoked:
+          type: object
+          additionalProperties: false
+          properties:
+            jti:
+              type: string
+            reason:
+              type: string
+              nullable: true
+            revokedAt:
+              type: string
+              format: date-time
+          required: [jti, revokedAt]
+      required: [ok, revoked]
+
+    RevokedToken:
+      type: object
+      additionalProperties: false
+      properties:
+        jti:
+          type: string
+        userId:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          nullable: true
+        revokedAt:
+          type: string
+          format: date-time
+      required: [jti, userId, revokedAt]
+
+    RevokedTokenListResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RevokedToken"
+        nextCursor:
+          type: string
+          nullable: true
+      required: [items]
+
+    RevokeAllTokensRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          nullable: true
+
+    RevokeAllTokensResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        ok:
+          type: boolean
+        userId:
+          type: string
+          format: uuid
+        revokedCount:
+          type: integer
+          minimum: 0
+      required: [ok, userId, revokedCount]
