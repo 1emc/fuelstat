@@ -184,8 +184,32 @@ app.post('/api/v1/fillups', auth, async (req, res) => {
     if (!allowedUnits.has(unit)) return res.status(400).json({ error: 'invalid_unit' });
 
     const r = await pool.query(
-      `INSERT INTO fillups (user_id, vehicle_id, odometer_km, amount, unit, total_cost_eur, price_per_unit, station, filled_at)
-       VALUES ($1,$2,$3,$4,$5,$6,CASE WHEN $4 > 0 THEN ROUND($6 / $4, 4) ELSE NULL END,$7,COALESCE($8, now()))
+      `INSERT INTO fillups (
+         user_id,
+         vehicle_id,
+         odometer_km,
+         amount,
+         unit,
+         total_cost_eur,
+         price_per_unit,
+         station,
+         filled_at
+       )
+       VALUES (
+         $1,
+         $2,
+         $3,
+         $4::numeric,
+         $5,
+         $6::numeric,
+         CASE
+           WHEN $4::numeric > 0
+             THEN ROUND(($6::numeric / $4::numeric), 4)
+           ELSE NULL
+         END,
+         $7,
+         COALESCE($8, now())
+       )
        RETURNING id, vehicle_id, odometer_km, amount, unit, total_cost_eur, price_per_unit, station, filled_at, created_at, is_full, skip_previous`,
       [req.user.sub, vehicleId, odometerKm, amount, unit, totalCostEur, station, filledAt]
     );
