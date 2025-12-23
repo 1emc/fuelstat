@@ -143,106 +143,59 @@ app.get('/api/v1/vehicles', auth, async (req, res) => {
   }
 });
 
-// Add fillup
-// Add fillup
+// Add fillup (generalisiert: amount + unit)
 app.post('/api/v1/fillups', auth, async (req, res) => {
   const vehicleId = String(req.body?.vehicleId || '').trim();
   const odometerKm = Number(req.body?.odometerKm);
-  const liters = Number(req.body?.liters);
-  const priceTotalEur = Number(req.body?.priceTotalEur);
-  const station = req.body?.station ? String(req.body.station).trim() : null;
-  const filledAt = req.body?.filledAt ? new Date(req.body.filledAt) : new Date();
 
-  const isFull = req.body?.isFull !== undefined ? Boolean(req.body.isFull) : true;
-  const skipPrevious = req.body?.skipPrevious !== undefined ? Boolean(req.body.skipPrevious) : false;
+  // Backward-compatible: akzeptiere liters ODER amount
+  const amount = Number(req.body?.amount ?? req.body?.liters);
+  const totalCostEur = Number(req.body?.totalCostEur ?? req.body?.priceTotalEur);
+
+  const station = req.body?.station ? String(req.body.station).trim() : null;
+  const filledAt = req.body?.filledAt ? new Date(req.body.filledAt) : null;
+
+  // unit optional: wenn nicht gesetzt, wird es aus vehicle.fuel_type abgeleitet
+  let unit = req.body?.unit ? String(req.body.unit).trim().toLowerCase() : null;
 
   if (!vehicleId) return res.status(400).json({ error: 'missing_vehicleId' });
   if (!Number.isFinite(odometerKm) || odometerKm < 0) return res.status(400).json({ error: 'invalid_odometerKm' });
+  if (!Number.isFinite(amount) || amount < 0) return res.status(400).json({ error: 'invalid_amount' });
+  if (!Number.isFinite(totalCostEur) || totalCostEur < 0) return res.status(400).json({ error: 'invalid_totalCostEur' });
+  if (filledAt && Number.isNaN(filledAt.getTime())) return res.status(400).json({ error: 'invalid_filledAt' });
 
-  // Bei Tankfüllung macht 0 Liter oder 0 Euro keinen Sinn
-  if (!Number.isFinite(liters) || liters <= 0) return res.status(400).json({ error: 'invalid_liters' });
-  if (!Number.isFinite(priceTotalEur) || priceTotalEur <= 0) return res.status(400).json({ error: 'invalid_priceTotalEur' });
+  const allowedUnits = new Set(['l', 'kwh', 'kg']);
 
-  if (!filledAt || Number.isNaN(filledAt.getTime())) return res.status(400).json({ error: 'invalid_filledAt' });
-
-  // Optional: Preis pro Liter plausibilisieren (Trade-off: Länder, Sonderfälle)
-  const ppl = priceTotalEur / liters;
-  if (!Number.isFinite(ppl) || ppl < 0.2 || ppl > 6) return res.status(400).json({ error: 'invalid_price_per_liter' });
-
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-
-    // Vehicle Ownership
-    const v = await client.query(
-      'SELECT 1 FROM vehicles WHERE id = $1 AND user_id = $2',
+    // ownership + fuel_type
+    const v = await pool.query(
+      'SELECT fuel_type FROM vehicles WHERE id = $1 AND user_id = $2',
       [vehicleId, req.user.sub]
     );
-    if (v.rowCount === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'vehicle_not_found' });
-    }
+    if (v.rowCount === 0) return res.status(404).json({ error: 'vehicle_not_found' });
 
-    // Zeitlinien-Check: prev und next anhand filled_at
-    const prev = await client.query(
-      `SELECT id, odometer_km, filled_at
-       FROM fillups
-       WHERE user_id = $1 AND vehicle_id = $2 AND filled_at < $3
-       ORDER BY filled_at DESC
-       LIMIT 1`,
-      [req.user.sub, vehicleId, filledAt]
+    const fuelType = String(v.rows[0].fuel_type || '').toLowerCase();
+
+    if (!unit) {
+      if (fuelType === 'electric') unit = 'kwh';
+      else if (fuelType === 'cng') unit = 'kg';
+      else unit = 'l';
+    }
+    if (!allowedUnits.has(unit)) return res.status(400).json({ error: 'invalid_unit' });
+
+    const r = await pool.query(
+      `INSERT INTO fillups (user_id, vehicle_id, odometer_km, amount, unit, total_cost_eur, price_per_unit, station, filled_at)
+       VALUES ($1,$2,$3,$4,$5,$6,CASE WHEN $4 > 0 THEN ROUND($6 / $4, 4) ELSE NULL END,$7,COALESCE($8, now()))
+       RETURNING id, vehicle_id, odometer_km, amount, unit, total_cost_eur, price_per_unit, station, filled_at, created_at, is_full, skip_previous`,
+      [req.user.sub, vehicleId, odometerKm, amount, unit, totalCostEur, station, filledAt]
     );
 
-    const next = await client.query(
-      `SELECT id, odometer_km, filled_at
-       FROM fillups
-       WHERE user_id = $1 AND vehicle_id = $2 AND filled_at > $3
-       ORDER BY filled_at ASC
-       LIMIT 1`,
-      [req.user.sub, vehicleId, filledAt]
-    );
-
-    if (prev.rowCount === 1) {
-      const p = Number(prev.rows[0].odometer_km);
-      if (!(odometerKm > p)) {
-        await client.query('ROLLBACK');
-        return res.status(409).json({
-          error: 'odometer_not_increasing',
-          detail: `must be > previous (${p})`
-        });
-      }
-    }
-
-    if (next.rowCount === 1) {
-      const n = Number(next.rows[0].odometer_km);
-      if (!(odometerKm < n)) {
-        await client.query('ROLLBACK');
-        return res.status(409).json({
-          error: 'odometer_conflicts_with_future',
-          detail: `must be < next (${n})`
-        });
-      }
-    }
-
-    // Insert
-    const r = await client.query(
-      `INSERT INTO fillups (
-         user_id, vehicle_id, odometer_km, liters, price_total_eur, station, filled_at, is_full, skip_previous
-       )
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       RETURNING id, vehicle_id, odometer_km, liters, price_total_eur, station, filled_at, created_at, is_full, skip_previous`,
-      [req.user.sub, vehicleId, odometerKm, liters, priceTotalEur, station, filledAt, isFull, skipPrevious]
-    );
-
-    await client.query('COMMIT');
-    return res.status(201).json(r.rows[0]);
+    res.status(201).json(r.rows[0]);
   } catch (e) {
-    await client.query('ROLLBACK');
-    return res.status(500).json({ error: 'server_error', detail: e.message });
-  } finally {
-    client.release();
+    res.status(500).json({ error: 'server_error', detail: e.message });
   }
 });
+
 
 
 // List fillups by vehicle
