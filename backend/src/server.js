@@ -232,7 +232,14 @@ app.get('/api/v1/vehicles/:vehicleId/fillups', auth, async (req, res) => {
     if (v.rowCount === 0) return res.status(404).json({ error: 'vehicle_not_found' });
 
     const r = await pool.query(
-      `SELECT id, odometer_km, liters, price_total_eur, station, filled_at, created_at
+      `SELECT
+         id,
+         odometer_km,
+         amount       AS liters,
+         total_cost_eur AS price_total_eur,
+         station,
+         filled_at,
+         created_at
        FROM fillups
        WHERE user_id = $1 AND vehicle_id = $2
        ORDER BY filled_at DESC

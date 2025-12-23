@@ -14,8 +14,8 @@ async function getVehicleStats(pool, userId, vehicleId) {
 
   const ppl = await pool.query(
     `SELECT
-       CASE WHEN SUM(liters) > 0
-         THEN ROUND((SUM(price_total_eur) / SUM(liters))::numeric, 3)
+       CASE WHEN SUM(amount) > 0
+         THEN ROUND((SUM(total_cost_eur) / SUM(amount))::numeric, 3)
          ELSE NULL
        END AS avg_price_per_liter
      FROM fillups
@@ -26,7 +26,7 @@ async function getVehicleStats(pool, userId, vehicleId) {
   const segments = await pool.query(
     `
     WITH ordered AS (
-      SELECT id, filled_at, odometer_km, liters, is_full, skip_previous
+      SELECT id, filled_at, odometer_km, amount, unit, is_full, skip_previous
       FROM fillups
       WHERE user_id=$1 AND vehicle_id=$2
       ORDER BY filled_at
@@ -44,7 +44,7 @@ async function getVehicleStats(pool, userId, vehicleId) {
         f.filled_at AS full_at,
         (f.odometer_km - f.prev_full_odo) AS km,
         (
-          SELECT COALESCE(SUM(o.liters),0)
+          SELECT COALESCE(SUM(o.amount),0)
           FROM ordered o
           WHERE o.filled_at > f.prev_full_at AND o.filled_at <= f.filled_at
         ) AS liters_segment
