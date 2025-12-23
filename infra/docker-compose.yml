@@ -1,7 +1,7 @@
 services:
   api:
     build:
-      context: ./backend
+      context: ../backend
       dockerfile: Dockerfile
       target: dev
     # Der Port 3000 wird an 127.0.0.1 gebunden, damit er nur lokal (für Nginx) 
@@ -9,7 +9,7 @@ services:
     ports:
       - "127.0.0.1:${API_PORT:-3000}:3000"
     volumes:
-      - ./backend:/usr/src/app
+      - ../backend:/usr/src/app
       - api_node_modules:/usr/src/app/node_modules
     env_file:
       - .env
