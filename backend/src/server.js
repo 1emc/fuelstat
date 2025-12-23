@@ -325,6 +325,44 @@ app.post('/api/v1/entries', auth, async (req, res) => {
   }
 });
 
+// List expense entries by vehicle
+app.get('/api/v1/vehicles/:vehicleId/entries', auth, async (req, res) => {
+  const vehicleId = String(req.params.vehicleId || '').trim();
+  const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));
+
+  try {
+    // Fahrzeug-Besitz prüfen
+    const v = await pool.query(
+      'SELECT 1 FROM vehicles WHERE id = $1 AND user_id = $2',
+      [vehicleId, req.user.sub]
+    );
+    if (v.rowCount === 0) return res.status(404).json({ error: 'vehicle_not_found' });
+
+    const r = await pool.query(
+      `SELECT
+         id,
+         user_id,
+         vehicle_id,
+         category,
+         amount_eur,
+         odometer_km,
+         occurred_at,
+         vendor,
+         description,
+         created_at
+       FROM expenses
+       WHERE user_id = $1 AND vehicle_id = $2
+       ORDER BY occurred_at DESC, created_at DESC
+       LIMIT $3`,
+      [req.user.sub, vehicleId, limit]
+    );
+
+    res.json(r.rows);
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
 // Statistics of Vehicle
 app.get('/api/v1/vehicles/:vehicleId/stats', auth, async (req, res) => {
   const vehicleId = String(req.params.vehicleId || '').trim();
