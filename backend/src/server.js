@@ -110,6 +110,109 @@ app.post('/api/v1/auth/login', async (req, res) => {
   }
 });
 
+// List all users (Admin-Endpoint, aktuell ohne weitere Einschränkung)
+app.get('/api/v1/auth/users', auth, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT
+         id,
+         email,
+         created_at
+       FROM users
+       ORDER BY created_at ASC`
+    );
+    res.json(r.rows);
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// Get single user (Admin-Endpoint)
+app.get('/api/v1/auth/users/:userId', auth, async (req, res) => {
+  const userId = String(req.params.userId || '').trim();
+  if (!userId) return res.status(400).json({ error: 'missing_userId' });
+
+  try {
+    const r = await pool.query(
+      `SELECT
+         id,
+         email,
+         created_at
+       FROM users
+       WHERE id = $1`,
+      [userId]
+    );
+
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: 'user_not_found' });
+    }
+
+    res.json(r.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// Patch single user (Admin-Endpoint)
+app.patch('/api/v1/auth/users/:userId', auth, async (req, res) => {
+  const userId = String(req.params.userId || '').trim();
+  if (!userId) return res.status(400).json({ error: 'missing_userId' });
+
+  const email =
+    req.body?.email !== undefined
+      ? String(req.body.email).trim().toLowerCase()
+      : undefined;
+
+  if (email === undefined) {
+    return res.status(400).json({ error: 'nothing_to_update' });
+  }
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ error: 'invalid_email' });
+  }
+
+  try {
+    const r = await pool.query(
+      `UPDATE users
+       SET email = $1
+       WHERE id = $2
+       RETURNING id, email, created_at`,
+      [email, userId]
+    );
+
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: 'user_not_found' });
+    }
+
+    res.json(r.rows[0]);
+  } catch (e) {
+    if (e.code === '23505') {
+      return res.status(409).json({ error: 'email_already_exists' });
+    }
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// Delete single user (Admin-Endpoint)
+app.delete('/api/v1/auth/users/:userId', auth, async (req, res) => {
+  const userId = String(req.params.userId || '').trim();
+  if (!userId) return res.status(400).json({ error: 'missing_userId' });
+
+  try {
+    const r = await pool.query(
+      'DELETE FROM users WHERE id = $1 RETURNING id',
+      [userId]
+    );
+
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: 'user_not_found' });
+    }
+
+    return res.status(204).send();
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
 // Create vehicle
 app.post('/api/v1/vehicles', auth, async (req, res) => {
   const name = String(req.body?.name || '').trim();
