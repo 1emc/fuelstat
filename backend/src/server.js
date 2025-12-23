@@ -1,0 +1,287 @@
+const express = require('express');
+const helmet = require('helmet');
+const cors = require('cors');
+const { Pool } = require('pg');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
+const { getVehicleStats } = require('./services/stats');
+
+const app = express();
+
+app.use(helmet());
+app.use(cors());
+app.use(express.json());
+
+const PORT = process.env.PORT || 3000;
+
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL fehlt');
+}
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
+  throw new Error('JWT_SECRET fehlt oder ist zu kurz');
+}
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+function signToken(user) {
+  return jwt.sign(
+    { sub: user.id, email: user.email },
+    process.env.JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+}
+
+function auth(req, res, next) {
+  const h = req.header('Authorization') || '';
+  const m = h.match(/^Bearer\s+(.+)$/i);
+  if (!m) return res.status(401).json({ error: 'missing_token' });
+
+  try {
+    req.user = jwt.verify(m[1], process.env.JWT_SECRET);
+    return next();
+  } catch {
+    return res.status(401).json({ error: 'invalid_token' });
+  }
+}
+
+// Healthcheck
+app.get('/api/v1/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    service: 'fuelstat-api-v2'
+  });
+});
+
+// DB Ping
+app.get('/api/v1/db-ping', async (req, res) => {
+  try {
+    const r = await pool.query('SELECT 1 AS ok');
+    res.json({ ok: true, result: r.rows[0] });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Register
+app.post('/api/v1/auth/register', async (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const password = String(req.body?.password || '');
+
+  if (!email || !email.includes('@')) return res.status(400).json({ error: 'invalid_email' });
+  if (password.length < 8) return res.status(400).json({ error: 'password_too_short' });
+
+  try {
+    const passwordHash = await bcrypt.hash(password, 12);
+    const r = await pool.query(
+      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, created_at',
+      [email, passwordHash]
+    );
+    const user = r.rows[0];
+    res.status(201).json({ token: signToken(user), user });
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'email_already_exists' });
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// Login
+app.post('/api/v1/auth/login', async (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const password = String(req.body?.password || '');
+
+  if (!email || !password) return res.status(400).json({ error: 'missing_credentials' });
+
+  try {
+    const r = await pool.query(
+      'SELECT id, email, password_hash, created_at FROM users WHERE email = $1',
+      [email]
+    );
+    if (r.rowCount === 0) return res.status(401).json({ error: 'invalid_credentials' });
+
+    const user = r.rows[0];
+    const ok = await bcrypt.compare(password, user.password_hash);
+    if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
+
+    delete user.password_hash;
+    res.json({ token: signToken(user), user });
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// Create vehicle
+app.post('/api/v1/vehicles', auth, async (req, res) => {
+  const name = String(req.body?.name || '').trim();
+  const fuelType = String(req.body?.fuelType || '').trim().toLowerCase();
+
+  const allowed = new Set(['diesel','petrol','electric','hybrid','cng','lpg','other']);
+  if (!name) return res.status(400).json({ error: 'missing_name' });
+  if (!allowed.has(fuelType)) return res.status(400).json({ error: 'invalid_fuelType' });
+
+  try {
+    const r = await pool.query(
+      'INSERT INTO vehicles (user_id, name, fuel_type) VALUES ($1, $2, $3) RETURNING id, name, fuel_type, created_at',
+      [req.user.sub, name, fuelType]
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// List vehicles
+app.get('/api/v1/vehicles', auth, async (req, res) => {
+  try {
+    const r = await pool.query(
+      'SELECT id, name, fuel_type, created_at FROM vehicles WHERE user_id = $1 ORDER BY created_at DESC',
+      [req.user.sub]
+    );
+    res.json(r.rows);
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// Add fillup
+// Add fillup
+app.post('/api/v1/fillups', auth, async (req, res) => {
+  const vehicleId = String(req.body?.vehicleId || '').trim();
+  const odometerKm = Number(req.body?.odometerKm);
+  const liters = Number(req.body?.liters);
+  const priceTotalEur = Number(req.body?.priceTotalEur);
+  const station = req.body?.station ? String(req.body.station).trim() : null;
+  const filledAt = req.body?.filledAt ? new Date(req.body.filledAt) : new Date();
+
+  const isFull = req.body?.isFull !== undefined ? Boolean(req.body.isFull) : true;
+  const skipPrevious = req.body?.skipPrevious !== undefined ? Boolean(req.body.skipPrevious) : false;
+
+  if (!vehicleId) return res.status(400).json({ error: 'missing_vehicleId' });
+  if (!Number.isFinite(odometerKm) || odometerKm < 0) return res.status(400).json({ error: 'invalid_odometerKm' });
+
+  // Bei Tankfüllung macht 0 Liter oder 0 Euro keinen Sinn
+  if (!Number.isFinite(liters) || liters <= 0) return res.status(400).json({ error: 'invalid_liters' });
+  if (!Number.isFinite(priceTotalEur) || priceTotalEur <= 0) return res.status(400).json({ error: 'invalid_priceTotalEur' });
+
+  if (!filledAt || Number.isNaN(filledAt.getTime())) return res.status(400).json({ error: 'invalid_filledAt' });
+
+  // Optional: Preis pro Liter plausibilisieren (Trade-off: Länder, Sonderfälle)
+  const ppl = priceTotalEur / liters;
+  if (!Number.isFinite(ppl) || ppl < 0.2 || ppl > 6) return res.status(400).json({ error: 'invalid_price_per_liter' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Vehicle Ownership
+    const v = await client.query(
+      'SELECT 1 FROM vehicles WHERE id = $1 AND user_id = $2',
+      [vehicleId, req.user.sub]
+    );
+    if (v.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'vehicle_not_found' });
+    }
+
+    // Zeitlinien-Check: prev und next anhand filled_at
+    const prev = await client.query(
+      `SELECT id, odometer_km, filled_at
+       FROM fillups
+       WHERE user_id = $1 AND vehicle_id = $2 AND filled_at < $3
+       ORDER BY filled_at DESC
+       LIMIT 1`,
+      [req.user.sub, vehicleId, filledAt]
+    );
+
+    const next = await client.query(
+      `SELECT id, odometer_km, filled_at
+       FROM fillups
+       WHERE user_id = $1 AND vehicle_id = $2 AND filled_at > $3
+       ORDER BY filled_at ASC
+       LIMIT 1`,
+      [req.user.sub, vehicleId, filledAt]
+    );
+
+    if (prev.rowCount === 1) {
+      const p = Number(prev.rows[0].odometer_km);
+      if (!(odometerKm > p)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          error: 'odometer_not_increasing',
+          detail: `must be > previous (${p})`
+        });
+      }
+    }
+
+    if (next.rowCount === 1) {
+      const n = Number(next.rows[0].odometer_km);
+      if (!(odometerKm < n)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          error: 'odometer_conflicts_with_future',
+          detail: `must be < next (${n})`
+        });
+      }
+    }
+
+    // Insert
+    const r = await client.query(
+      `INSERT INTO fillups (
+         user_id, vehicle_id, odometer_km, liters, price_total_eur, station, filled_at, is_full, skip_previous
+       )
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       RETURNING id, vehicle_id, odometer_km, liters, price_total_eur, station, filled_at, created_at, is_full, skip_previous`,
+      [req.user.sub, vehicleId, odometerKm, liters, priceTotalEur, station, filledAt, isFull, skipPrevious]
+    );
+
+    await client.query('COMMIT');
+    return res.status(201).json(r.rows[0]);
+  } catch (e) {
+    await client.query('ROLLBACK');
+    return res.status(500).json({ error: 'server_error', detail: e.message });
+  } finally {
+    client.release();
+  }
+});
+
+
+// List fillups by vehicle
+app.get('/api/v1/vehicles/:vehicleId/fillups', auth, async (req, res) => {
+  const vehicleId = String(req.params.vehicleId || '').trim();
+  const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));
+
+  try {
+    const v = await pool.query('SELECT 1 FROM vehicles WHERE id = $1 AND user_id = $2', [vehicleId, req.user.sub]);
+    if (v.rowCount === 0) return res.status(404).json({ error: 'vehicle_not_found' });
+
+    const r = await pool.query(
+      `SELECT id, odometer_km, liters, price_total_eur, station, filled_at, created_at
+       FROM fillups
+       WHERE user_id = $1 AND vehicle_id = $2
+       ORDER BY filled_at DESC
+       LIMIT $3`,
+      [req.user.sub, vehicleId, limit]
+    );
+    res.json(r.rows);
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+//Statistics of Vehicle
+app.get('/api/v1/vehicles/:vehicleId/stats', auth, async (req, res) => {
+  const vehicleId = String(req.params.vehicleId || '').trim();
+
+  try {
+    const data = await getVehicleStats(pool, req.user.sub, vehicleId);
+    if (data?.error === 'vehicle_not_found') return res.status(404).json({ error: 'vehicle_not_found' });
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Backend V2 läuft auf Port ${PORT}`);
+});

@@ -1,0 +1,40 @@
+generator client {
+  provider = "prisma-client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  currency     String   @default("EUR")
+  distanceUnit String   @default("km")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  vehicles     Vehicle[]
+}
+
+model Vehicle {
+  id           String   @id @default(uuid())
+  userId       String
+  name         String
+  licensePlate String?
+  brand        String?
+  model        String?
+  vehicleType  String?
+  fuelType     String?
+  tankCapacity Float?
+  imageUrl     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
