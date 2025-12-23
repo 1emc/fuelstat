@@ -252,7 +252,80 @@ app.get('/api/v1/vehicles/:vehicleId/fillups', auth, async (req, res) => {
   }
 });
 
-//Statistics of Vehicle
+// Create non-fuel expense entry
+app.post('/api/v1/entries', auth, async (req, res) => {
+  const vehicleId = String(req.body?.vehicleId || '').trim();
+  const category = String(req.body?.category || '').trim();
+
+  const amountEur = Number(req.body?.amountEur);
+  const odometerKm = req.body?.odometerKm !== undefined ? Number(req.body.odometerKm) : null;
+  const occurredAt = req.body?.occurredAt ? new Date(req.body.occurredAt) : null;
+
+  const vendor = req.body?.vendor ? String(req.body.vendor).trim() : null;
+  const description = req.body?.description ? String(req.body.description).trim() : null;
+
+  if (!vehicleId) return res.status(400).json({ error: 'missing_vehicleId' });
+  if (!category) return res.status(400).json({ error: 'missing_category' });
+  if (!Number.isFinite(amountEur) || amountEur < 0) {
+    return res.status(400).json({ error: 'invalid_amountEur' });
+  }
+  if (odometerKm !== null && (!Number.isFinite(odometerKm) || odometerKm < 0)) {
+    return res.status(400).json({ error: 'invalid_odometerKm' });
+  }
+  if (occurredAt && Number.isNaN(occurredAt.getTime())) {
+    return res.status(400).json({ error: 'invalid_occurredAt' });
+  }
+
+  try {
+    // Prüfen, ob das Fahrzeug zum User gehört
+    const v = await pool.query(
+      'SELECT 1 FROM vehicles WHERE id = $1 AND user_id = $2',
+      [vehicleId, req.user.sub]
+    );
+    if (v.rowCount === 0) return res.status(404).json({ error: 'vehicle_not_found' });
+
+    const r = await pool.query(
+      `INSERT INTO expenses (
+         user_id,
+         vehicle_id,
+         category,
+         amount_eur,
+         odometer_km,
+         occurred_at,
+         vendor,
+         description
+       )
+       VALUES (
+         $1,
+         $2,
+         $3,
+         $4::numeric,
+         $5,
+         COALESCE($6, now()),
+         $7,
+         $8
+       )
+       RETURNING
+         id,
+         user_id,
+         vehicle_id,
+         category,
+         amount_eur,
+         odometer_km,
+         occurred_at,
+         vendor,
+         description,
+         created_at`,
+      [req.user.sub, vehicleId, category, amountEur, odometerKm, occurredAt, vendor, description]
+    );
+
+    res.status(201).json(r.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// Statistics of Vehicle
 app.get('/api/v1/vehicles/:vehicleId/stats', auth, async (req, res) => {
   const vehicleId = String(req.params.vehicleId || '').trim();
 
