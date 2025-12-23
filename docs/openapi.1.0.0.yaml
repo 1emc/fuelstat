@@ -73,14 +73,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/WhoAmIResponse"
               example:
-                user:
-                  id: "97f6407a-b317-4715-ae74-f03885125c88"
-                  email: "mario@test.local"
+                id: "97f6407a-b317-4715-ae74-f03885125c88"
+                email: "mario@test.local"
+                created_at: "2025-01-01T12:34:56.000Z"
                 token:
-                  issuedAt: "2025-12-23T08:34:47.135Z"
-                  expiresAt: "2025-12-30T08:34:47.135Z"
+                  jti: "c7b1c65a-9f4c-4f0e-9d62-..."
+                  iat: "2025-12-23T08:34:47.135Z"
+                  exp: "2025-12-30T08:34:47.135Z"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
 
   /api/v1/auth/register:
     post:
@@ -173,18 +178,17 @@ paths:
               token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
               reason: "lost"
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/RevokeTokenResponse"
               example:
-                ok: true
-                revoked:
-                  jti: "e253e319-17ae-4378-b68e-b07784cd4f39"
-                  reason: "lost"
-                  revokedAt: "2025-12-23T12:00:00.000Z"
+                jti: "e253e319-17ae-4378-b68e-b07784cd4f39"
+                userId: "46c597e1-0f50-4bd7-a02b-088c91842c76"
+                reason: "lost"
+                message: "Token wurde widerrufen und wird ab sofort abgelehnt."
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -197,20 +201,28 @@ paths:
       tags: [Tokens]
       summary: Get revoked Login Tokens (list)
       operationId: getAuthTokens
+      parameters:
+        - name: userId
+          in: query
+          required: false
+          description: Filter tokens by user ID
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RevokedTokenListResponse"
-              example:
+                type: array
                 items:
-                  - jti: "e253e319-17ae-4378-b68e-b07784cd4f39"
-                    userId: "46c597e1-0f50-4bd7-a02b-088c91842c76"
-                    reason: "lost"
-                    revokedAt: "2025-12-23T12:00:00.000Z"
-                nextCursor: null
+                  $ref: "#/components/schemas/RevokedToken"
+              example:
+                - jti: "e253e319-17ae-4378-b68e-b07784cd4f39"
+                  user_id: "46c597e1-0f50-4bd7-a02b-088c91842c76"
+                  reason: "lost"
+                  revoked_at: "2025-12-23T12:00:00.000Z"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "500":
@@ -232,16 +244,17 @@ paths:
             example:
               reason: "reset"
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/RevokeAllTokensResponse"
               example:
-                ok: true
                 userId: "46c597e1-0f50-4bd7-a02b-088c91842c76"
-                revokedCount: 3
+                revokedAfter: "2025-12-23T12:00:00.000Z"
+                reason: "reset"
+                message: "Alle bestehenden Tokens dieses Benutzers wurden widerrufen. Neue Logins erhalten wieder gültige Tokens."
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -254,16 +267,19 @@ paths:
       tags: [Users]
       summary: Get Users (list)
       operationId: getUsers
-      parameters:
-        - $ref: "#/components/parameters/Limit"
-        - $ref: "#/components/parameters/Cursor"
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UserListResponse"
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+              example:
+                - id: "97f6407a-b317-4715-ae74-f03885125c88"
+                  email: "mario@test.local"
+                  created_at: "2025-01-01T12:34:56.000Z"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "500":
@@ -548,6 +564,9 @@ paths:
     patch:
       tags: [Fillups]
       summary: Patch Fillup (details)
+      description: >
+        Bearbeitung ist nur innerhalb von 14 Tagen nach dem Tank-/Ladedatum (filledAt) möglich.
+        Ältere Einträge können nicht mehr bearbeitet werden.
       operationId: patchFillup
       parameters:
         - $ref: "#/components/parameters/FillupId"
@@ -579,18 +598,39 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: Conflict (fillup_edit_window_expired)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: fillup_edit_window_expired
+                message: "Tank-/Ladevorgänge können nur innerhalb von 14 Tagen nach dem Tank-/Ladedatum bearbeitet werden."
         "500":
           $ref: "#/components/responses/ServerError"
 
     delete:
       tags: [Fillups]
       summary: Delete Fillup
+      description: >
+        Löschung ist immer möglich. Wenn der Eintrag älter als 14 Tage ist,
+        wird der nachfolgende Fillup automatisch auf skip_previous=true gesetzt.
       operationId: deleteFillup
       parameters:
         - $ref: "#/components/parameters/FillupId"
       responses:
-        "204":
-          description: No Content
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteFillupResponse"
+              example:
+                deletedId: "e253e319-17ae-4378-b68e-b07784cd4f39"
+                olderThan14Days: true
+                nextUpdated: true
+                message: "Ein Tank-/Ladevorgang, der älter als 14 Tage ist, wurde gelöscht. Der nachfolgende Vorgang wird bei der Verbrauchsberechnung nicht mehr den vorherigen berücksichtigen (skip_previous = true)."
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -614,14 +654,13 @@ paths:
                 $ref: "#/components/schemas/VehicleStatsResponse"
               example:
                 currentOdo: 12845
-                avgPricePerUnit: 1.828
+                avgPricePerLiter: 1.828
                 segments:
-                  - fullId: "5546f0ac-b9f7-4d31-92c1-7886aba01701"
-                    fullAt: "2025-12-23T09:11:23.890Z"
+                  - full_id: "5546f0ac-b9f7-4d31-92c1-7886aba01701"
+                    full_at: "2025-12-23T09:11:23.890Z"
                     km: 300
-                    unit: "l"
-                    amountSegment: 47.2
-                    per100: 15.73
+                    liters_segment: 47.2
+                    l_per_100km: 15.73
                 trend:
                   current: 15.73
                   avgPrev: 23.6
@@ -815,20 +854,31 @@ components:
       type: object
       additionalProperties: false
       properties:
-        user:
-          $ref: "#/components/schemas/User"
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        created_at:
+          type: string
+          format: date-time
         token:
           type: object
           additionalProperties: false
           properties:
-            issuedAt:
+            jti:
+              type: string
+              nullable: true
+            iat:
               type: string
               format: date-time
-            expiresAt:
+              nullable: true
+            exp:
               type: string
               format: date-time
-          required: [issuedAt, expiresAt]
-      required: [user, token]
+              nullable: true
+      required: [id, email]
 
     RegisterRequest:
       type: object
@@ -874,7 +924,7 @@ components:
         email:
           type: string
           format: email
-        createdAt:
+        created_at:
           type: string
           format: date-time
       required: [id, email]
@@ -887,18 +937,6 @@ components:
           type: string
           format: email
 
-    UserListResponse:
-      type: object
-      additionalProperties: false
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/User"
-        nextCursor:
-          type: string
-          nullable: true
-      required: [items]
 
     VehicleFuelType:
       type: string
@@ -933,17 +971,14 @@ components:
         id:
           type: string
           format: uuid
-        userId:
-          type: string
-          format: uuid
         name:
           type: string
-        fuelType:
+        fuel_type:
           $ref: "#/components/schemas/VehicleFuelType"
-        createdAt:
+        created_at:
           type: string
           format: date-time
-      required: [id, name, fuelType]
+      required: [id, name, fuel_type]
 
     VehicleListResponse:
       type: array
@@ -952,8 +987,8 @@ components:
 
     FillupUnit:
       type: string
-      description: Einheit der Menge (Verbrenner meist l, Elektro meist kWh).
-      enum: [l, kwh, kg, m3, other]
+      description: Einheit der Menge (Verbrenner meist l, Elektro meist kWh, CNG/LPG meist kg).
+      enum: [l, kwh, kg]
 
     FillupCreateRequest:
       type: object
@@ -967,12 +1002,23 @@ components:
           minimum: 0
         unit:
           $ref: "#/components/schemas/FillupUnit"
+          description: Optional, wird aus vehicle.fuel_type abgeleitet wenn nicht gesetzt
         amount:
           type: number
           minimum: 0
+          description: Backward-kompatibel: kann auch als 'liters' gesendet werden
+        liters:
+          type: number
+          minimum: 0
+          description: Alias für amount (Backward-Kompatibilität)
         totalCostEur:
           type: number
           minimum: 0
+          description: Backward-kompatibel: kann auch als 'priceTotalEur' gesendet werden
+        priceTotalEur:
+          type: number
+          minimum: 0
+          description: Alias für totalCostEur (Backward-Kompatibilität)
         station:
           type: string
           nullable: true
@@ -980,13 +1026,14 @@ components:
           type: string
           format: date-time
           nullable: true
+          description: Wenn nicht gesetzt, wird now() verwendet
         isFull:
           type: boolean
           default: true
         skipPrevious:
           type: boolean
           default: false
-      required: [vehicleId, odometerKm, unit, amount, totalCostEur]
+      required: [vehicleId, odometerKm]
 
     FillupPatchRequest:
       type: object
@@ -1000,9 +1047,19 @@ components:
         amount:
           type: number
           minimum: 0
+          description: Backward-kompatibel: kann auch als 'liters' gesendet werden
+        liters:
+          type: number
+          minimum: 0
+          description: Alias für amount (Backward-Kompatibilität)
         totalCostEur:
           type: number
           minimum: 0
+          description: Backward-kompatibel: kann auch als 'priceTotalEur' gesendet werden
+        priceTotalEur:
+          type: number
+          minimum: 0
+          description: Alias für totalCostEur (Backward-Kompatibilität)
         station:
           type: string
           nullable: true
@@ -1022,34 +1079,50 @@ components:
         id:
           type: string
           format: uuid
-        userId:
+        user_id:
           type: string
           format: uuid
-        vehicleId:
+        vehicle_id:
           type: string
           format: uuid
-        odometerKm:
+        odometer_km:
           type: integer
         unit:
           $ref: "#/components/schemas/FillupUnit"
         amount:
           type: number
-        totalCostEur:
+        total_cost_eur:
           type: number
+        price_per_unit:
+          type: number
+          nullable: true
         station:
           type: string
           nullable: true
-        filledAt:
+        filled_at:
           type: string
           format: date-time
-        createdAt:
+        created_at:
           type: string
           format: date-time
-        isFull:
+        is_full:
           type: boolean
-        skipPrevious:
+        skip_previous:
           type: boolean
-      required: [id, vehicleId, odometerKm, unit, amount, totalCostEur, filledAt, createdAt, isFull, skipPrevious]
+        # Legacy-Felder für Backward-Kompatibilität (nur bei unit='l')
+        liters:
+          type: number
+          nullable: true
+          description: Alias für amount, nur gesetzt wenn unit='l'
+        price_total_eur:
+          type: number
+          nullable: true
+          description: Alias für total_cost_eur
+        price_per_liter:
+          type: number
+          nullable: true
+          description: Alias für price_per_unit, nur gesetzt wenn unit='l'
+      required: [id, vehicle_id, odometer_km, unit, amount, total_cost_eur, filled_at, created_at, is_full, skip_previous]
 
     FillupListResponse:
       type: array
@@ -1060,25 +1133,24 @@ components:
       type: object
       additionalProperties: false
       properties:
-        fullId:
+        full_id:
           type: string
           format: uuid
-        fullAt:
+        full_at:
           type: string
           format: date-time
         km:
           type: integer
           minimum: 0
-        unit:
-          $ref: "#/components/schemas/FillupUnit"
-        amountSegment:
+        liters_segment:
           type: number
           minimum: 0
-        per100:
+          description: Verbrauchte Menge im Segment (kann Liter, kWh oder kg sein)
+        l_per_100km:
           type: number
           nullable: true
           description: Verbrauch je 100km (z.B. l/100km oder kWh/100km). Null wenn km=0.
-      required: [fullId, fullAt, km, unit, amountSegment]
+      required: [full_id, full_at, km, liters_segment]
 
     VehicleStatsTrend:
       type: object
@@ -1099,33 +1171,24 @@ components:
         currentOdo:
           type: integer
           nullable: true
-        avgPricePerUnit:
+        avgPricePerLiter:
           type: number
           nullable: true
+          description: Durchschnittlicher Preis pro Einheit (Liter/kWh/kg)
         segments:
           type: array
           items:
             $ref: "#/components/schemas/VehicleStatsSegment"
         trend:
           $ref: "#/components/schemas/VehicleStatsTrend"
+          nullable: true
       required: [segments]
 
     EntryCategory:
       type: string
-      description: Kategorie für generische Einträge (Expenses/Entries).
-      enum:
-        - Fillup
-        - Insurance
-        - Workshop
-        - Inspection
-        - Tax
-        - Repair
-        - Tires
-        - TUEV
-        - Maintenance
-        - Decoration
-        - Trip
-        - Other
+      description: >
+        Kategorie für generische Einträge (Expenses/Entries). Freier Text.
+        Typische Werte: repair, insurance, tuv, tax, maintenance, tires, etc.
 
     EntryCreateRequest:
       type: object
@@ -1146,13 +1209,15 @@ components:
         occurredAt:
           type: string
           format: date-time
+          nullable: true
+          description: Wenn nicht gesetzt, wird now() verwendet
         vendor:
           type: string
           nullable: true
         description:
           type: string
           nullable: true
-      required: [vehicleId, category, amountEur, occurredAt]
+      required: [vehicleId, category, amountEur]
 
     Entry:
       type: object
@@ -1161,20 +1226,20 @@ components:
         id:
           type: string
           format: uuid
-        userId:
+        user_id:
           type: string
           format: uuid
-        vehicleId:
+        vehicle_id:
           type: string
           format: uuid
         category:
           $ref: "#/components/schemas/EntryCategory"
-        amountEur:
+        amount_eur:
           type: number
-        odometerKm:
+        odometer_km:
           type: integer
           nullable: true
-        occurredAt:
+        occurred_at:
           type: string
           format: date-time
         vendor:
@@ -1183,10 +1248,10 @@ components:
         description:
           type: string
           nullable: true
-        createdAt:
+        created_at:
           type: string
           format: date-time
-      required: [id, vehicleId, category, amountEur, occurredAt, createdAt]
+      required: [id, vehicle_id, category, amount_eur, occurred_at, created_at]
 
     EntryListResponse:
       type: array
@@ -1209,27 +1274,6 @@ components:
       type: object
       additionalProperties: false
       properties:
-        ok:
-          type: boolean
-        revoked:
-          type: object
-          additionalProperties: false
-          properties:
-            jti:
-              type: string
-            reason:
-              type: string
-              nullable: true
-            revokedAt:
-              type: string
-              format: date-time
-          required: [jti, revokedAt]
-      required: [ok, revoked]
-
-    RevokedToken:
-      type: object
-      additionalProperties: false
-      properties:
         jti:
           type: string
         userId:
@@ -1238,23 +1282,27 @@ components:
         reason:
           type: string
           nullable: true
-        revokedAt:
+        message:
           type: string
-          format: date-time
-      required: [jti, userId, revokedAt]
+      required: [jti, userId, message]
 
-    RevokedTokenListResponse:
+    RevokedToken:
       type: object
       additionalProperties: false
       properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/RevokedToken"
-        nextCursor:
+        jti:
+          type: string
+        user_id:
+          type: string
+          format: uuid
+        reason:
           type: string
           nullable: true
-      required: [items]
+        revoked_at:
+          type: string
+          format: date-time
+      required: [jti, user_id, revoked_at]
+
 
     RevokeAllTokensRequest:
       type: object
@@ -1268,12 +1316,30 @@ components:
       type: object
       additionalProperties: false
       properties:
-        ok:
-          type: boolean
         userId:
           type: string
           format: uuid
-        revokedCount:
-          type: integer
-          minimum: 0
-      required: [ok, userId, revokedCount]
+        revokedAfter:
+          type: string
+          format: date-time
+        reason:
+          type: string
+          nullable: true
+        message:
+          type: string
+      required: [userId, revokedAfter, message]
+    
+    DeleteFillupResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        deletedId:
+          type: string
+          format: uuid
+        olderThan14Days:
+          type: boolean
+        nextUpdated:
+          type: boolean
+        message:
+          type: string
+      required: [deletedId, olderThan14Days, nextUpdated, message]
