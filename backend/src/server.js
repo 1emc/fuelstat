@@ -171,6 +171,80 @@ app.get('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
   }
 });
 
+// Update vehicle (partial)
+app.patch('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
+  const vehicleId = String(req.params.vehicleId || '').trim();
+  if (!vehicleId) return res.status(400).json({ error: 'missing_vehicleId' });
+
+  let name =
+    req.body?.name !== undefined ? String(req.body.name).trim() : undefined;
+  let fuelType =
+    req.body?.fuelType !== undefined
+      ? String(req.body.fuelType).trim().toLowerCase()
+      : undefined;
+
+  const allowedFuelTypes = new Set([
+    'diesel',
+    'petrol',
+    'electric',
+    'hybrid',
+    'cng',
+    'lpg',
+    'other'
+  ]);
+
+  if (name !== undefined && !name) {
+    return res.status(400).json({ error: 'invalid_name' });
+  }
+  if (fuelType !== undefined && !allowedFuelTypes.has(fuelType)) {
+    return res.status(400).json({ error: 'invalid_fuelType' });
+  }
+
+  if (name === undefined && fuelType === undefined) {
+    return res.status(400).json({ error: 'nothing_to_update' });
+  }
+
+  try {
+    // Sicherstellen, dass das Fahrzeug dem User gehört
+    const existing = await pool.query(
+      'SELECT id FROM vehicles WHERE id = $1 AND user_id = $2',
+      [vehicleId, req.user.sub]
+    );
+    if (existing.rowCount === 0) {
+      return res.status(404).json({ error: 'vehicle_not_found' });
+    }
+
+    // Dynamisches Update je nach gesendeten Feldern
+    const fields = [];
+    const values = [];
+    let idx = 1;
+
+    if (name !== undefined) {
+      fields.push(`name = $${idx++}`);
+      values.push(name);
+    }
+    if (fuelType !== undefined) {
+      fields.push(`fuel_type = $${idx++}`);
+      values.push(fuelType);
+    }
+
+    values.push(vehicleId);
+    values.push(req.user.sub);
+
+    const r = await pool.query(
+      `UPDATE vehicles
+       SET ${fields.join(', ')}
+       WHERE id = $${idx++} AND user_id = $${idx}
+       RETURNING id, name, fuel_type, created_at`,
+      values
+    );
+
+    res.json(r.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
 // Add fillup (generalisiert: amount + unit)
 app.post('/api/v1/fillups', auth, async (req, res) => {
   const vehicleId = String(req.body?.vehicleId || '').trim();
