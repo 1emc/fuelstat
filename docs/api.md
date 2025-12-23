@@ -300,11 +300,3 @@ curl -s https://tanken.1emc.de/api/v1/fillups \
   -d '{"vehicleId":"<uuid>","odometerKm":12845,"liters":47.2,"priceTotalEur":86.3,"station":"Aral"}'
 ```
 
-```
-
-Wenn du als nächsten Schritt “Repo sauber machen” willst, wäre mein erster Commit-Vorschlag: `docs/api.md` hinzufügen (genau das oben), und die `readme.md` im Root um einen Abschnitt “V2 Backend (Node + Postgres)” ergänzen, damit dein Zukunfts-Ich nicht flucht.
-::contentReference[oaicite:2]{index=2}
-```
-
-[1]: https://github.com/1emc/fuelstat/tree/main "GitHub - 1emc/fuelstat"
-
