@@ -52,6 +52,21 @@ async function auth(req, res, next) {
       }
     }
 
+    // User-weite Revocation: alle Tokens vor revoked_after sind ungültig
+    if (payload.sub) {
+      const r2 = await pool.query(
+        'SELECT revoked_after FROM user_token_revocations WHERE user_id = $1',
+        [payload.sub]
+      );
+      if (r2.rowCount === 1 && payload.iat) {
+        const revokedAfter = new Date(r2.rows[0].revoked_after);
+        const tokenIat = new Date(payload.iat * 1000); // iat ist in Sekunden
+        if (tokenIat < revokedAfter) {
+          return res.status(401).json({ error: 'token_revoked_for_user' });
+        }
+      }
+    }
+
     req.user = payload;
     return next();
   } catch {
@@ -223,6 +238,48 @@ app.delete('/api/v1/auth/users/:userId', auth, async (req, res) => {
     }
 
     return res.status(204).send();
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// Revoke all tokens of a user (Admin-Endpoint)
+app.post('/api/v1/auth/users/:userId/revoke-all', auth, async (req, res) => {
+  const userId = String(req.params.userId || '').trim();
+  if (!userId) return res.status(400).json({ error: 'missing_userId' });
+
+  const reason =
+    req.body?.reason !== undefined
+      ? String(req.body.reason).trim()
+      : null;
+
+  try {
+    // Sicherstellen, dass der User existiert
+    const exists = await pool.query(
+      'SELECT 1 FROM users WHERE id = $1',
+      [userId]
+    );
+    if (exists.rowCount === 0) {
+      return res.status(404).json({ error: 'user_not_found' });
+    }
+
+    const r = await pool.query(
+      `INSERT INTO user_token_revocations (user_id, revoked_after, reason)
+       VALUES ($1, now(), $2)
+       ON CONFLICT (user_id) DO UPDATE
+         SET revoked_after = now(),
+             reason = COALESCE(EXCLUDED.reason, user_token_revocations.reason)
+       RETURNING user_id, revoked_after, reason`,
+      [userId, reason]
+    );
+
+    res.status(201).json({
+      userId: r.rows[0].user_id,
+      revokedAfter: r.rows[0].revoked_after,
+      reason: r.rows[0].reason,
+      message:
+        'Alle bestehenden Tokens dieses Benutzers wurden widerrufen. Neue Logins erhalten wieder gültige Tokens.'
+    });
   } catch (e) {
     res.status(500).json({ error: 'server_error', detail: e.message });
   }
