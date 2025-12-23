@@ -4,6 +4,7 @@ const cors = require('cors');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
+const { randomUUID } = require('crypto');
 const { getVehicleStats } = require('./services/stats');
 
 const app = express();
@@ -24,20 +25,34 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 function signToken(user) {
+  const jti = randomUUID();
   return jwt.sign(
-    { sub: user.id, email: user.email },
+    { sub: user.id, email: user.email, jti },
     process.env.JWT_SECRET,
     { expiresIn: '7d' }
   );
 }
 
-function auth(req, res, next) {
+async function auth(req, res, next) {
   const h = req.header('Authorization') || '';
   const m = h.match(/^Bearer\s+(.+)$/i);
   if (!m) return res.status(401).json({ error: 'missing_token' });
 
   try {
-    req.user = jwt.verify(m[1], process.env.JWT_SECRET);
+    const payload = jwt.verify(m[1], process.env.JWT_SECRET);
+
+    // Falls Token eine jti besitzt, prüfen wir, ob es widerrufen wurde
+    if (payload.jti) {
+      const revoked = await pool.query(
+        'SELECT 1 FROM revoked_tokens WHERE jti = $1',
+        [payload.jti]
+      );
+      if (revoked.rowCount > 0) {
+        return res.status(401).json({ error: 'token_revoked' });
+      }
+    }
+
+    req.user = payload;
     return next();
   } catch {
     return res.status(401).json({ error: 'invalid_token' });
@@ -209,6 +224,85 @@ app.delete('/api/v1/auth/users/:userId', auth, async (req, res) => {
 
     return res.status(204).send();
   } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// List revoked tokens (Admin-Endpoint)
+app.get('/api/v1/auth/tokens', auth, async (req, res) => {
+  const userId =
+    req.query.userId !== undefined
+      ? String(req.query.userId).trim()
+      : null;
+
+  try {
+    let r;
+    if (userId) {
+      r = await pool.query(
+        `SELECT jti, user_id, revoked_at, reason
+         FROM revoked_tokens
+         WHERE user_id = $1
+         ORDER BY revoked_at DESC`,
+        [userId]
+      );
+    } else {
+      r = await pool.query(
+        `SELECT jti, user_id, revoked_at, reason
+         FROM revoked_tokens
+         ORDER BY revoked_at DESC`
+      );
+    }
+
+    res.json(r.rows);
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// Revoke a token (Admin-Endpoint)
+app.post('/api/v1/auth/tokens/revoke', auth, async (req, res) => {
+  const token = String(req.body?.token || '').trim();
+  const reason =
+    req.body?.reason !== undefined
+      ? String(req.body.reason).trim()
+      : null;
+
+  if (!token) {
+    return res.status(400).json({ error: 'missing_token' });
+  }
+
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+
+    if (!payload.jti) {
+      return res.status(400).json({
+        error: 'cannot_revoke_legacy_token',
+        message:
+          'Dieses Token besitzt keine jti und kann daher serverseitig nicht widerrufen werden. Bitte den Benutzer neu einloggen lassen.'
+      });
+    }
+
+    const jti = String(payload.jti);
+    const userId = String(payload.sub);
+
+    const r = await pool.query(
+      `INSERT INTO revoked_tokens (jti, user_id, reason)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (jti) DO UPDATE
+         SET reason = COALESCE(EXCLUDED.reason, revoked_tokens.reason)`,
+      [jti, userId, reason]
+    );
+
+    res.status(201).json({
+      jti,
+      userId,
+      reason,
+      message: 'Token wurde widerrufen und wird ab sofort abgelehnt.'
+    });
+  } catch (e) {
+    if (e.name === 'JsonWebTokenError' || e.name === 'TokenExpiredError') {
+      return res.status(400).json({ error: 'invalid_token', detail: e.message });
+    }
     res.status(500).json({ error: 'server_error', detail: e.message });
   }
 });
