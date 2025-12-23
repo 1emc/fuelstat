@@ -245,6 +245,28 @@ app.patch('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
   }
 });
 
+// Delete vehicle
+app.delete('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
+  const vehicleId = String(req.params.vehicleId || '').trim();
+  if (!vehicleId) return res.status(400).json({ error: 'missing_vehicleId' });
+
+  try {
+    const r = await pool.query(
+      'DELETE FROM vehicles WHERE id = $1 AND user_id = $2 RETURNING id',
+      [vehicleId, req.user.sub]
+    );
+
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: 'vehicle_not_found' });
+    }
+
+    // 204 No Content, keine Response-Payload nötig
+    return res.status(204).send();
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
 // Add fillup (generalisiert: amount + unit)
 app.post('/api/v1/fillups', auth, async (req, res) => {
   const vehicleId = String(req.body?.vehicleId || '').trim();
