@@ -83,6 +83,34 @@ app.get('/api/v1/health', (req, res) => {
   });
 });
 
+// Whoami - zeigt aktuell angemeldeten User
+app.get('/api/v1/whoami', auth, async (req, res) => {
+  try {
+    // Zusätzlich User-Daten aus DB holen für vollständige Info
+    const r = await pool.query(
+      'SELECT id, email, created_at FROM users WHERE id = $1',
+      [req.user.sub]
+    );
+
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: 'user_not_found' });
+    }
+
+    res.json({
+      id: r.rows[0].id,
+      email: r.rows[0].email,
+      created_at: r.rows[0].created_at,
+      token: {
+        jti: req.user.jti || null,
+        iat: req.user.iat ? new Date(req.user.iat * 1000).toISOString() : null,
+        exp: req.user.exp ? new Date(req.user.exp * 1000).toISOString() : null
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
 // DB Ping
 app.get('/api/v1/db-ping', async (req, res) => {
   try {
