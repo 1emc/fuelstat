@@ -585,6 +585,92 @@ app.patch('/api/v1/fillups/:fillupId', auth, async (req, res) => {
   }
 });
 
+// Delete fillup (immer möglich; bei >14 Tagen wird nächster Fillup auf skip_previous=true gesetzt)
+app.delete('/api/v1/fillups/:fillupId', auth, async (req, res) => {
+  const fillupId = String(req.params.fillupId || '').trim();
+  if (!fillupId) return res.status(400).json({ error: 'missing_fillupId' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Zu löschenden Fillup laden + Besitz prüfen
+    const existingRes = await client.query(
+      `SELECT
+         id,
+         user_id,
+         vehicle_id,
+         odometer_km,
+         filled_at
+       FROM fillups
+       WHERE id = $1 AND user_id = $2
+       FOR UPDATE`,
+      [fillupId, req.user.sub]
+    );
+
+    if (existingRes.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'fillup_not_found' });
+    }
+
+    const existing = existingRes.rows[0];
+    const filledAt = new Date(existing.filled_at);
+    const now = new Date();
+    const diffMs = now.getTime() - filledAt.getTime();
+    const maxMs = 14 * 24 * 60 * 60 * 1000; // 14 Tage
+    const olderThan14Days = diffMs > maxMs;
+
+    // Fillup löschen
+    await client.query(
+      'DELETE FROM fillups WHERE id = $1 AND user_id = $2',
+      [fillupId, req.user.sub]
+    );
+
+    let nextUpdated = false;
+
+    if (olderThan14Days) {
+      // Nächsten Fillup anhand filled_at finden und skip_previous = true setzen
+      const nextRes = await client.query(
+        `SELECT id
+         FROM fillups
+         WHERE user_id = $1
+           AND vehicle_id = $2
+           AND filled_at > $3
+         ORDER BY filled_at ASC
+         LIMIT 1`,
+        [req.user.sub, existing.vehicle_id, filledAt]
+      );
+
+      if (nextRes.rowCount === 1) {
+        const nextId = nextRes.rows[0].id;
+        await client.query(
+          `UPDATE fillups
+           SET skip_previous = true
+           WHERE id = $1 AND user_id = $2`,
+          [nextId, req.user.sub]
+        );
+        nextUpdated = true;
+      }
+    }
+
+    await client.query('COMMIT');
+
+    return res.status(200).json({
+      deletedId: existing.id,
+      olderThan14Days,
+      nextUpdated,
+      message: olderThan14Days
+        ? 'Ein Tank-/Ladevorgang, der älter als 14 Tage ist, wurde gelöscht. Der nachfolgende Vorgang wird bei der Verbrauchsberechnung nicht mehr den vorherigen berücksichtigen (skip_previous = true).'
+        : 'Tank-/Ladevorgang wurde gelöscht.'
+    });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  } finally {
+    client.release();
+  }
+});
+
 // List fillups by vehicle
 app.get('/api/v1/vehicles/:vehicleId/fillups', auth, async (req, res) => {
   const vehicleId = String(req.params.vehicleId || '').trim();
