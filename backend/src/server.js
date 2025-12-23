@@ -344,7 +344,51 @@ app.post('/api/v1/fillups', auth, async (req, res) => {
   }
 });
 
+// Get single fillup by id
+app.get('/api/v1/fillups/:fillupId', auth, async (req, res) => {
+  const fillupId = String(req.params.fillupId || '').trim();
 
+  if (!fillupId) return res.status(400).json({ error: 'missing_fillupId' });
+
+  try {
+    const r = await pool.query(
+      `SELECT
+         id,
+         user_id,
+         vehicle_id,
+         odometer_km,
+         amount,
+         unit,
+         total_cost_eur,
+         price_per_unit,
+         station,
+         filled_at,
+         created_at,
+         is_full,
+         skip_previous
+       FROM fillups
+       WHERE id = $1 AND user_id = $2`,
+      [fillupId, req.user.sub]
+    );
+
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: 'fillup_not_found' });
+    }
+
+    const row = r.rows[0];
+
+    // Für ältere Clients zusätzlich kompatible Felder anbieten
+    const legacy = {
+      liters: row.unit === 'l' ? row.amount : null,
+      price_total_eur: row.total_cost_eur,
+      price_per_liter: row.unit === 'l' ? row.price_per_unit : null
+    };
+
+    res.json({ ...row, ...legacy });
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
 
 // List fillups by vehicle
 app.get('/api/v1/vehicles/:vehicleId/fillups', auth, async (req, res) => {
