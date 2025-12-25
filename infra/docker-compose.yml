@@ -11,6 +11,7 @@ services:
     volumes:
       - ../backend:/usr/src/app
       - api_node_modules:/usr/src/app/node_modules
+      - ../public/uploads:/usr/src/app/uploads
     env_file:
       - .env
     environment:
