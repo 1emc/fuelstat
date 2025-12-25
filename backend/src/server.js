@@ -5,6 +5,9 @@ const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const { randomUUID } = require('crypto');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const { getVehicleStats } = require('./services/stats');
 
 const app = express();
@@ -12,6 +15,9 @@ const app = express();
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
+
+// Statischer File-Server für Uploads
+app.use(MEDIA_BASE_URL, express.static(UPLOAD_DIR));
 
 const PORT = process.env.PORT || 3000;
 
@@ -23,6 +29,41 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
 }
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+// Media Upload Konfiguration
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '../../uploads');
+const MEDIA_BASE_URL = process.env.MEDIA_BASE_URL || '/uploads';
+
+// Upload-Verzeichnis erstellen falls nicht vorhanden
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, UPLOAD_DIR);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const filename = `${randomUUID()}${ext}`;
+    cb(null, filename);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 20 * 1024 * 1024 // 20 MB
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Nur JPEG, PNG, GIF und WebP Bilder sind erlaubt.'), false);
+    }
+  }
+});
 
 function signToken(user) {
   const jti = randomUUID();
@@ -1284,6 +1325,237 @@ app.get('/api/v1/vehicles/:vehicleId/stats', auth, async (req, res) => {
   }
 });
 
+
+// ============================================
+// Media Upload Endpoints (User Media)
+// ============================================
+
+// Upload user media
+app.post('/api/v1/media/upload', auth, upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'missing_file' });
+  }
+
+  const mediaType = String(req.body?.mediaType || 'image').trim();
+  const url = `${MEDIA_BASE_URL}/${req.file.filename}`;
+  const mimeType = req.file.mimetype;
+  const bytes = req.file.size;
+
+  try {
+    const r = await pool.query(
+      `INSERT INTO user_media (user_id, media_type, url, mime_type, bytes)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, user_id, media_type, url, mime_type, bytes, created_at`,
+      [req.user.sub, mediaType, url, mimeType, bytes]
+    );
+
+    res.status(201).json(r.rows[0]);
+  } catch (e) {
+    // Datei löschen falls DB-Insert fehlschlägt
+    fs.unlink(req.file.path, () => {});
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// List user media
+app.get('/api/v1/media', auth, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT id, user_id, media_type, url, mime_type, bytes, created_at
+       FROM user_media
+       WHERE user_id = $1
+       ORDER BY created_at DESC`,
+      [req.user.sub]
+    );
+    res.json(r.rows);
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// Get single media
+app.get('/api/v1/media/:mediaId', auth, async (req, res) => {
+  const mediaId = String(req.params.mediaId || '').trim();
+  if (!mediaId) return res.status(400).json({ error: 'missing_mediaId' });
+
+  try {
+    const r = await pool.query(
+      `SELECT id, user_id, media_type, url, mime_type, bytes, created_at
+       FROM user_media
+       WHERE id = $1 AND user_id = $2`,
+      [mediaId, req.user.sub]
+    );
+
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: 'media_not_found' });
+    }
+
+    res.json(r.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// Delete media
+app.delete('/api/v1/media/:mediaId', auth, async (req, res) => {
+  const mediaId = String(req.params.mediaId || '').trim();
+  if (!mediaId) return res.status(400).json({ error: 'missing_mediaId' });
+
+  try {
+    const r = await pool.query(
+      `SELECT url FROM user_media WHERE id = $1 AND user_id = $2`,
+      [mediaId, req.user.sub]
+    );
+
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: 'media_not_found' });
+    }
+
+    const url = r.rows[0].url;
+    const filename = path.basename(url);
+
+    // Aus DB löschen
+    await pool.query(
+      'DELETE FROM user_media WHERE id = $1 AND user_id = $2',
+      [mediaId, req.user.sub]
+    );
+
+    // Datei löschen
+    const filePath = path.join(UPLOAD_DIR, filename);
+    fs.unlink(filePath, (err) => {
+      // Ignoriere Fehler wenn Datei nicht existiert
+    });
+
+    return res.status(204).send();
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// ============================================
+// Media Upload Endpoints (Vehicle Media)
+// ============================================
+
+// Upload vehicle media
+app.post('/api/v1/vehicles/:vehicleId/media/upload', auth, upload.single('file'), async (req, res) => {
+  const vehicleId = String(req.params.vehicleId || '').trim();
+  if (!vehicleId) return res.status(400).json({ error: 'missing_vehicleId' });
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'missing_file' });
+  }
+
+  try {
+    // Prüfen, ob das Fahrzeug dem User gehört
+    const v = await pool.query(
+      'SELECT 1 FROM vehicles WHERE id = $1 AND user_id = $2',
+      [vehicleId, req.user.sub]
+    );
+    if (v.rowCount === 0) {
+      fs.unlink(req.file.path, () => {});
+      return res.status(404).json({ error: 'vehicle_not_found' });
+    }
+
+    const mediaType = String(req.body?.mediaType || 'image').trim();
+    const url = `${MEDIA_BASE_URL}/${req.file.filename}`;
+    const mimeType = req.file.mimetype;
+    const bytes = req.file.size;
+
+    const r = await pool.query(
+      `INSERT INTO vehicle_media (vehicle_id, user_id, media_type, url, mime_type, bytes)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, vehicle_id, user_id, media_type, url, mime_type, bytes, created_at`,
+      [vehicleId, req.user.sub, mediaType, url, mimeType, bytes]
+    );
+
+    res.status(201).json(r.rows[0]);
+  } catch (e) {
+    // Datei löschen falls DB-Insert fehlschlägt
+    fs.unlink(req.file.path, () => {});
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// List vehicle media
+app.get('/api/v1/vehicles/:vehicleId/media', auth, async (req, res) => {
+  const vehicleId = String(req.params.vehicleId || '').trim();
+  if (!vehicleId) return res.status(400).json({ error: 'missing_vehicleId' });
+
+  try {
+    // Prüfen, ob das Fahrzeug dem User gehört
+    const v = await pool.query(
+      'SELECT 1 FROM vehicles WHERE id = $1 AND user_id = $2',
+      [vehicleId, req.user.sub]
+    );
+    if (v.rowCount === 0) {
+      return res.status(404).json({ error: 'vehicle_not_found' });
+    }
+
+    const r = await pool.query(
+      `SELECT id, vehicle_id, user_id, media_type, url, mime_type, bytes, created_at
+       FROM vehicle_media
+       WHERE vehicle_id = $1 AND user_id = $2
+       ORDER BY created_at DESC`,
+      [vehicleId, req.user.sub]
+    );
+    res.json(r.rows);
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// Delete vehicle media
+app.delete('/api/v1/vehicles/:vehicleId/media/:mediaId', auth, async (req, res) => {
+  const vehicleId = String(req.params.vehicleId || '').trim();
+  const mediaId = String(req.params.mediaId || '').trim();
+  if (!vehicleId) return res.status(400).json({ error: 'missing_vehicleId' });
+  if (!mediaId) return res.status(400).json({ error: 'missing_mediaId' });
+
+  try {
+    const r = await pool.query(
+      `SELECT url FROM vehicle_media
+       WHERE id = $1 AND vehicle_id = $2 AND user_id = $3`,
+      [mediaId, vehicleId, req.user.sub]
+    );
+
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: 'media_not_found' });
+    }
+
+    const url = r.rows[0].url;
+    const filename = path.basename(url);
+
+    // Aus DB löschen
+    await pool.query(
+      'DELETE FROM vehicle_media WHERE id = $1 AND vehicle_id = $2 AND user_id = $3',
+      [mediaId, vehicleId, req.user.sub]
+    );
+
+    // Datei löschen
+    const filePath = path.join(UPLOAD_DIR, filename);
+    fs.unlink(filePath, (err) => {
+      // Ignoriere Fehler wenn Datei nicht existiert
+    });
+
+    return res.status(204).send();
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// Error Handler für multer
+app.use((error, req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: 'file_too_large', message: 'Datei ist zu groß (max. 20 MB)' });
+    }
+    return res.status(400).json({ error: 'upload_error', detail: error.message });
+  }
+  if (error) {
+    return res.status(400).json({ error: 'upload_error', detail: error.message });
+  }
+  next();
+});
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Backend V2 läuft auf Port ${PORT}`);
