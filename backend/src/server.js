@@ -88,7 +88,8 @@ app.get('/api/v1/whoami', auth, async (req, res) => {
   try {
     // Zusätzlich User-Daten aus DB holen für vollständige Info
     const r = await pool.query(
-      'SELECT id, email, created_at FROM users WHERE id = $1',
+      `SELECT id, email, username, mfa_enabled, profile_image_url, created_at, updated_at
+       FROM users WHERE id = $1`,
       [req.user.sub]
     );
 
@@ -99,7 +100,11 @@ app.get('/api/v1/whoami', auth, async (req, res) => {
     res.json({
       id: r.rows[0].id,
       email: r.rows[0].email,
+      username: r.rows[0].username,
+      mfa_enabled: r.rows[0].mfa_enabled,
+      profile_image_url: r.rows[0].profile_image_url,
       created_at: r.rows[0].created_at,
+      updated_at: r.rows[0].updated_at,
       token: {
         jti: req.user.jti || null,
         iat: req.user.iat ? new Date(req.user.iat * 1000).toISOString() : null,
@@ -132,7 +137,9 @@ app.post('/api/v1/auth/register', async (req, res) => {
   try {
     const passwordHash = await bcrypt.hash(password, 12);
     const r = await pool.query(
-      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, created_at',
+      `INSERT INTO users (email, password_hash)
+       VALUES ($1, $2)
+       RETURNING id, email, username, mfa_enabled, profile_image_url, created_at, updated_at`,
       [email, passwordHash]
     );
     const user = r.rows[0];
@@ -152,7 +159,8 @@ app.post('/api/v1/auth/login', async (req, res) => {
 
   try {
     const r = await pool.query(
-      'SELECT id, email, password_hash, created_at FROM users WHERE email = $1',
+      `SELECT id, email, password_hash, username, mfa_enabled, profile_image_url, created_at, updated_at
+       FROM users WHERE email = $1`,
       [email]
     );
     if (r.rowCount === 0) return res.status(401).json({ error: 'invalid_credentials' });
@@ -175,7 +183,11 @@ app.get('/api/v1/auth/users', auth, async (req, res) => {
       `SELECT
          id,
          email,
-         created_at
+         username,
+         mfa_enabled,
+         profile_image_url,
+         created_at,
+         updated_at
        FROM users
        ORDER BY created_at ASC`
     );
@@ -195,7 +207,11 @@ app.get('/api/v1/auth/users/:userId', auth, async (req, res) => {
       `SELECT
          id,
          email,
-         created_at
+         username,
+         mfa_enabled,
+         profile_image_url,
+         created_at,
+         updated_at
        FROM users
        WHERE id = $1`,
       [userId]
@@ -220,21 +236,50 @@ app.patch('/api/v1/auth/users/:userId', auth, async (req, res) => {
     req.body?.email !== undefined
       ? String(req.body.email).trim().toLowerCase()
       : undefined;
+  const username =
+    req.body?.username !== undefined
+      ? String(req.body.username).trim() || null
+      : undefined;
+  const profileImageUrl =
+    req.body?.profileImageUrl !== undefined
+      ? String(req.body.profileImageUrl).trim() || null
+      : undefined;
 
-  if (email === undefined) {
+  if (email === undefined && username === undefined && profileImageUrl === undefined) {
     return res.status(400).json({ error: 'nothing_to_update' });
   }
-  if (!email || !email.includes('@')) {
+
+  if (email !== undefined && (!email || !email.includes('@'))) {
     return res.status(400).json({ error: 'invalid_email' });
   }
 
   try {
+    const fields = [];
+    const values = [];
+    let idx = 1;
+
+    if (email !== undefined) {
+      fields.push(`email = $${idx++}`);
+      values.push(email);
+    }
+    if (username !== undefined) {
+      fields.push(`username = $${idx++}`);
+      values.push(username);
+    }
+    if (profileImageUrl !== undefined) {
+      fields.push(`profile_image_url = $${idx++}`);
+      values.push(profileImageUrl);
+    }
+
+    fields.push(`updated_at = now()`);
+    values.push(userId);
+
     const r = await pool.query(
       `UPDATE users
-       SET email = $1
-       WHERE id = $2
-       RETURNING id, email, created_at`,
-      [email, userId]
+       SET ${fields.join(', ')}
+       WHERE id = $${idx}
+       RETURNING id, email, username, mfa_enabled, profile_image_url, created_at, updated_at`,
+      values
     );
 
     if (r.rowCount === 0) {
@@ -397,14 +442,46 @@ app.post('/api/v1/vehicles', auth, async (req, res) => {
   const name = String(req.body?.name || '').trim();
   const fuelType = String(req.body?.fuelType || '').trim().toLowerCase();
 
-  const allowed = new Set(['diesel','petrol','electric','hybrid','cng','lpg','other']);
+  const allowed = new Set(['diesel', 'e5', 'e10', 'lpg', 'cng', 'electric', 'hybrid', 'hydrogen', 'other']);
   if (!name) return res.status(400).json({ error: 'missing_name' });
   if (!allowed.has(fuelType)) return res.status(400).json({ error: 'invalid_fuelType' });
 
+  const brand = req.body?.brand ? String(req.body.brand).trim() : null;
+  const model = req.body?.model ? String(req.body.model).trim() : null;
+  const year = req.body?.year !== undefined ? Number(req.body.year) : null;
+  const imageUrl = req.body?.imageUrl ? String(req.body.imageUrl).trim() : null;
+  const odometerKm = req.body?.odometerKm !== undefined ? Number(req.body.odometerKm) : null;
+  const mileageKm = req.body?.mileageKm !== undefined ? Number(req.body.mileageKm) : null;
+  const tankCapacity = req.body?.tankCapacity !== undefined ? Number(req.body.tankCapacity) : null;
+  const sortOrder = req.body?.sortOrder !== undefined ? Number(req.body.sortOrder) : 0;
+
+  if (year !== null && (!Number.isFinite(year) || year < 1886 || year > 2100)) {
+    return res.status(400).json({ error: 'invalid_year' });
+  }
+  if (odometerKm !== null && (!Number.isFinite(odometerKm) || odometerKm < 0)) {
+    return res.status(400).json({ error: 'invalid_odometerKm' });
+  }
+  if (mileageKm !== null && (!Number.isFinite(mileageKm) || mileageKm < 0)) {
+    return res.status(400).json({ error: 'invalid_mileageKm' });
+  }
+  if (tankCapacity !== null && (!Number.isFinite(tankCapacity) || tankCapacity <= 0)) {
+    return res.status(400).json({ error: 'invalid_tankCapacity' });
+  }
+  if (!Number.isFinite(sortOrder)) {
+    return res.status(400).json({ error: 'invalid_sortOrder' });
+  }
+
   try {
     const r = await pool.query(
-      'INSERT INTO vehicles (user_id, name, fuel_type) VALUES ($1, $2, $3) RETURNING id, name, fuel_type, created_at',
-      [req.user.sub, name, fuelType]
+      `INSERT INTO vehicles (
+         user_id, name, fuel_type, brand, model, year, image_url,
+         odometer_km, mileage_km, tank_capacity, sort_order
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING id, name, fuel_type, brand, model, year, image_url,
+                 odometer_km, mileage_km, tank_capacity, sort_order,
+                 created_at, updated_at`,
+      [req.user.sub, name, fuelType, brand, model, year, imageUrl, odometerKm, mileageKm, tankCapacity, sortOrder]
     );
     res.status(201).json(r.rows[0]);
   } catch (e) {
@@ -416,7 +493,12 @@ app.post('/api/v1/vehicles', auth, async (req, res) => {
 app.get('/api/v1/vehicles', auth, async (req, res) => {
   try {
     const r = await pool.query(
-      'SELECT id, name, fuel_type, created_at FROM vehicles WHERE user_id = $1 ORDER BY created_at DESC',
+      `SELECT id, name, fuel_type, brand, model, year, image_url,
+              odometer_km, mileage_km, tank_capacity, sort_order,
+              created_at, updated_at
+       FROM vehicles
+       WHERE user_id = $1
+       ORDER BY sort_order ASC, created_at DESC`,
       [req.user.sub]
     );
     res.json(r.rows);
@@ -437,7 +519,16 @@ app.get('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
          id,
          name,
          fuel_type,
-         created_at
+         brand,
+         model,
+         year,
+         image_url,
+         odometer_km,
+         mileage_km,
+         tank_capacity,
+         sort_order,
+         created_at,
+         updated_at
        FROM vehicles
        WHERE id = $1 AND user_id = $2`,
       [vehicleId, req.user.sub]
@@ -464,14 +555,38 @@ app.patch('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
     req.body?.fuelType !== undefined
       ? String(req.body.fuelType).trim().toLowerCase()
       : undefined;
+  const brand =
+    req.body?.brand !== undefined
+      ? String(req.body.brand).trim() || null
+      : undefined;
+  const model =
+    req.body?.model !== undefined
+      ? String(req.body.model).trim() || null
+      : undefined;
+  const year =
+    req.body?.year !== undefined ? Number(req.body.year) : undefined;
+  const imageUrl =
+    req.body?.imageUrl !== undefined
+      ? String(req.body.imageUrl).trim() || null
+      : undefined;
+  const odometerKm =
+    req.body?.odometerKm !== undefined ? Number(req.body.odometerKm) : undefined;
+  const mileageKm =
+    req.body?.mileageKm !== undefined ? Number(req.body.mileageKm) : undefined;
+  const tankCapacity =
+    req.body?.tankCapacity !== undefined ? Number(req.body.tankCapacity) : undefined;
+  const sortOrder =
+    req.body?.sortOrder !== undefined ? Number(req.body.sortOrder) : undefined;
 
   const allowedFuelTypes = new Set([
     'diesel',
-    'petrol',
+    'e5',
+    'e10',
+    'lpg',
+    'cng',
     'electric',
     'hybrid',
-    'cng',
-    'lpg',
+    'hydrogen',
     'other'
   ]);
 
@@ -481,8 +596,34 @@ app.patch('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
   if (fuelType !== undefined && !allowedFuelTypes.has(fuelType)) {
     return res.status(400).json({ error: 'invalid_fuelType' });
   }
+  if (year !== undefined && year !== null && (!Number.isFinite(year) || year < 1886 || year > 2100)) {
+    return res.status(400).json({ error: 'invalid_year' });
+  }
+  if (odometerKm !== undefined && odometerKm !== null && (!Number.isFinite(odometerKm) || odometerKm < 0)) {
+    return res.status(400).json({ error: 'invalid_odometerKm' });
+  }
+  if (mileageKm !== undefined && mileageKm !== null && (!Number.isFinite(mileageKm) || mileageKm < 0)) {
+    return res.status(400).json({ error: 'invalid_mileageKm' });
+  }
+  if (tankCapacity !== undefined && tankCapacity !== null && (!Number.isFinite(tankCapacity) || tankCapacity <= 0)) {
+    return res.status(400).json({ error: 'invalid_tankCapacity' });
+  }
+  if (sortOrder !== undefined && !Number.isFinite(sortOrder)) {
+    return res.status(400).json({ error: 'invalid_sortOrder' });
+  }
 
-  if (name === undefined && fuelType === undefined) {
+  if (
+    name === undefined &&
+    fuelType === undefined &&
+    brand === undefined &&
+    model === undefined &&
+    year === undefined &&
+    imageUrl === undefined &&
+    odometerKm === undefined &&
+    mileageKm === undefined &&
+    tankCapacity === undefined &&
+    sortOrder === undefined
+  ) {
     return res.status(400).json({ error: 'nothing_to_update' });
   }
 
@@ -509,7 +650,40 @@ app.patch('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
       fields.push(`fuel_type = $${idx++}`);
       values.push(fuelType);
     }
+    if (brand !== undefined) {
+      fields.push(`brand = $${idx++}`);
+      values.push(brand);
+    }
+    if (model !== undefined) {
+      fields.push(`model = $${idx++}`);
+      values.push(model);
+    }
+    if (year !== undefined) {
+      fields.push(`year = $${idx++}`);
+      values.push(year);
+    }
+    if (imageUrl !== undefined) {
+      fields.push(`image_url = $${idx++}`);
+      values.push(imageUrl);
+    }
+    if (odometerKm !== undefined) {
+      fields.push(`odometer_km = $${idx++}`);
+      values.push(odometerKm);
+    }
+    if (mileageKm !== undefined) {
+      fields.push(`mileage_km = $${idx++}`);
+      values.push(mileageKm);
+    }
+    if (tankCapacity !== undefined) {
+      fields.push(`tank_capacity = $${idx++}`);
+      values.push(tankCapacity);
+    }
+    if (sortOrder !== undefined) {
+      fields.push(`sort_order = $${idx++}`);
+      values.push(sortOrder);
+    }
 
+    fields.push(`updated_at = now()`);
     values.push(vehicleId);
     values.push(req.user.sub);
 
@@ -517,7 +691,9 @@ app.patch('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
       `UPDATE vehicles
        SET ${fields.join(', ')}
        WHERE id = $${idx++} AND user_id = $${idx}
-       RETURNING id, name, fuel_type, created_at`,
+       RETURNING id, name, fuel_type, brand, model, year, image_url,
+                 odometer_km, mileage_km, tank_capacity, sort_order,
+                 created_at, updated_at`,
       values
     );
 
@@ -584,8 +760,9 @@ app.post('/api/v1/fillups', auth, async (req, res) => {
 
     if (!unit) {
       if (fuelType === 'electric') unit = 'kwh';
-      else if (fuelType === 'cng') unit = 'kg';
-      else unit = 'l';
+      else if (fuelType === 'cng' || fuelType === 'lpg') unit = 'kg';
+      else if (fuelType === 'hydrogen') unit = 'kg';
+      else unit = 'l'; // diesel, e5, e10, hybrid, other
     }
     if (!allowedUnits.has(unit)) return res.status(400).json({ error: 'invalid_unit' });
 
