@@ -10,6 +10,10 @@ const path = require('path');
 const fs = require('fs');
 const { getVehicleStats } = require('./services/stats');
 
+// Media Upload Konfiguration
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '../../uploads');
+const MEDIA_BASE_URL = process.env.MEDIA_BASE_URL || '/uploads';
+
 const app = express();
 
 app.use(helmet());
@@ -29,10 +33,6 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
 }
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-
-// Media Upload Konfiguration
-const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '../../uploads');
-const MEDIA_BASE_URL = process.env.MEDIA_BASE_URL || '/uploads';
 
 // Upload-Verzeichnis erstellen falls nicht vorhanden
 if (!fs.existsSync(UPLOAD_DIR)) {
