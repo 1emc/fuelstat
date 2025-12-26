@@ -11,13 +11,15 @@ const fs = require('fs');
 const { getVehicleStats } = require('./services/stats');
 
 // Media Upload Konfiguration
-// Standard-Uploadpfad: im Projekt-Root unter /uploads (z. B. /srv/www/.../public/uploads)
-// Falls UPLOAD_DIR gesetzt ist, wird ein relativer Pfad ebenfalls relativ zum Projekt-Root
-// aufgelöst, damit keine verschachtelten /public/public/uploads Pfade entstehen.
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+// Standard-Uploadpfad: im Backend-Projektordner unter ../uploads (z. B. /srv/www/.../public/uploads)
+// Falls UPLOAD_DIR gesetzt ist, werden relative Pfade auf den Backend-Root (/usr/src/app) bezogen,
+// damit keine verschachtelten /public/public/uploads Pfade entstehen.
+const BACKEND_ROOT = path.resolve(__dirname, '..');
 const UPLOAD_DIR = process.env.UPLOAD_DIR
-  ? path.resolve(PROJECT_ROOT, process.env.UPLOAD_DIR)
-  : path.join(PROJECT_ROOT, 'uploads');
+  ? (path.isAbsolute(process.env.UPLOAD_DIR)
+    ? process.env.UPLOAD_DIR
+    : path.resolve(BACKEND_ROOT, process.env.UPLOAD_DIR))
+  : path.resolve(BACKEND_ROOT, 'uploads');
 const MEDIA_BASE_URL = process.env.MEDIA_BASE_URL || '/uploads';
 
 const app = express();
