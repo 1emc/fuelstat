@@ -11,10 +11,13 @@ const fs = require('fs');
 const { getVehicleStats } = require('./services/stats');
 
 // Media Upload Konfiguration
-// Standard-Uploadpfad: innerhalb des Backend-Containers /usr/src/app/uploads
-// (siehe docker-compose Bind-Mount ../public/uploads:/usr/src/app/uploads)
-// Fallback liegt damit im Backend-Projektordner, nicht im Repo-Root.
-const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
+// Standard-Uploadpfad: im Projekt-Root unter /uploads (z. B. /srv/www/.../public/uploads)
+// Falls UPLOAD_DIR gesetzt ist, wird ein relativer Pfad ebenfalls relativ zum Projekt-Root
+// aufgelöst, damit keine verschachtelten /public/public/uploads Pfade entstehen.
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+const UPLOAD_DIR = process.env.UPLOAD_DIR
+  ? path.resolve(PROJECT_ROOT, process.env.UPLOAD_DIR)
+  : path.join(PROJECT_ROOT, 'uploads');
 const MEDIA_BASE_URL = process.env.MEDIA_BASE_URL || '/uploads';
 
 const app = express();

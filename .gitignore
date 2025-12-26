@@ -34,6 +34,10 @@ $RECYCLE.BIN/
 !/images/new-icon-*x*.png
 !/images/icon-*x*.png
 
+# Uploads
+/uploads/
+/backend/uploads/
+
 # --- Secrets ---
 includes/db_connect.php
 .env
