@@ -11,9 +11,7 @@ const fs = require('fs');
 const { getVehicleStats } = require('./services/stats');
 
 // Media Upload Konfiguration
-// Standard-Uploadpfad: im Backend-Projektordner unter ../uploads (z. B. /srv/www/.../public/uploads)
-// Falls UPLOAD_DIR gesetzt ist, werden relative Pfade auf den Backend-Root (/usr/src/app) bezogen,
-// damit keine verschachtelten /public/public/uploads Pfade entstehen.
+// Standard-Uploadpfad: im Backend-Projektordner unter ../uploads (z. B. /srv/www/.../uploads)
 const BACKEND_ROOT = path.resolve(__dirname, '..');
 const UPLOAD_DIR = process.env.UPLOAD_DIR
   ? (path.isAbsolute(process.env.UPLOAD_DIR)
