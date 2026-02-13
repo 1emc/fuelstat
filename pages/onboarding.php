@@ -1,31 +1,45 @@
 <?php
 include '../includes/session.php';
 include '../includes/db_connect.php';
-require_once __DIR__ . '/../includes/api_config.php';
+require_once __DIR__ . '/../includes/api_helpers.php';
 
 $vehicleCount = 0;
 $vehicleId = null;
-$isAuthenticated = getApiToken() !== null;
+$isAuthenticated = isApiAuthenticated();
+$api = getApiClient();
 
 if ($isAuthenticated) {
     try {
+        $token = getApiToken() ?? '';
+        error_log('[Onboarding] token_len=' . strlen($token) . ' base_url=' . getApiBaseUrl());
         $vehicles = $api->getVehicles();
         $vehicleCount = count($vehicles);
+        error_log('[Onboarding] getVehicles ok count=' . $vehicleCount);
+
         if ($vehicleCount > 0) {
             $vehicleId = $vehicles[0]['id'];
             $hasAnyEntry = false;
             foreach ($vehicles as $v) {
-                if (count($api->getVehicleFillups($v['id'], 1)) > 0 || count($api->getVehicleEntries($v['id'], 1)) > 0) {
+                $fillups = $api->getVehicleFillups($v['id'], 1);
+                $entries = $api->getVehicleEntries($v['id'], 1);
+                if (count($fillups) > 0 || count($entries) > 0) {
                     $hasAnyEntry = true;
                     break;
                 }
             }
             if ($hasAnyEntry) {
-                header('Location: ../index.php');
+                header('Location: /index.php', true, 302);
                 exit;
             }
         }
     } catch (Throwable $e) {
+        $code = method_exists($e, 'getCode') ? (int)$e->getCode() : 0;
+        error_log('[Onboarding] API call failed code=' . $code . ' message=' . $e->getMessage());
+        if ($code === 401) {
+            clearApiToken();
+            header('Location: /pages/login.php', true, 302);
+            exit;
+        }
     }
 }
 

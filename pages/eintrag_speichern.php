@@ -1,6 +1,8 @@
 <?php
 include '../includes/session.php';
 include '../includes/db_connect.php';
+require_once __DIR__ . '/../includes/api_helpers.php';
+$api = getApiClient();
 
 $fahrzeug_id = trim($_POST['fahrzeug_id'] ?? '');
 $eintragstyp = $_POST['eintragstyp'] ?? '';

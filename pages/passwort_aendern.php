@@ -1,6 +1,7 @@
 <?php
 include '../includes/session.php';
-if (!isset($_SESSION['user_id'])) {
+require_once __DIR__ . '/../includes/api_config.php';
+if (!isApiAuthenticated()) {
     header('Location: login.php');
     exit;
 }

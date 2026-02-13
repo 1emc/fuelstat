@@ -1,12 +1,14 @@
 <?php
 include '../includes/session.php';
+require_once __DIR__ . '/../includes/api_helpers.php';
 
-if (!isset($_SESSION['user_id'])) {
+if (!isApiAuthenticated()) {
     header('Location: login.php');
     exit;
 }
 
 include '../includes/db_connect.php';
+$api = getApiClient();
 $success_message = '';
 $error = '';
 $user = ['email' => $_SESSION['user_email'] ?? ''];
@@ -16,6 +18,7 @@ try {
     $user['id'] = $who['id'] ?? $_SESSION['user_id'];
     $user['email'] = $who['email'] ?? $user['email'];
 } catch (Throwable $e) {
+    error_log('[Einstellungen] getWhoAmI failed: ' . $e->getMessage());
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['email'])) {
@@ -29,6 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['email'])) {
             $user['email'] = $email;
             $success_message = 'E-Mail wurde aktualisiert.';
         } catch (Throwable $e) {
+            error_log('[Einstellungen] patchUser failed: ' . $e->getMessage());
             $error = $e->getMessage();
         }
     }

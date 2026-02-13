@@ -1,6 +1,6 @@
 <?php
 include '../includes/session.php';
-require_once __DIR__ . '/../includes/api_config.php';
+require_once __DIR__ . '/../includes/api_helpers.php';
 ob_start();
 
 $error = '';
@@ -11,7 +11,7 @@ try {
         include '../includes/db_connect.php';
 
         // API-Login: E-Mail + Passwort (OpenAPI Auth)
-        if (!isset($_SESSION['user_id']) && isset($_POST['email']) && isset($_POST['password'])) {
+        if (!isApiAuthenticated() && isset($_POST['email']) && isset($_POST['password'])) {
             $email = trim($_POST['email'] ?? '');
             $password = $_POST['password'] ?? '';
 
@@ -20,7 +20,7 @@ try {
             } else {
                 try {
                     // Login ohne Session-Token aufrufen (sonst wird alter Bearer mitgeschickt → 401)
-                    $apiLogin = new \FuelstatApi(null);
+                    $apiLogin = getApiClient(null);
                     $response = $apiLogin->postAuthLogin($email, $password);
                     $data = $response['data'] ?? $response;
                     $token = $data['token'] ?? $data['access_token'] ?? $data['accessToken'] ?? '';
@@ -31,22 +31,16 @@ try {
                             'id' => $userId,
                             'email' => $user['email'] ?? $email,
                         ]);
+                        error_log('[Login] success token_len=' . strlen($token) . ' session_id=' . session_id() . ' stored_token_len=' . strlen((string)getApiToken()));
                         session_write_close();
                         while (ob_get_level()) {
                             ob_end_clean();
                         }
-                        $scheme = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-                        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-                        $docRoot = rtrim(str_replace('\\', '/', $_SERVER['DOCUMENT_ROOT'] ?? ''), '/');
-                        $appRoot = str_replace('\\', '/', realpath(__DIR__ . '/..'));
-                        $basePath = trim(str_replace($docRoot, '', $appRoot), '/');
-                        if ($basePath === '' || $basePath[0] !== '/') {
-                            $basePath = '/' . $basePath;
-                        }
-                        $baseUrl = $scheme . '://' . $host . ($basePath === '/' ? '' : $basePath) . '/';
-                        header('Location: ' . $baseUrl . 'pages/onboarding.php');
+                        header('Location: /pages/onboarding.php', true, 302);
                         exit;
                     }
+                    error_log('[Login] missing token in response for ' . $email . ', keys=' . implode(',', array_keys($data)));
+                    $error = 'Login-Antwort enthielt kein Token.';
                 } catch (RuntimeException $e) {
                     $code = $e->getCode();
                     $msg = $e->getMessage();
