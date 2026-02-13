@@ -1,6 +1,6 @@
 <?php
 include '../includes/session.php';
-require_once __DIR__ . '/../includes/api_config.php';
+require_once __DIR__ . '/../includes/api_helpers.php';
 ob_start();
 
 $error = '';
@@ -20,7 +20,7 @@ try {
         } else {
             include '../includes/db_connect.php';
             try {
-                $apiRegister = new \FuelstatApi(null);
+                $apiRegister = getApiClient(null);
                 $response = $apiRegister->postAuthRegister($email, $password);
                 $_SESSION['success_message'] = "Registrierung erfolgreich! Sie können sich jetzt anmelden.";
                 header('Location: login.php');

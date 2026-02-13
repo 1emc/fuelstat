@@ -1,7 +1,7 @@
 <?php
 // API-Anbindung (ersetzt frühere DB-Verbindung)
 include 'db_connect.php';
-require_once __DIR__ . '/api_config.php';
+require_once __DIR__ . '/api_helpers.php';
 
 // Basis-URL (mit http/https) und Basis-Pfad (unterhalb Document-Root) ermitteln
 // So funktionieren Links und Assets auch in Unterordnern (z.B. /fuelstat)
@@ -23,6 +23,8 @@ if ($basePath === '' || $basePath[0] !== '/') {
 $baseUrl = $scheme . '://' . $host . ($basePath === '/' ? '' : $basePath) . '/';
 
 // Fahrzeuge des eingeloggten Benutzers über API (user_id wird ignoriert; API nutzt JWT)
+$api = getApiClient();
+
 function getUserVehicles($user_id) {
     global $api;
     $vehicles = [];
@@ -36,17 +38,18 @@ function getUserVehicles($user_id) {
             ];
         }
     } catch (Throwable $e) {
-        // z.B. Token abgelaufen
+        error_log('[Header] getVehicles failed: ' . $e->getMessage());
     }
     return $vehicles;
 }
 
 // Session validieren: Nur bei 401 (ungültiger/abgelaufener Token) ausloggen
-if (isset($_SESSION['user_id']) && getApiToken() !== null) {
+if (isApiAuthenticated()) {
     try {
         $api->getWhoAmI();
     } catch (Throwable $e) {
         $code = method_exists($e, 'getCode') ? $e->getCode() : 0;
+        error_log('[Header] getWhoAmI failed with code ' . $code . ': ' . $e->getMessage());
         if ($code === 401) {
             clearApiToken();
             $_SESSION = array();
@@ -106,7 +109,7 @@ if (isset($_SESSION['user_id']) && getApiToken() !== null) {
                 <li class="nav-item">
                     <a class="nav-link" href="<?= htmlspecialchars($baseUrl) ?>index.php">Home</a>
                 </li>
-                <?php if (isset($_SESSION['user_id'])): ?>
+                <?php if (isApiAuthenticated()): ?>
                     <!-- Dropdown für Fahrzeuge -->
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="fahrzeugeDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -115,7 +118,7 @@ if (isset($_SESSION['user_id']) && getApiToken() !== null) {
                         <ul class="dropdown-menu" aria-labelledby="fahrzeugeDropdown">
                             <?php
                             // Funktion zum Abrufen der Fahrzeuge des Benutzers
-                            $userVehicles = getUserVehicles($_SESSION['user_id']);
+                            $userVehicles = getUserVehicles($_SESSION['user_id'] ?? null);
                             foreach ($userVehicles as $vehicle):
                             ?>
                                 <li>

@@ -4,6 +4,16 @@
  * Stellt z.B. zusammengeführte Einträge (Fillups + Entries) und Stats bereit.
  */
 
+require_once __DIR__ . '/api_config.php';
+require_once __DIR__ . '/fuelstat_api.php';
+
+if (!function_exists('getApiClient')) {
+    function getApiClient(?string $token = null): FuelstatApi
+    {
+        return new FuelstatApi($token ?? getApiToken());
+    }
+}
+
 /**
  * Fillups und Entries einer Fahrzeug-ID holen und zu einer einheitlichen Liste
  * mit Keys (id, datum, kategorie, menge, kosten, tachostand, vollgetankt, …) zusammenführen.

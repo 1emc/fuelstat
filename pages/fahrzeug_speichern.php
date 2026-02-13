@@ -1,8 +1,10 @@
 <?php
 include '../includes/session.php';
+require_once __DIR__ . '/../includes/api_config.php';
 include '../includes/db_connect.php';
+require_once __DIR__ . '/../includes/api_helpers.php';
 
-if (!isset($_SESSION['user_id'])) {
+if (!isApiAuthenticated()) {
     die('Benutzer nicht eingeloggt.');
 }
 
@@ -17,6 +19,7 @@ if ($name === '' || !in_array($fuelType, $allowed, true)) {
 }
 
 try {
+    $api = getApiClient();
     $api->postVehicle($name, $fuelType);
     $_SESSION['success_message'] = 'Fahrzeug erfolgreich angelegt.';
     header('Location: onboarding.php');

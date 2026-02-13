@@ -4,11 +4,7 @@ include 'includes/db_connect.php';
 include 'includes/functions.php';
 include 'includes/header.php';
 
-if (isset($_SESSION['user_id'])) {
-    $benutzer_id = $_SESSION['user_id'];
-} else {
-    $benutzer_id = null;
-}
+$benutzer_id = isApiAuthenticated() ? ($_SESSION['user_id'] ?? 'api-user') : null;
 
 $vehicles = [];
 if ($benutzer_id !== null) {
