@@ -26,7 +26,7 @@ try {
                     $token = $data['token'] ?? $data['access_token'] ?? $data['accessToken'] ?? '';
                     $user = $data['user'] ?? [];
                     $userId = $user['id'] ?? $user['userId'] ?? null;
-                    if ($token !== '' && $userId !== null && $userId !== '') {
+                    if ($token !== '') {
                         setApiToken($token, [
                             'id' => $userId,
                             'email' => $user['email'] ?? $email,

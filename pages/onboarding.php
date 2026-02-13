@@ -1,11 +1,13 @@
 <?php
 include '../includes/session.php';
 include '../includes/db_connect.php';
+require_once __DIR__ . '/../includes/api_config.php';
 
 $vehicleCount = 0;
 $vehicleId = null;
+$isAuthenticated = getApiToken() !== null;
 
-if (isset($_SESSION['user_id'])) {
+if ($isAuthenticated) {
     try {
         $vehicles = $api->getVehicles();
         $vehicleCount = count($vehicles);
@@ -31,7 +33,7 @@ include '../includes/header.php';
 ?>
 
 <div class="container mt-5">
-    <?php if (!isset($_SESSION['user_id'])): ?>
+    <?php if (!$isAuthenticated): ?>
         <h1 class="mb-3">Willkommen bei Fuelstat</h1>
         <p class="mb-4">Um zu starten, erstellen Sie bitte ein Konto.</p>
         <a href="register.php" class="btn btn-primary">
