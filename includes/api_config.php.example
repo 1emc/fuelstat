@@ -7,3 +7,41 @@
  *
  * Standard (laut OpenAPI): https://tanken.1emc.de
  */
+
+// API-Basis-URL (laut OpenAPI produktiv: https://tanken.1emc.de)
+if (!defined('FUELSTAT_API_BASE_URL')) {
+    define('FUELSTAT_API_BASE_URL', getenv('FUELSTAT_API_BASE_URL') ?: 'https://tanken.1emc.de');
+}
+
+/**
+ * Liefert den gespeicherten JWT für API-Aufrufe.
+ * @return string|null
+ */
+function getApiToken(): ?string
+{
+    return $_SESSION['api_token'] ?? null;
+}
+
+/**
+ * Speichert den JWT in der Session (nach Login/Register).
+ * @param string $token
+ * @param array $user Optional: id, email aus AuthResponse
+ */
+function setApiToken(string $token, array $user = []): void
+{
+    $_SESSION['api_token'] = $token;
+    if (!empty($user['id'])) {
+        $_SESSION['user_id'] = $user['id'];
+    }
+    if (!empty($user['email'])) {
+        $_SESSION['user_email'] = $user['email'];
+    }
+}
+
+/**
+ * Entfernt Token und User-Daten aus der Session (Logout).
+ */
+function clearApiToken(): void
+{
+    unset($_SESSION['api_token'], $_SESSION['user_id'], $_SESSION['user_email']);
+}
