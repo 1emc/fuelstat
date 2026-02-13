@@ -1,6 +1,7 @@
 <?php
 // API-Anbindung (ersetzt frühere DB-Verbindung)
 include 'db_connect.php';
+require_once __DIR__ . '/api_config.php';
 
 // Basis-URL (mit http/https) und Basis-Pfad (unterhalb Document-Root) ermitteln
 // So funktionieren Links und Assets auch in Unterordnern (z.B. /fuelstat)

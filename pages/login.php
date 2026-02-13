@@ -1,5 +1,6 @@
 <?php
 include '../includes/session.php';
+require_once __DIR__ . '/../includes/api_config.php';
 ob_start();
 
 $error = '';
