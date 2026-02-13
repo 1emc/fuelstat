@@ -1,32 +1,27 @@
 <?php
-// pages/fahrzeug_detail.php
-// Session-Handling
 include '../includes/session.php';
-// Andere Includes
 include '../includes/db_connect.php';
 include '../includes/header.php';
 include '../includes/functions.php';
 
-// Fahrzeug-ID prüfen
 if (!isset($_GET['id'])) {
     die("Fahrzeug-ID fehlt.");
 }
-$fahrzeug_id = intval($_GET['id']);
+$fahrzeug_id = $_GET['id'];
 
-// Fahrzeugdaten abrufen
-$stmt = $conn->prepare("SELECT * FROM fahrzeuge WHERE id = ?");
-$stmt->bind_param("i", $fahrzeug_id);
-$stmt->execute();
-$result = $stmt->get_result();
-if ($result->num_rows === 0) {
+try {
+    $fahrzeug = $api->getVehicle($fahrzeug_id);
+} catch (Throwable $e) {
     die("Fahrzeug nicht gefunden.");
 }
-$fahrzeug = $result->fetch_assoc();
-$stmt->close();
+
+// Für Tabs: API-Fahrzeug in altes Format abbilden (marke/modell wo erwartet)
+$fahrzeug['marke'] = '';
+$fahrzeug['modell'] = $fahrzeug['name'] ?? '';
 ?>
 
 <div class="container mt-5">
-    <h1><?php echo htmlspecialchars($fahrzeug['marke'] . ' ' . $fahrzeug['modell']); ?></h1>
+    <h1><?= htmlspecialchars($fahrzeug['name'] ?? 'Fahrzeug') ?></h1>
 
     <!-- Offcanvas-Trigger (Mobil) -->
     <button class="btn btn-outline-secondary d-sm-none mb-3" type="button" data-bs-toggle="offcanvas" data-bs-target="#tabOffcanvas" aria-controls="tabOffcanvas">

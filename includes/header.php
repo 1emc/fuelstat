@@ -1,5 +1,5 @@
 <?php
-// Datenbankverbindung herstellen
+// API-Anbindung (ersetzt frühere DB-Verbindung)
 include 'db_connect.php';
 
 // Basis-URL (mit http/https) und Basis-Pfad (unterhalb Document-Root) ermitteln
@@ -21,45 +21,42 @@ if ($basePath === '' || $basePath[0] !== '/') {
 }
 $baseUrl = $scheme . '://' . $host . ($basePath === '/' ? '' : $basePath) . '/';
 
-// Funktion zum Abrufen der Fahrzeuge eines Benutzers
+// Fahrzeuge des eingeloggten Benutzers über API (user_id wird ignoriert; API nutzt JWT)
 function getUserVehicles($user_id) {
-    global $conn;
-    $vehicles = array();
-    
-    $stmt = $conn->prepare("SELECT id, marke, modell FROM fahrzeuge WHERE benutzer_id = ? ORDER BY sortierung ASC, id ASC");
-    $stmt->bind_param("i", $user_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    
-    while ($row = $result->fetch_assoc()) {
-        $vehicles[] = $row;
+    global $api;
+    $vehicles = [];
+    try {
+        $list = $api->getVehicles();
+        foreach ($list as $v) {
+            $vehicles[] = [
+                'id' => $v['id'],
+                'marke' => '', // API liefert nur name
+                'modell' => $v['name'] ?? '',
+            ];
+        }
+    } catch (Throwable $e) {
+        // z.B. Token abgelaufen
     }
-    
     return $vehicles;
 }
 
-if (isset($_SESSION['user_id'])) {
-    $sessionId = session_id();
-    $now = date('Y-m-d H:i:s');
-    // Prüfen, ob die Session noch gültig ist
-    $stmt = $conn->prepare("SELECT id FROM benutzer_sessions WHERE user_id = ? AND session_id = ?");
-    $stmt->bind_param("is", $_SESSION['user_id'], $sessionId);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    if ($result->num_rows === 0) {
-        // Session ist nicht mehr gültig -> alles löschen und umleiten
-        $_SESSION = array();
-        if (isset($_COOKIE[session_name()])) {
-            setcookie(session_name(), '', time() - 3600, '/', '', true, true);
+// Session validieren: Nur bei 401 (ungültiger/abgelaufener Token) ausloggen
+if (isset($_SESSION['user_id']) && getApiToken() !== null) {
+    try {
+        $api->getWhoAmI();
+    } catch (Throwable $e) {
+        $code = method_exists($e, 'getCode') ? $e->getCode() : 0;
+        if ($code === 401) {
+            clearApiToken();
+            $_SESSION = array();
+            if (isset($_COOKIE[session_name()])) {
+                setcookie(session_name(), '', time() - 3600, '/', '', true, true);
+            }
+            session_destroy();
+            header('Location: ' . $baseUrl . 'pages/login.php');
+            exit;
         }
-        session_destroy();
-        header('Location: ' . $baseUrl . 'pages/login.php');
-        exit;
     }
-    // last_activity aktualisieren
-    $stmt = $conn->prepare("UPDATE benutzer_sessions SET last_activity = ? WHERE session_id = ?");
-    $stmt->bind_param("ss", $now, $sessionId);
-    $stmt->execute();
 }
 ?>
 <!doctype html>
@@ -121,8 +118,8 @@ if (isset($_SESSION['user_id'])) {
                             foreach ($userVehicles as $vehicle):
                             ?>
                                 <li>
-                                    <a class="dropdown-item" href="<?= htmlspecialchars($baseUrl) ?>pages/fahrzeug_detail.php?id=<?php echo $vehicle['id']; ?>">
-                                        <?php echo htmlspecialchars($vehicle['marke'] . ' ' . $vehicle['modell']); ?>
+                                    <a class="dropdown-item" href="<?= htmlspecialchars($baseUrl) ?>pages/fahrzeug_detail.php?id=<?php echo htmlspecialchars($vehicle['id']); ?>">
+                                        <?php echo htmlspecialchars(trim($vehicle['marke'] . ' ' . $vehicle['modell'])); ?>
                                     </a>
                                 </li>
                             <?php endforeach; ?>

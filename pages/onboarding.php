@@ -1,45 +1,35 @@
 <?php
-// pages/onboarding.php
-
-// Session handling and DB connection
 include '../includes/session.php';
 include '../includes/db_connect.php';
 
-// Helper function to count rows
-function getCount($conn, $sql, $param) {
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param('i', $param);
-    $stmt->execute();
-    $result = $stmt->get_result()->fetch_assoc();
-    return (int)$result['cnt'];
-}
-
-// Pre-calculate onboarding state and redirect before output
 $vehicleCount = 0;
 $vehicleId = null;
+
 if (isset($_SESSION['user_id'])) {
-    $userId = $_SESSION['user_id'];
-    $vehicleCount = getCount($conn, 'SELECT COUNT(*) AS cnt FROM fahrzeuge WHERE benutzer_id = ?', $userId);
-    if ($vehicleCount > 0) {
-        $entryCountStmt = $conn->prepare('SELECT COUNT(e.id) AS cnt FROM eintraege e JOIN fahrzeuge f ON e.fahrzeug_id = f.id WHERE f.benutzer_id = ?');
-        $entryCountStmt->bind_param('i', $userId);
-        $entryCountStmt->execute();
-        $entryCount = (int)$entryCountStmt->get_result()->fetch_assoc()['cnt'];
-        if ($entryCount > 0) {
-            header('Location: ../index.php');
-            exit;
+    try {
+        $vehicles = $api->getVehicles();
+        $vehicleCount = count($vehicles);
+        if ($vehicleCount > 0) {
+            $vehicleId = $vehicles[0]['id'];
+            $hasAnyEntry = false;
+            foreach ($vehicles as $v) {
+                if (count($api->getVehicleFillups($v['id'], 1)) > 0 || count($api->getVehicleEntries($v['id'], 1)) > 0) {
+                    $hasAnyEntry = true;
+                    break;
+                }
+            }
+            if ($hasAnyEntry) {
+                header('Location: ../index.php');
+                exit;
+            }
         }
-        // Get first vehicle id for entry link
-        $vehicleStmt = $conn->prepare('SELECT id FROM fahrzeuge WHERE benutzer_id = ? ORDER BY id ASC LIMIT 1');
-        $vehicleStmt->bind_param('i', $userId);
-        $vehicleStmt->execute();
-        $vehicleId = $vehicleStmt->get_result()->fetch_assoc()['id'];
+    } catch (Throwable $e) {
     }
 }
 
 include '../includes/header.php';
-
 ?>
+
 <div class="container mt-5">
     <?php if (!isset($_SESSION['user_id'])): ?>
         <h1 class="mb-3">Willkommen bei Fuelstat</h1>
@@ -57,7 +47,7 @@ include '../includes/header.php';
         <?php else: ?>
             <h1 class="mb-3">Ersten Eintrag erfassen</h1>
             <p class="mb-4">Erfassen Sie eine Tankfüllung oder andere Ausgabe, um Statistiken zu erhalten.</p>
-            <a href="eintrag_hinzufuegen.php?fahrzeug_id=<?= intval($vehicleId) ?>" class="btn btn-primary">
+            <a href="eintrag_hinzufuegen.php?fahrzeug_id=<?= htmlspecialchars(urlencode($vehicleId)) ?>" class="btn btn-primary">
                 <i class="fas fa-plus me-2"></i>Eintrag hinzufügen
             </a>
         <?php endif; ?>

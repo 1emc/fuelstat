@@ -1,104 +1,74 @@
 <?php
-// Session-Handling
 include '../includes/session.php';
-// Andere Includes
 include '../includes/db_connect.php';
 
-// Daten aus dem Formular abrufen
-$fahrzeug_id = intval($_POST['fahrzeug_id']);
+$fahrzeug_id = trim($_POST['fahrzeug_id'] ?? '');
 $eintragstyp = $_POST['eintragstyp'] ?? '';
-$datum       = $_POST['datum'] ?? null;
-$tachostand  = isset($_POST['tachostand']) ? intval($_POST['tachostand']) : null;
+$datum = $_POST['datum'] ?? null;
+$tachostand = isset($_POST['tachostand']) ? (int)$_POST['tachostand'] : null;
 
-// Gemeinsame Felder validieren
-if (!$datum || $tachostand === null) {
-    die('Datum und Tachostand sind erforderlich.');
+if (!$fahrzeug_id || !$datum || $tachostand === null) {
+    $_SESSION['error_message'] = 'Fahrzeug, Datum und Tachostand sind erforderlich.';
+    header('Location: eintrag_hinzufuegen.php?fahrzeug_id=' . rawurlencode($fahrzeug_id));
+    exit;
 }
 
-// Daten-Array vorbereiten
-$data = [
-    'fahrzeug_id' => $fahrzeug_id,
-    'kategorie'    => '',
-    'datum'        => $datum,
-    'tachostand'   => $tachostand,
-    'standort'     => '',
-    'kosten'       => 0,
-    'preis_pro_einheit' => 0,
-    'menge'        => 0,
-    'vollgetankt'  => 0,
-    'skip_previous'=> 0,
-    'beschreibung' => '',
-    // Schema verlangt NOT NULL für standort_bezeichnung
-    'standort_bezeichnung' => '',
-    // Felder für Fahrten
-    'startort'       => '',
-    'zielort'        => '',
-    'zweck'          => '',
-    'gefahrene_km'   => 0
-];
+$dateTime = $datum . 'T12:00:00.000Z'; // ISO für API
 
-// Verarbeitung nach Typ
-switch ($eintragstyp) {
-    case 'Tankfuellung':
-        $data['kategorie']    = 'Tankfuellung';
-        $data['kraftstoff']   = $_POST['kraftstoff'] ?? null;
-        $data['standort']     = $_POST['standort'] ?? '';
-        $data['menge']        = floatval($_POST['menge'] ?? 0);
-        $data['kosten']       = floatval($_POST['kosten'] ?? 0);
-        $data['preis_pro_einheit'] = floatval($_POST['preis_pro_einheit'] ?? 0);
-        $data['vollgetankt']  = isset($_POST['vollgetankt']) ? 1 : 0;
-        $data['skip_previous']= isset($_POST['skip_previous']) ? 1 : 0;
-        break;
-
-    case 'Andere Ausgabe':
-        $data['kategorie']    = $_POST['kategorie'] ?? '';
-        $data['kosten']       = floatval($_POST['kosten'] ?? 0);
-        $data['beschreibung'] = trim($_POST['beschreibung'] ?? '');
-        break;
-
-    case 'Fahrt':
-        $data['kategorie']    = 'Fahrt';
-        $data['startort']     = trim($_POST['startort'] ?? '');
-        $data['zielort']      = trim($_POST['zielort'] ?? '');
-        $data['zweck']        = trim($_POST['zweck'] ?? '');
-        $data['gefahrene_km'] = isset($_POST['gefahrene_km']) ? floatval($_POST['gefahrene_km']) : 0;
-        break;
-
-    default:
-        die('Ungültiger Eintragstyp.');
-}
-
-// Dynamisch Spalten und Platzhalter
-$columns = array_keys($data);
-$placeholders = implode(', ', array_fill(0, count($columns), '?'));
-$sql = "INSERT INTO eintraege (" . implode(', ', $columns) . ") VALUES ($placeholders)";
-
-// Param-String: s für strings, d für doubles, i für integers
-$types = '';
-$params = [];
-foreach ($data as $key => $value) {
-    if (is_int($value)) {
-        $types .= 'i';
-    } elseif (is_float($value)) {
-        $types .= 'd';
+try {
+    if ($eintragstyp === 'Tankfuellung') {
+        $menge = (float)($_POST['menge'] ?? 0);
+        $kosten = (float)($_POST['kosten'] ?? 0);
+        $station = trim($_POST['standort'] ?? '');
+        $vollgetankt = isset($_POST['vollgetankt']);
+        $skipPrevious = isset($_POST['skip_previous']);
+        $api->postFillup([
+            'vehicleId' => $fahrzeug_id,
+            'odometerKm' => $tachostand,
+            'unit' => 'l',
+            'amount' => $menge,
+            'totalCostEur' => $kosten,
+            'station' => $station !== '' ? $station : null,
+            'filledAt' => $dateTime,
+            'isFull' => $vollgetankt,
+            'skipPrevious' => $skipPrevious,
+        ]);
+    } elseif ($eintragstyp === 'Andere Ausgabe') {
+        $kategorie = trim($_POST['kategorie'] ?? '');
+        $kosten = (float)($_POST['kosten'] ?? 0);
+        $beschreibung = trim($_POST['beschreibung'] ?? '');
+        if ($kategorie === '') {
+            $_SESSION['error_message'] = 'Bitte eine Kategorie wählen.';
+            header('Location: eintrag_hinzufuegen.php?fahrzeug_id=' . rawurlencode($fahrzeug_id));
+            exit;
+        }
+        $api->postEntry([
+            'vehicleId' => $fahrzeug_id,
+            'category' => $kategorie,
+            'amountEur' => $kosten,
+            'odometerKm' => $tachostand,
+            'occurredAt' => $dateTime,
+            'description' => $beschreibung !== '' ? $beschreibung : null,
+        ]);
+    } elseif ($eintragstyp === 'Fahrt') {
+        $api->postEntry([
+            'vehicleId' => $fahrzeug_id,
+            'category' => 'Fahrt',
+            'amountEur' => 0,
+            'odometerKm' => $tachostand,
+            'occurredAt' => $dateTime,
+            'description' => trim($_POST['startort'] ?? '') . ' → ' . trim($_POST['zielort'] ?? '') . ' – ' . trim($_POST['zweck'] ?? ''),
+        ]);
     } else {
-        $types .= 's';
+        $_SESSION['error_message'] = 'Ungültiger Eintragstyp.';
+        header('Location: eintrag_hinzufuegen.php?fahrzeug_id=' . rawurlencode($fahrzeug_id));
+        exit;
     }
-    $params[] = $value;
+    $_SESSION['success_message'] = 'Eintrag gespeichert.';
+    header('Location: fahrzeug_detail.php?id=' . rawurlencode($fahrzeug_id));
+    exit;
+} catch (Throwable $e) {
+    $_SESSION['error_message'] = $e->getMessage();
+    header('Location: eintrag_hinzufuegen.php?fahrzeug_id=' . rawurlencode($fahrzeug_id));
+    exit;
 }
-
-$stmt = $conn->prepare($sql);
-if (!$stmt) {
-    error_log('eintrag_speichern PREPARE-ERROR: ' . $conn->error . ' | SQL=' . $sql);
-    die('Prepare-Fehler: ' . $conn->error);
-}
-$stmt->bind_param($types, ...$params);
-
-if ($stmt->execute()) {
-    header('Location: ../index.php');
-    exit();
-} else {
-    error_log('eintrag_speichern EXEC-ERROR: ' . $stmt->error . ' | SQL=' . $sql . ' | TYPES=' . $types . ' | PARAMS=' . json_encode($params));
-    die('Fehler beim Speichern des Eintrags: ' . $stmt->error);
-}
-?>

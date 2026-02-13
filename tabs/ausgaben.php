@@ -1,29 +1,26 @@
 <?php
-// Debug-Einstellungen
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
+include_once __DIR__ . '/../includes/db_connect.php';
+include_once __DIR__ . '/../includes/functions.php';
+include_once __DIR__ . '/../includes/api_helpers.php';
 
-// Jahr aus GET-Parameter holen
-$selectedYear = isset($_GET['jahr']) && $_GET['jahr'] !== '' ? intval($_GET['jahr']) : null;
+$selectedYear = isset($_GET['jahr']) && $_GET['jahr'] !== '' ? (int)$_GET['jahr'] : null;
 
-// Daten für das Kuchendiagramm vorbereiten
-// Daten holen und Kategorien mit 0 € für das Diagramm ausblenden
-$ausgabenDaten = holeAusgabenDaten($fahrzeug_id, $selectedYear);
+if ($selectedYear !== null) {
+    $d = getStatistikDatenFromApiForYear($api, $fahrzeug_id, $selectedYear);
+    $ausgabenDaten = $d['ausgabenDaten'];
+    $detailDaten = $d['detailAusgabenDaten'];
+    $gesamtKosten = $d['gesamtKostenForYear'] ?? array_sum($ausgabenDaten);
+    $anzahlMonate = $d['anzahlMonateForYear'] ?? 0;
+} else {
+    $d = getStatistikDatenFromApi($api, $fahrzeug_id);
+    $ausgabenDaten = $d['ausgabenDaten'];
+    $detailDaten = $d['detailAusgabenDaten'];
+    $gesamtKosten = array_sum($ausgabenDaten);
+    $anzahlMonate = count($d['kostenProMonat']);
+}
 $ausgabenDaten = array_filter($ausgabenDaten, fn($sum) => $sum > 0);
-
-// Aufbereitung der Daten für das Diagramm
 $kategorien = array_keys($ausgabenDaten);
-$beträge   = array_values($ausgabenDaten);
-
-// Gesamtkosten berechnen
-$gesamtKosten = array_sum($beträge);
-
-// Detailtabelle vorbereiten
-$detailDaten = holeDetailAusgabenDaten($fahrzeug_id, $selectedYear);
-
-// Zusätzliche Kennzahlen
-$anzahlMonate = holeAnzahlMonate($fahrzeug_id, $selectedYear);
+$beträge = array_values($ausgabenDaten);
 $durchschnittMonat = $anzahlMonate > 0 ? $gesamtKosten / $anzahlMonate : 0;
 $topKategorie = '-';
 $topSumme = 0;
@@ -33,6 +30,15 @@ foreach ($detailDaten as $k => $daten) {
         $topSumme = $daten['summe'];
     }
 }
+$jahre = $d['verfuegbareJahre'] ?? [];
+$currentOdo = null;
+try {
+    $stats = $api->getVehicleStats($fahrzeug_id);
+    $currentOdo = $stats['currentOdo'] ?? null;
+} catch (Throwable $e) {
+}
+$gefahreneKm = $currentOdo !== null ? $currentOdo : 0;
+$kostenProKm = $gefahreneKm > 0 ? $gesamtKosten / $gefahreneKm : 0;
 
 // Farben für Kategorien definieren
 function getCategoryColor($kategorie) {
@@ -83,7 +89,7 @@ $farben = array_map('getCategoryColor', $kategorien);
     
     <!-- Filter nach Jahr -->
     <form method="get" action="" class="mb-3">
-        <input type="hidden" name="id" value="<?php echo $fahrzeug_id; ?>">
+        <input type="hidden" name="id" value="<?= htmlspecialchars($fahrzeug_id) ?>">
         <div class="row align-items-center">
             <div class="col-auto">
                 <label for="jahr" class="form-label">Jahr:</label>
@@ -92,7 +98,6 @@ $farben = array_map('getCategoryColor', $kategorien);
                 <select name="jahr" id="jahr" class="form-select" onchange="this.form.submit()">
                     <option value="">Alle Jahre</option>
                     <?php
-                    $jahre = holeVerfügbareJahre($fahrzeug_id);
                     foreach ($jahre as $jahrOption) {
                         $selected = ($selectedYear == $jahrOption) ? 'selected' : '';
                         echo '<option value="' . $jahrOption . '" ' . $selected . '>' . $jahrOption . '</option>';
@@ -163,16 +168,10 @@ $farben = array_map('getCategoryColor', $kategorien);
             <div class="card h-100">
                 <div class="card-body">
                     <h5 class="card-title">Kosten pro Kilometer</h5>
-                    <?php
-                    // Aktuellen Tachostand und initialen Tachostand holen
-                    $aktTachostand = getAktuellenTachostand($fahrzeug_id);
-                    $initialTachostand = getInitialTachostand($fahrzeug_id) ?? 0;
-                    $gefahreneKm = $aktTachostand - $initialTachostand;
-                    $kostenProKm = $gefahreneKm > 0 ? $gesamtKosten / $gefahreneKm : 0;
                     ?>
                     <div class="text-center">
-                        <h3 class="mb-0"><?php echo number_format($kostenProKm, 2, ',', '.'); ?> €/km</h3>
-                        <p class="text-muted mb-0">bei <?php echo number_format($gefahreneKm, 0, ',', '.'); ?> km</p>
+                        <h3 class="mb-0"><?= number_format($kostenProKm, 2, ',', '.') ?> €/km</h3>
+                        <p class="text-muted mb-0">bei <?= number_format($gefahreneKm, 0, ',', '.') ?> km</p>
                     </div>
                 </div>
             </div>
@@ -192,7 +191,7 @@ $farben = array_map('getCategoryColor', $kategorien);
                             $wartungskosten += $daten['summe'];
                         }
                     }
-                    $wartungskostenPro10k = $gefahreneKm > 0 ? ($wartungskosten / $gefahreneKm) * 10000 : 0;
+                    $wartungskostenPro10k = $gefahreneKm > 0 ? ($wartungskosten / (float)$gefahreneKm) * 10000 : 0;
                     ?>
                     <div class="text-center">
                         <h3 class="mb-0"><?php echo number_format($wartungskostenPro10k, 2, ',', '.'); ?> €</h3>
@@ -253,114 +252,3 @@ new Chart(document.getElementById('kostenstrukturChart').getContext('2d'), {
 });
 </script>
 
-<?php
-function holeAusgabenDaten($fahrzeug_id, $jahr = null) {
-    global $conn;
-    
-    $sql = "SELECT kategorie, SUM(kosten) as summe 
-            FROM eintraege 
-            WHERE fahrzeug_id = ?";
-    
-    if ($jahr !== null) {
-        $sql .= " AND YEAR(datum) = ?";
-    }
-    
-    $sql .= " GROUP BY kategorie";
-            
-    $stmt = $conn->prepare($sql);
-    
-    if ($jahr !== null) {
-        $stmt->bind_param('ii', $fahrzeug_id, $jahr);
-    } else {
-        $stmt->bind_param('i', $fahrzeug_id);
-    }
-    
-    $stmt->execute();
-    $result = $stmt->get_result();
-    
-    $ausgaben = [];
-    while ($row = $result->fetch_assoc()) {
-        $ausgaben[$row['kategorie']] = $row['summe'];
-    }
-    
-    return $ausgaben;
-}
-
-function holeDetailAusgabenDaten($fahrzeug_id, $jahr = null) {
-    global $conn;
-    
-    $sql = "SELECT kategorie, 
-                   COUNT(*) as anzahl, 
-                   SUM(kosten) as summe 
-            FROM eintraege 
-            WHERE fahrzeug_id = ?";
-    
-    if ($jahr !== null) {
-        $sql .= " AND YEAR(datum) = ?";
-    }
-    
-    $sql .= " GROUP BY kategorie";
-            
-    $stmt = $conn->prepare($sql);
-    
-    if ($jahr !== null) {
-        $stmt->bind_param('ii', $fahrzeug_id, $jahr);
-    } else {
-        $stmt->bind_param('i', $fahrzeug_id);
-    }
-    
-    $stmt->execute();
-    $result = $stmt->get_result();
-    
-    $details = [];
-    while ($row = $result->fetch_assoc()) {
-        $details[$row['kategorie']] = [
-            'anzahl' => $row['anzahl'],
-            'summe' => $row['summe']
-        ];
-    }
-    
-    return $details;
-}
-
-function holeVerfügbareJahre($fahrzeug_id) {
-    global $conn;
-    
-    $sql = "SELECT DISTINCT YEAR(datum) as jahr 
-            FROM eintraege 
-            WHERE fahrzeug_id = ? 
-            ORDER BY jahr DESC";
-            
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param('i', $fahrzeug_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    
-    $jahre = [];
-    while ($row = $result->fetch_assoc()) {
-        $jahre[] = $row['jahr'];
-    }
-    
-    return $jahre;
-}
-
-function holeAnzahlMonate($fahrzeug_id, $jahr = null) {
-    global $conn;
-
-    $sql = "SELECT COUNT(DISTINCT DATE_FORMAT(datum, '%Y-%m')) AS monate FROM eintraege WHERE fahrzeug_id = ?";
-    if ($jahr !== null) {
-        $sql .= " AND YEAR(datum) = ?";
-    }
-
-    $stmt = $conn->prepare($sql);
-    if ($jahr !== null) {
-        $stmt->bind_param('ii', $fahrzeug_id, $jahr);
-    } else {
-        $stmt->bind_param('i', $fahrzeug_id);
-    }
-    $stmt->execute();
-    $row = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-    return (int)($row['monate'] ?? 0);
-}
-?>

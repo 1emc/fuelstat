@@ -1,7 +1,6 @@
-const cacheName = 'fahrzeugverwaltung-cache-v2';
+const cacheName = 'fahrzeugverwaltung-cache-v3';
 const assetsToCache = [
   './',
-  './index.php',
   './css/style.css',
   './js/script.js',
   './images/platzhalter.jpg',
@@ -9,7 +8,7 @@ const assetsToCache = [
   './images/new-icon-512x512.png'
 ];
 
-// Installiere den Service Worker
+// Install: Nur statische Assets cachen (keine .php-Seiten)
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(cacheName).then(cache => {
@@ -31,12 +30,25 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Fetch event abfangen und Ressourcen aus dem Cache bereitstellen
+// HTML/PHP-Seiten nie aus Cache – immer Netzwerk (Session-Inhalt ist dynamisch)
+function isDocumentRequest(request) {
+  return request.mode === 'navigate' ||
+    (request.url.includes('.php') && !request.url.includes('?')) ||
+    request.destination === 'document';
+}
+
+// Fetch: Dokumente = Network-First, Rest = Cache-First
 self.addEventListener('fetch', event => {
+  if (isDocumentRequest(event.request)) {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => response)
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
   event.respondWith(
-    caches.match(event.request).then(response => {
-      return response || fetch(event.request);
-    })
+    caches.match(event.request).then(cached => cached || fetch(event.request))
   );
 });
 

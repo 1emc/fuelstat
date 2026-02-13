@@ -1,90 +1,44 @@
 <?php
-// pages/eintrag_update.php
-// Session-Handling
 include '../includes/session.php';
-// Andere Includes
 include '../includes/db_connect.php';
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    die('Ungültige Anfrage.');
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['id'], $_POST['fahrzeug_id'])) {
+    header('Location: ../index.php');
+    exit;
+}
+$eintrag_id = trim($_POST['id']);
+$fahrzeug_id = trim($_POST['fahrzeug_id']);
+$type = $_POST['type'] ?? 'fillup';
+
+if ($type !== 'fillup') {
+    $_SESSION['warning_message'] = 'Nur Tankvorgänge können bearbeitet werden.';
+    header('Location: fahrzeug_detail.php?id=' . rawurlencode($fahrzeug_id));
+    exit;
 }
 
-// IDs prüfen
-if (!isset($_POST['id'], $_POST['fahrzeug_id'])) {
-    die('Eintrag-ID oder Fahrzeug-ID fehlt.');
+$datum = $_POST['datum'] ?? '';
+$tachostand = (int)($_POST['tachostand'] ?? 0);
+$menge = (float)($_POST['menge'] ?? 0);
+$kosten = (float)($_POST['kosten'] ?? 0);
+$standort = trim($_POST['standort'] ?? '');
+$vollgetankt = isset($_POST['vollgetankt']);
+$skipPrevious = isset($_POST['skip_previous']);
+$filledAt = $datum ? $datum . 'T12:00:00.000Z' : null;
+
+try {
+    $api->patchFillup($eintrag_id, [
+        'odometerKm' => $tachostand,
+        'unit' => 'l',
+        'amount' => $menge,
+        'totalCostEur' => $kosten,
+        'station' => $standort !== '' ? $standort : null,
+        'filledAt' => $filledAt,
+        'isFull' => $vollgetankt,
+        'skipPrevious' => $skipPrevious,
+    ]);
+    $_SESSION['success_message'] = 'Tankvorgang aktualisiert.';
+} catch (Throwable $e) {
+    $_SESSION['error_message'] = $e->getMessage();
 }
-$eintrag_id   = intval($_POST['id']);
-$fahrzeug_id  = intval($_POST['fahrzeug_id']);
-
-// Gemeinsame Felder
-$datum       = $_POST['datum'] ?? null;
-$tachostand  = isset($_POST['tachostand']) ? intval($_POST['tachostand']) : null;
-$kategorie   = $_POST['kategorie'] ?? '';
-
-// Validierung
-if (!$datum || !$tachostand) {
-    die('Datum und Tachostand sind erforderlich.');
-}
-
-// SQL-Aufbau je nach Kategorie
-switch ($kategorie) {
-    case 'Tankfuellung':
-        $kraftstoff        = isset($_POST['kraftstoff']) ? $_POST['kraftstoff'] : null;
-        $menge             = isset($_POST['menge']) ? floatval($_POST['menge']) : null;
-        $kosten            = isset($_POST['kosten']) ? floatval($_POST['kosten']) : null;
-        $preis_pro_einheit = isset($_POST['preis_pro_einheit']) ? floatval($_POST['preis_pro_einheit']) : null;
-        $vollgetankt       = isset($_POST['vollgetankt']) ? 1 : 0;
-        
-        $sql = "UPDATE eintraege SET datum = ?, tachostand = ?, kraftstoff = ?, menge = ?, kosten = ?, preis_pro_einheit = ?, vollgetankt = ? WHERE id = ?";
-        $stmt = $conn->prepare($sql);
-        if (!$stmt) { die('Prepare-Fehler: ' . $conn->error); }
-        $stmt->bind_param('sissddii', $datum, $tachostand, $kraftstoff, $menge, $kosten, $preis_pro_einheit, $vollgetankt, $eintrag_id);
-        break;
-
-    case 'Fahrt':
-        $startort      = trim($_POST['startort'] ?? '');
-        $zielort       = trim($_POST['zielort'] ?? '');
-        $zweck         = trim($_POST['zweck'] ?? '');
-        $gefahrene_km  = isset($_POST['gefahrene_km']) ? floatval($_POST['gefahrene_km']) : null;
-        
-        $sql = "UPDATE eintraege SET datum = ?, tachostand = ?, startort = ?, zielort = ?, zweck = ?, gefahrene_km = ? WHERE id = ?";
-        $stmt = $conn->prepare($sql);
-        if (!$stmt) { die('Prepare-Fehler: ' . $conn->error); }
-        $stmt->bind_param('sidssdi', $datum, $tachostand, $startort, $zielort, $zweck, $gefahrene_km, $eintrag_id);
-        break;
-
-    // Alle anderen Kategorien wie 'Andere Ausgabe' behandeln
-    case 'Andere Ausgabe':
-    case 'Versicherung':
-    case 'Steuer':
-    case 'Inspektion':
-    case 'Reparatur':
-    case 'Reifen':
-    case 'TUV':
-    case 'Wartung':
-    case 'Dekor':
-    case 'Verbrauch':
-        $kosten       = isset($_POST['kosten']) ? floatval($_POST['kosten']) : null;
-        $beschreibung = trim($_POST['beschreibung'] ?? '');
-        
-        $sql = "UPDATE eintraege SET datum = ?, tachostand = ?, kosten = ?, beschreibung = ? WHERE id = ?";
-        $stmt = $conn->prepare($sql);
-        if (!$stmt) { die('Prepare-Fehler: ' . $conn->error); }
-        $stmt->bind_param('sidsi', $datum, $tachostand, $kosten, $beschreibung, $eintrag_id);
-        break;
-
-    default:
-        die('Unbekannte Kategorie.');
-}
-
-// Ausführen und prüfen
-if (!$stmt->execute()) {
-    die('Execute-Fehler: ' . $stmt->error);
-}
-$stmt->close();
-$conn->close();
-
-// Weiterleitung zurück zur Detailseite
-header("Location: fahrzeug_detail.php?id={$fahrzeug_id}#eintraege");
-exit();
-?>
+header('Location: fahrzeug_detail.php?id=' . rawurlencode($fahrzeug_id));
+exit;

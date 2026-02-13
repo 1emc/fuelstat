@@ -1,34 +1,27 @@
 <?php
-// pages/eintrag_loeschen.php
-// Session-Handling
 include '../includes/session.php';
-// Andere Includes
 include '../includes/db_connect.php';
 
-// Nur POST erlauben
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     die('Ungültige Anfrage.');
 }
-
-// IDs prüfen
 if (!isset($_POST['id'], $_POST['fahrzeug_id'])) {
     die('Eintrag-ID oder Fahrzeug-ID fehlt.');
 }
-$eintrag_id   = intval($_POST['id']);
-$fahrzeug_id  = intval($_POST['fahrzeug_id']);
+$eintrag_id = trim($_POST['id']);
+$fahrzeug_id = trim($_POST['fahrzeug_id']);
+$type = $_POST['type'] ?? 'entry';
 
-// Löschen ausführen
-$stmt = $conn->prepare("DELETE FROM eintraege WHERE id = ? AND fahrzeug_id = ?");
-if (!$stmt) {
-    die('Prepare-Fehler: ' . $conn->error);
-}
-$stmt->bind_param('ii', $eintrag_id, $fahrzeug_id);
-
-if ($stmt->execute()) {
-    // Erfolg: zurück zur Fahrzeugdetailseite
-    header("Location: fahrzeug_detail.php?id={$fahrzeug_id}");
-    exit();
+if ($type === 'fillup') {
+    try {
+        $api->deleteFillup($eintrag_id);
+        $_SESSION['success_message'] = 'Tankvorgang gelöscht.';
+    } catch (Throwable $e) {
+        $_SESSION['error_message'] = $e->getMessage();
+    }
 } else {
-    die('Fehler beim Löschen des Eintrags: ' . $stmt->error);
+    // API (OpenAPI 1.0.0) bietet kein Löschen von Entries – nur Fillups
+    $_SESSION['warning_message'] = 'Löschen von Ausgabe-Einträgen ist über die API derzeit nicht möglich.';
 }
-?>
+header('Location: fahrzeug_detail.php?id=' . rawurlencode($fahrzeug_id));
+exit;

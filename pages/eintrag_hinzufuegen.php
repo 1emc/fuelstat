@@ -1,8 +1,5 @@
 <?php
-// pages/eintrag_hinzufuegen.php
-// Session-Handling
 include '../includes/session.php';
-// Andere Includes
 include '../includes/db_connect.php';
 include '../includes/functions.php';
 include '../includes/header.php';
@@ -10,47 +7,31 @@ include '../includes/header.php';
 if (!isset($_GET['fahrzeug_id'])) {
     die("Fahrzeug-ID fehlt.");
 }
-$fahrzeug_id = intval($_GET['fahrzeug_id']);
-$aktuellerTacho = getAktuellenTachostand($fahrzeug_id);   // kann null sein
+$fahrzeug_id = trim($_GET['fahrzeug_id']);
 
-// Kraftstofftyp des Fahrzeugs laden
+$aktuellerTacho = null;
 $fahrzeugKraftstoff = 'diesel';
-$stmt = $conn->prepare("SELECT kraftstoff FROM fahrzeuge WHERE id = ? LIMIT 1");
-$stmt->bind_param("i", $fahrzeug_id);
-$stmt->execute();
-$res = $stmt->get_result();
-if ($row = $res->fetch_assoc()) {
-    $fahrzeugKraftstoff = $row['kraftstoff'];
-    //echo "<script>alert('Kraftstoff des Fahrzeugs: " . $row['kraftstoff'] . "');</script>";
+$standortOptionen = [];
+try {
+    $vehicle = $api->getVehicle($fahrzeug_id);
+    $fahrzeugKraftstoff = $vehicle['fuel_type'] ?? 'diesel';
+    if ($fahrzeugKraftstoff === 'petrol') $fahrzeugKraftstoff = 'e10';
+    $stats = $api->getVehicleStats($fahrzeug_id);
+    $aktuellerTacho = $stats['currentOdo'] ?? null;
+    $fillups = $api->getVehicleFillups($fahrzeug_id, 10);
+    foreach ($fillups as $f) {
+        if (!empty($f['station']) && !in_array($f['station'], $standortOptionen, true)) {
+            $standortOptionen[] = htmlspecialchars($f['station']);
+        }
+    }
+} catch (Throwable $e) {
 }
-$stmt->close();
 
-// Prüfe, ob eine Kategorie übergeben wurde
 $vorgegebeneKategorie = isset($_GET['kategorie']) ? $_GET['kategorie'] : null;
-
 $allCategories = [
     'Versicherung', 'Werkstatt', 'Inspektion', 'Steuer',
     'Reparatur', 'Reifen', 'TUV', 'Wartung', 'Dekor'
 ];
-
-$standortOptionen = [];
-
-$stmt = $conn->prepare("
-    SELECT DISTINCT standort
-      FROM eintraege
-     WHERE fahrzeug_id = ?
-       AND standort <> ''
-       AND standort IS NOT NULL
-  ORDER BY datum DESC
-     LIMIT 5
-");
-$stmt->bind_param("i", $fahrzeug_id);
-$stmt->execute();
-$res = $stmt->get_result();
-while ($row = $res->fetch_assoc()) {
-    $standortOptionen[] = htmlspecialchars($row['standort']);
-}
-$stmt->close();
 ?>
 <style>
     /* wirkt nur innerhalb dieser Seite */
@@ -239,7 +220,7 @@ $stmt->close();
         </div>
 
         <button type="submit" class="btn btn-primary">Eintrag speichern</button>
-        <a href="fahrzeug_detail.php?id=<?php echo $fahrzeug_id; ?>" class="btn btn-secondary ms-2">Abbrechen</a>
+        <a href="fahrzeug_detail.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?>" class="btn btn-secondary ms-2">Abbrechen</a>
     </form>
 </div>
 
