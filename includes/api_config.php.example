@@ -1,0 +1,9 @@
+<?php
+/**
+ * Beispiel: API-Basis-URL anpassen.
+ * Optional: Diese Datei als api_config_local.php speichern und darin
+ * define('FUELSTAT_API_BASE_URL', 'https://dein-api-server.de');
+ * setzen. Oder die Umgebungsvariable FUELSTAT_API_BASE_URL setzen.
+ *
+ * Standard (laut OpenAPI): https://tanken.1emc.de
+ */
