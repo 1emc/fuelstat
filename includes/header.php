@@ -54,7 +54,14 @@ if (isApiAuthenticated()) {
             clearApiToken();
             $_SESSION = array();
             if (isset($_COOKIE[session_name()])) {
-                setcookie(session_name(), '', time() - 3600, '/', '', true, true);
+                $sessionCookieOptions = getSessionCookieOptions();
+                setcookie(session_name(), '', [
+                    'expires' => time() - 3600,
+                    'path' => $sessionCookieOptions['path'],
+                    'secure' => $sessionCookieOptions['secure'],
+                    'httponly' => $sessionCookieOptions['httponly'],
+                    'samesite' => $sessionCookieOptions['samesite'],
+                ]);
             }
             session_destroy();
             header('Location: ' . $baseUrl . 'pages/login.php');

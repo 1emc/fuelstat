@@ -15,12 +15,27 @@ if (isset($_POST['csrf_token']) && isset($_SESSION['csrf_token'])) {
 $_SESSION = array();
 clearApiToken();
 
+$sessionCookieOptions = getSessionCookieOptions();
+
 if (isset($_COOKIE[session_name()])) {
-    setcookie(session_name(), '', time() - 3600, '/', '', true, true);
+    setcookie(session_name(), '', [
+        'expires' => time() - 3600,
+        'path' => $sessionCookieOptions['path'],
+        'secure' => $sessionCookieOptions['secure'],
+        'httponly' => $sessionCookieOptions['httponly'],
+        'samesite' => $sessionCookieOptions['samesite'],
+    ]);
 }
+
 foreach (['remember_me', 'auth_token'] as $cookie) {
     if (isset($_COOKIE[$cookie])) {
-        setcookie($cookie, '', time() - 3600, '/', '', true, true);
+        setcookie($cookie, '', [
+            'expires' => time() - 3600,
+            'path' => '/',
+            'secure' => $sessionCookieOptions['secure'],
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
     }
 }
 

@@ -36,7 +36,7 @@ try {
                         while (ob_get_level()) {
                             ob_end_clean();
                         }
-                        header('Location: /pages/onboarding.php', true, 302);
+                        header('Location: /index.php', true, 302);
                         exit;
                     }
                     error_log('[Login] missing token in response for ' . $email . ', keys=' . implode(',', array_keys($data)));
