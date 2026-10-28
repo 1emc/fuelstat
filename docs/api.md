@@ -56,6 +56,19 @@ Gibt bei gültigen Credentials ein JWT zurück.
 * 401: `invalid_credentials`
 * 500: `server_error`
 
+## Benutzer & Admin-Rechte
+
+Die Endpunkte unter `/auth/users` und `/auth/tokens` sind auf den eigenen Account beschränkt:
+
+* `GET /auth/users` (alle User auflisten): nur Admins
+* `GET|PATCH|DELETE /auth/users/:userId` und `POST /auth/users/:userId/revoke-all`: nur der eigene User oder Admins
+* `POST /auth/tokens/revoke`: eigene Tokens jeder, fremde nur Admins
+* `GET /auth/tokens`: Admins sehen alle (optional `?userId=`), alle anderen nur ihre eigenen
+
+Admins werden über die Umgebungsvariable `ADMIN_USER_IDS` (kommagetrennte User-UUIDs) in der `.env` des Backends festgelegt. Ohne diese Variable gibt es keine Admins.
+
+Fehlende Rechte: **403** `{ "error": "forbidden" }`
+
 ## Health & Diagnostics
 
 ### GET /health
@@ -207,11 +220,18 @@ Authorization: Bearer <jwt>
   {
     "id": "<uuid>",
     "odometer_km": 12845,
-    "liters": "47.200",
-    "price_total_eur": "86.30",
+    "amount": "47.200",
+    "unit": "l",
+    "total_cost_eur": "86.30",
+    "price_per_unit": "1.8284",
     "station": "Aral",
     "filled_at": "2025-12-23T09:16:08.998Z",
-    "created_at": "2025-12-23T09:16:08.998Z"
+    "created_at": "2025-12-23T09:16:08.998Z",
+    "is_full": true,
+    "skip_previous": false,
+    "liters": "47.200",
+    "price_total_eur": "86.30",
+    "price_per_liter": "1.8284"
   }
 ]
 ```

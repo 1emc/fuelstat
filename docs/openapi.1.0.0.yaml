@@ -168,6 +168,7 @@ paths:
       tags: [Tokens]
       summary: Revoke Login Token
       operationId: postAuthTokensRevoke
+      description: "Eigene Tokens kann jeder widerrufen, fremde nur Admins (ADMIN_USER_IDS)."
       requestBody:
         required: true
         content:
@@ -193,6 +194,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/ServerError"
 
@@ -201,6 +204,7 @@ paths:
       tags: [Tokens]
       summary: Get revoked Login Tokens (list)
       operationId: getAuthTokens
+      description: "Admins sehen alle widerrufenen Tokens (optional gefiltert per userId), alle anderen nur ihre eigenen; userId wird dann ignoriert."
       parameters:
         - name: userId
           in: query
@@ -233,6 +237,7 @@ paths:
       tags: [Tokens, Users]
       summary: Revoke all Tokens of User
       operationId: postAuthUsersRevokeAll
+      description: "Nur für den eigenen User oder Admins (ADMIN_USER_IDS)."
       parameters:
         - $ref: "#/components/parameters/UserId"
       requestBody:
@@ -257,6 +262,8 @@ paths:
                 message: "Alle bestehenden Tokens dieses Benutzers wurden widerrufen. Neue Logins erhalten wieder gültige Tokens."
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "500":
@@ -267,6 +274,7 @@ paths:
       tags: [Users]
       summary: Get Users (list)
       operationId: getUsers
+      description: "Nur für Admins (ADMIN_USER_IDS)."
       responses:
         "200":
           description: OK
@@ -282,6 +290,8 @@ paths:
                   created_at: "2025-01-01T12:34:56.000Z"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/ServerError"
 
@@ -290,6 +300,7 @@ paths:
       tags: [Users]
       summary: Get User (details)
       operationId: getUser
+      description: "Nur für den eigenen User oder Admins (ADMIN_USER_IDS)."
       parameters:
         - $ref: "#/components/parameters/UserId"
       responses:
@@ -301,6 +312,8 @@ paths:
                 $ref: "#/components/schemas/User"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "500":
@@ -310,6 +323,7 @@ paths:
       tags: [Users]
       summary: Patch User (details)
       operationId: patchUser
+      description: "Nur für den eigenen User oder Admins (ADMIN_USER_IDS)."
       parameters:
         - $ref: "#/components/parameters/UserId"
       requestBody:
@@ -331,6 +345,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -348,6 +364,7 @@ paths:
       tags: [Users]
       summary: Delete User
       operationId: deleteUser
+      description: "Nur für den eigenen User oder Admins (ADMIN_USER_IDS)."
       parameters:
         - $ref: "#/components/parameters/UserId"
       responses:
@@ -355,6 +372,8 @@ paths:
           description: No Content
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "500":
@@ -787,6 +806,14 @@ components:
           example:
             error: invalid_request
             detail: "Validation failed"
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: forbidden
     Unauthorized:
       description: Unauthorized
       content:
@@ -1006,7 +1033,7 @@ components:
         amount:
           type: number
           minimum: 0
-          description: Backward-kompatibel: kann auch als 'liters' gesendet werden
+          description: "Backward-kompatibel: kann auch als 'liters' gesendet werden"
         liters:
           type: number
           minimum: 0
@@ -1014,7 +1041,7 @@ components:
         totalCostEur:
           type: number
           minimum: 0
-          description: Backward-kompatibel: kann auch als 'priceTotalEur' gesendet werden
+          description: "Backward-kompatibel: kann auch als 'priceTotalEur' gesendet werden"
         priceTotalEur:
           type: number
           minimum: 0
@@ -1047,7 +1074,7 @@ components:
         amount:
           type: number
           minimum: 0
-          description: Backward-kompatibel: kann auch als 'liters' gesendet werden
+          description: "Backward-kompatibel: kann auch als 'liters' gesendet werden"
         liters:
           type: number
           minimum: 0
@@ -1055,7 +1082,7 @@ components:
         totalCostEur:
           type: number
           minimum: 0
-          description: Backward-kompatibel: kann auch als 'priceTotalEur' gesendet werden
+          description: "Backward-kompatibel: kann auch als 'priceTotalEur' gesendet werden"
         priceTotalEur:
           type: number
           minimum: 0
