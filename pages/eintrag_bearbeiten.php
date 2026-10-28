@@ -31,6 +31,7 @@ $preis_pro_einheit = $eintrag['price_per_unit'] ?? ($menge > 0 ? $kosten / $meng
 $vollgetankt = !empty($eintrag['is_full']);
 $skip_previous = !empty($eintrag['skip_previous']);
 $standort = $eintrag['station'] ?? '';
+$einheit = $eintrag['unit'] ?? 'l';
 ?>
 
 <div class="container mt-5">
@@ -52,11 +53,11 @@ $standort = $eintrag['station'] ?? '';
             <input type="text" class="form-control" name="standort" value="<?= htmlspecialchars($standort) ?>">
         </div>
         <div class="mb-3">
-            <label class="form-label">Menge (Liter)</label>
+            <label class="form-label">Menge (<?= einheitLang($einheit) ?>)</label>
             <input type="number" step="0.01" id="menge" name="menge" class="form-control" value="<?= (float)$menge ?>" min="0">
         </div>
         <div class="mb-3">
-            <label class="form-label">Preis pro Liter (€)</label>
+            <label class="form-label">Preis pro <?= einheitLang($einheit) ?> (€)</label>
             <input type="number" step="0.001" id="preis_pro_einheit" name="preis_pro_einheit" class="form-control" value="<?= (float)$preis_pro_einheit ?>" min="0">
         </div>
         <div class="mb-3">

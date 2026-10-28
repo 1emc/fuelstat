@@ -2,6 +2,7 @@
 include '../includes/session.php';
 include '../includes/db_connect.php';
 require_once __DIR__ . '/../includes/api_helpers.php';
+require_once __DIR__ . '/../includes/functions.php';
 $api = getApiClient();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['id'], $_POST['fahrzeug_id'])) {
@@ -28,9 +29,11 @@ $skipPrevious = isset($_POST['skip_previous']);
 $filledAt = $datum ? $datum . 'T12:00:00.000Z' : null;
 
 try {
+    // Einheit aus dem Kraftstoff des Fahrzeugs (korrigiert auch früher falsch als Liter gespeicherte Einträge)
+    $vehicle = $api->getVehicle($fahrzeug_id);
     $api->patchFillup($eintrag_id, [
         'odometerKm' => $tachostand,
-        'unit' => 'l',
+        'unit' => getEinheitFuerKraftstoff($vehicle['fuel_type'] ?? null),
         'amount' => $menge,
         'totalCostEur' => $kosten,
         'station' => $standort !== '' ? $standort : null,

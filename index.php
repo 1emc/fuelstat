@@ -46,7 +46,7 @@ if ($benutzer_id !== null) {
                 } catch (Throwable $e) {
                 }
                 $tooltip = $verbrauch !== null
-                    ? 'Ø Verbrauch: ' . number_format($verbrauch, 2, ',', '.') . ' l/100 km'
+                    ? 'Ø Verbrauch: ' . number_format($verbrauch, 2, ',', '.') . ' ' . einheitKurz(getEinheitFuerKraftstoff($row['fuel_type'] ?? null)) . '/100 km'
                     : 'Noch keine Verbrauchsdaten';
             ?>
             <div class="col">

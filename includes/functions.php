@@ -605,6 +605,33 @@ function getLetzterEintrag($fahrzeug_id, $kategorie) {
  * @param string $kategorie Der interne Kategoriename
  * @return string Der benutzerfreundliche Name mit Umlauten
  */
+/**
+ * Mengeneinheit passend zum Kraftstoff (wie im Backend abgeleitet): 'l', 'kwh' oder 'kg'.
+ */
+function getEinheitFuerKraftstoff(?string $fuelType): string
+{
+    $fuelType = strtolower((string)$fuelType);
+    if ($fuelType === 'electric') {
+        return 'kwh';
+    }
+    if ($fuelType === 'cng' || $fuelType === 'hydrogen') {
+        return 'kg';
+    }
+    return 'l';
+}
+
+/** Kurzform für Anzeigen wie "41,2 l" oder "kWh/100km". */
+function einheitKurz(?string $einheit): string
+{
+    return ['kwh' => 'kWh', 'kg' => 'kg'][strtolower((string)$einheit)] ?? 'l';
+}
+
+/** Langform für Formularbeschriftungen wie "Menge (Liter)". */
+function einheitLang(?string $einheit): string
+{
+    return ['kwh' => 'kWh', 'kg' => 'kg'][strtolower((string)$einheit)] ?? 'Liter';
+}
+
 function getKategorieName($kategorie) {
     $uebersetzung = [
         'Tankfuellung' => 'Tankfüllung',

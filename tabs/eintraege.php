@@ -83,11 +83,12 @@ body.dark .badge { background-color: #444; color: #fff; }
               <div class="text-muted small">
                 <?= number_format((int)($e['tachostand'] ?? 0), 0, ',', '.') ?> km<?= !empty($e['standort']) ? ' · ' . htmlspecialchars($e['standort']) : '' ?>
               </div>
-              <?php if ($e['kategorie'] === 'Tankfuellung' && $v !== null): ?>
+              <?php if ($e['kategorie'] === 'Tankfuellung'): ?>
               <div class="text-info small mt-1">
                 <i class="fas fa-tint me-1"></i>
-                <?= number_format((float)($e['menge'] ?? 0), 2, ',', '.') ?> l ·
-                <?= number_format($v, 2, ',', '.') ?> l/100km
+                <?= number_format((float)($e['menge'] ?? 0), 2, ',', '.') ?> <?= $einheitKurz ?>
+                <?php if ($v !== null): ?>· <?= number_format($v, 2, ',', '.') ?> <?= $einheitKurz ?>/100km<?php endif; ?>
+                <?php if (empty($e['vollgetankt'])): ?><span class="badge text-bg-secondary ms-1">Teilbetankung</span><?php endif; ?>
               </div>
               <?php endif; ?>
             </div>

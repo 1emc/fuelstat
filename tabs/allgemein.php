@@ -54,7 +54,7 @@ $kraftstoffTexte = [
                 $aktuell = $trend['current'] ?? null;
                 $diff = $trend['diff'] ?? null;
                 if ($aktuell !== null) {
-                    echo number_format($aktuell, 2, ',', '.') . ' l/100km';
+                    echo number_format($aktuell, 2, ',', '.') . ' ' . $einheitKurz . '/100km';
                     if ($diff !== null && abs($diff) >= 0.01) {
                         $sign = $diff > 0 ? '+' : '';
                         echo ' <span class="text-muted">(' . $sign . number_format($diff, 2, ',', '.') . ' ggü. Ø)</span>';

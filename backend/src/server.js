@@ -811,6 +811,8 @@ app.post('/api/v1/fillups', auth, async (req, res) => {
 
   const station = req.body?.station ? String(req.body.station).trim() : null;
   const filledAt = req.body?.filledAt ? new Date(req.body.filledAt) : null;
+  const isFull = req.body?.isFull !== undefined ? Boolean(req.body.isFull) : true;
+  const skipPrevious = req.body?.skipPrevious !== undefined ? Boolean(req.body.skipPrevious) : false;
 
   // unit optional: wenn nicht gesetzt, wird es aus vehicle.fuel_type abgeleitet
   let unit = req.body?.unit ? String(req.body.unit).trim().toLowerCase() : null;
@@ -835,7 +837,7 @@ app.post('/api/v1/fillups', auth, async (req, res) => {
 
     if (!unit) {
       if (fuelType === 'electric') unit = 'kwh';
-      else if (fuelType === 'cng' || fuelType === 'lpg') unit = 'kg';
+      else if (fuelType === 'cng') unit = 'kg';
       else if (fuelType === 'hydrogen') unit = 'kg';
       else unit = 'l'; // diesel, e5, e10, hybrid, other
     }
@@ -851,7 +853,9 @@ app.post('/api/v1/fillups', auth, async (req, res) => {
          total_cost_eur,
          price_per_unit,
          station,
-         filled_at
+         filled_at,
+         is_full,
+         skip_previous
        )
        VALUES (
          $1,
@@ -866,10 +870,12 @@ app.post('/api/v1/fillups', auth, async (req, res) => {
            ELSE NULL
          END,
          $7,
-         COALESCE($8, now())
+         COALESCE($8, now()),
+         $9,
+         $10
        )
        RETURNING id, vehicle_id, odometer_km, amount, unit, total_cost_eur, price_per_unit, station, filled_at, created_at, is_full, skip_previous`,
-      [req.user.sub, vehicleId, odometerKm, amount, unit, totalCostEur, station, filledAt]
+      [req.user.sub, vehicleId, odometerKm, amount, unit, totalCostEur, station, filledAt, isFull, skipPrevious]
     );
 
     res.status(201).json(r.rows[0]);

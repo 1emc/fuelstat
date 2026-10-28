@@ -53,13 +53,13 @@ $teuersterMonatWert = !empty($kostenProMonatFormatted) ? max($kostenProMonatForm
     <div class="col-md-4 mb-2">
         <div class="card p-2 text-center">
             <strong title="Basis: Full-to-Full">Bester Monatsverbrauch</strong><br>
-            <span><?= $besterVerbrauch !== null ? $bestKey . ' (' . number_format($besterVerbrauch, 2, ',', '.') . ' l/100km)' : '–' ?></span>
+            <span><?= $besterVerbrauch !== null ? $bestKey . ' (' . number_format($besterVerbrauch, 2, ',', '.') . ' ' . $einheitKurz . '/100km)' : '–' ?></span>
         </div>
     </div>
     <div class="col-md-4 mb-2">
         <div class="card p-2 text-center">
             <strong>Schlechtester Monatsverbrauch</strong><br>
-            <span><?= $schlechtesterVerbrauch !== null ? $worstKey . ' (' . number_format($schlechtesterVerbrauch, 2, ',', '.') . ' l/100km)' : '–' ?></span>
+            <span><?= $schlechtesterVerbrauch !== null ? $worstKey . ' (' . number_format($schlechtesterVerbrauch, 2, ',', '.') . ' ' . $einheitKurz . '/100km)' : '–' ?></span>
         </div>
     </div>
     <div class="col-md-4 mb-2">
@@ -80,7 +80,7 @@ $teuersterMonatWert = !empty($kostenProMonatFormatted) ? max($kostenProMonatForm
     <div class="col-md-6 mb-2">
         <div class="card p-2 text-center">
             <strong>Ø Kraftstoffpreis</strong><br>
-            <span><?= $durchschnittPreis !== null ? number_format($durchschnittPreis, 3, ',', '.') . ' €/l' : '–' ?></span>
+            <span><?= $durchschnittPreis !== null ? number_format($durchschnittPreis, 3, ',', '.') . ' €/' . $einheitKurz : '–' ?></span>
         </div>
     </div>
 </div>
@@ -103,7 +103,7 @@ $teuersterMonatWert = !empty($kostenProMonatFormatted) ? max($kostenProMonatForm
         <div style="max-height:250px; overflow:auto;">
             <table class="table table-sm table-bordered mb-0">
                 <thead>
-                    <tr><th>Jahr</th><th># Stops</th><th>l gekauft</th><th>€ gekauft</th><th>l verbraucht</th><th>l/100km</th></tr>
+                    <tr><th>Jahr</th><th># Stops</th><th><?= $einheitKurz ?> gekauft</th><th>€ gekauft</th><th><?= $einheitKurz ?> verbraucht</th><th><?= $einheitKurz ?>/100km</th></tr>
                 </thead>
                 <tbody>
                     <?php foreach ($jahresdaten as $jahr => $daten): ?>
