@@ -478,10 +478,16 @@ function holeJahresdaten(int $fahrzeug_id): array
     return $jahresdaten;
 }
 
-function formatMonat(string $monat): string
+function formatMonat(string $monat, bool $lang = false): string
 {
-    $date = DateTime::createFromFormat('Y-m', $monat);
-    return $date ? $date->format('M Y') : $monat;
+    $kurz = [1 => 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+    $voll = [1 => 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+    $date = DateTime::createFromFormat('!Y-m', $monat);
+    if (!$date) {
+        return $monat;
+    }
+    $namen = $lang ? $voll : $kurz;
+    return $namen[(int)$date->format('n')] . ' ' . $date->format('Y');
 }
 
 function formatLabels(array $arr): array

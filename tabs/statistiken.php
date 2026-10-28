@@ -28,6 +28,9 @@ $minVerbrauch = $verbrauchswerte ? min($verbrauchswerte) : 0;
 $durchschnittVerbrauch = $verbrauchswerte ? array_sum($verbrauchswerte) / count($verbrauchswerte) : 0;
 $maxVerbrauch = $verbrauchswerte ? max($verbrauchswerte) : 0;
 
+ksort($verbrauchProMonat);
+ksort($kostenProMonat);
+$verbrauchProMonat = array_filter($verbrauchProMonat, fn($v) => $v > 0);
 $verbrauchProMonatFormatted = formatLabels($verbrauchProMonat);
 $kostenProMonatFormatted = formatLabels($kostenProMonat);
 
@@ -49,8 +52,7 @@ $teuersterMonatWert = !empty($kostenProMonatFormatted) ? max($kostenProMonatForm
 <div class="row mb-4">
     <div class="col-md-4 mb-2">
         <div class="card p-2 text-center">
-            <strong>Bester Monatsverbrauch</strong><br>
-            <small>Basis: Full-to-Full</small><br>
+            <strong title="Basis: Full-to-Full">Bester Monatsverbrauch</strong><br>
             <span><?= $besterVerbrauch !== null ? $bestKey . ' (' . number_format($besterVerbrauch, 2, ',', '.') . ' l/100km)' : '–' ?></span>
         </div>
     </div>
