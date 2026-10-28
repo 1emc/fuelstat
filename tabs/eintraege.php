@@ -83,6 +83,9 @@ body.dark .badge { background-color: #444; color: #fff; }
               <div class="text-muted small">
                 <?= number_format((int)($e['tachostand'] ?? 0), 0, ',', '.') ?> km<?= !empty($e['standort']) ? ' · ' . htmlspecialchars($e['standort']) : '' ?>
               </div>
+              <?php if (!empty($e['beschreibung'])): ?>
+              <div class="small mt-1"><?= htmlspecialchars($e['beschreibung']) ?></div>
+              <?php endif; ?>
               <?php if ($e['kategorie'] === 'Tankfuellung'): ?>
               <div class="text-info small mt-1">
                 <i class="fas fa-tint me-1"></i>

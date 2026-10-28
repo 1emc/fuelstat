@@ -22,8 +22,12 @@ if ($type === 'fillup') {
         $_SESSION['error_message'] = $e->getMessage();
     }
 } else {
-    // API (OpenAPI 1.0.0) bietet kein Löschen von Entries – nur Fillups
-    $_SESSION['warning_message'] = 'Löschen von Ausgabe-Einträgen ist über die API derzeit nicht möglich.';
+    try {
+        $api->deleteEntry($eintrag_id);
+        $_SESSION['success_message'] = 'Ausgabe gelöscht.';
+    } catch (Throwable $e) {
+        $_SESSION['error_message'] = $e->getMessage();
+    }
 }
 header('Location: fahrzeug_detail.php?id=' . rawurlencode($fahrzeug_id));
 exit;

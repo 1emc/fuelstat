@@ -1326,6 +1326,111 @@ app.post('/api/v1/entries', auth, async (req, res) => {
 });
 
 // List expense entries by vehicle
+const ENTRY_COLUMNS = `
+  id,
+  user_id,
+  vehicle_id,
+  category,
+  amount_eur,
+  odometer_km,
+  occurred_at,
+  vendor,
+  description,
+  created_at`;
+
+// Get single entry (expense)
+app.get('/api/v1/entries/:entryId', auth, async (req, res) => {
+  const entryId = String(req.params.entryId || '').trim();
+  try {
+    const r = await pool.query(
+      `SELECT ${ENTRY_COLUMNS} FROM expenses WHERE id = $1 AND user_id = $2`,
+      [entryId, req.user.sub]
+    );
+    if (r.rowCount === 0) return res.status(404).json({ error: 'entry_not_found' });
+    res.json(r.rows[0]);
+  } catch (e) {
+    if (e.code === '22P02') return res.status(404).json({ error: 'entry_not_found' });
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// Patch single entry (expense)
+app.patch('/api/v1/entries/:entryId', auth, async (req, res) => {
+  const entryId = String(req.params.entryId || '').trim();
+  const body = req.body || {};
+  const fields = [];
+  const values = [];
+  let idx = 1;
+
+  if (body.category !== undefined) {
+    const category = String(body.category).trim();
+    if (!category) return res.status(400).json({ error: 'missing_category' });
+    fields.push(`category = $${idx++}`);
+    values.push(category);
+  }
+  if (body.amountEur !== undefined) {
+    const amountEur = Number(body.amountEur);
+    if (!Number.isFinite(amountEur) || amountEur < 0) return res.status(400).json({ error: 'invalid_amountEur' });
+    fields.push(`amount_eur = $${idx++}`);
+    values.push(amountEur);
+  }
+  if (body.odometerKm !== undefined) {
+    const odometerKm = body.odometerKm === null || body.odometerKm === '' ? null : Number(body.odometerKm);
+    if (odometerKm !== null && (!Number.isFinite(odometerKm) || odometerKm < 0)) {
+      return res.status(400).json({ error: 'invalid_odometerKm' });
+    }
+    fields.push(`odometer_km = $${idx++}`);
+    values.push(odometerKm);
+  }
+  if (body.occurredAt !== undefined) {
+    const occurredAt = new Date(body.occurredAt);
+    if (Number.isNaN(occurredAt.getTime())) return res.status(400).json({ error: 'invalid_occurredAt' });
+    fields.push(`occurred_at = $${idx++}`);
+    values.push(occurredAt);
+  }
+  if (body.vendor !== undefined) {
+    fields.push(`vendor = $${idx++}`);
+    values.push(body.vendor === null ? null : String(body.vendor).trim() || null);
+  }
+  if (body.description !== undefined) {
+    fields.push(`description = $${idx++}`);
+    values.push(body.description === null ? null : String(body.description).trim() || null);
+  }
+
+  if (fields.length === 0) return res.status(400).json({ error: 'nothing_to_update' });
+
+  try {
+    values.push(entryId, req.user.sub);
+    const r = await pool.query(
+      `UPDATE expenses SET ${fields.join(', ')}
+       WHERE id = $${idx++} AND user_id = $${idx}
+       RETURNING ${ENTRY_COLUMNS}`,
+      values
+    );
+    if (r.rowCount === 0) return res.status(404).json({ error: 'entry_not_found' });
+    res.json(r.rows[0]);
+  } catch (e) {
+    if (e.code === '22P02') return res.status(404).json({ error: 'entry_not_found' });
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// Delete single entry (expense)
+app.delete('/api/v1/entries/:entryId', auth, async (req, res) => {
+  const entryId = String(req.params.entryId || '').trim();
+  try {
+    const r = await pool.query(
+      'DELETE FROM expenses WHERE id = $1 AND user_id = $2 RETURNING id',
+      [entryId, req.user.sub]
+    );
+    if (r.rowCount === 0) return res.status(404).json({ error: 'entry_not_found' });
+    res.status(204).send();
+  } catch (e) {
+    if (e.code === '22P02') return res.status(404).json({ error: 'entry_not_found' });
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
 app.get('/api/v1/vehicles/:vehicleId/entries', auth, async (req, res) => {
   const vehicleId = String(req.params.vehicleId || '').trim();
   const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));

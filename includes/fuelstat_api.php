@@ -42,6 +42,9 @@ class FuelstatApi
     public function getVehicleStats(string $vehicleId): array { return $this->request('GET', '/vehicles/' . rawurlencode($vehicleId) . '/stats'); }
     public function getVehicleEntries(string $vehicleId, int $limit = 50): array { return $this->request('GET', '/vehicles/' . rawurlencode($vehicleId) . '/entries?limit=' . $limit); }
     public function postEntry(array $data): array { return $this->request('POST', '/entries', $data); }
+    public function getEntry(string $entryId): array { return $this->request('GET', '/entries/' . rawurlencode($entryId)); }
+    public function patchEntry(string $entryId, array $data): array { return $this->request('PATCH', '/entries/' . rawurlencode($entryId), $data); }
+    public function deleteEntry(string $entryId): void { $this->request('DELETE', '/entries/' . rawurlencode($entryId)); }
     public function getUser(string $userId): array { return $this->request('GET', '/auth/users/' . rawurlencode($userId)); }
     public function patchUser(string $userId, array $data): array { return $this->request('PATCH', '/auth/users/' . rawurlencode($userId), $data); }
     public function getWhoAmI(): array { return $this->request('GET', '/whoami'); }
