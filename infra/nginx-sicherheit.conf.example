@@ -1,0 +1,33 @@
+# Sicherheitsregeln für den Fuelstat-Webroot (nginx), in den server { … }-Block der Seite übernehmen.
+# Hintergrund: Liegt das ganze Repository im Webroot, wären sonst .env-Dateien, das .git-Verzeichnis,
+# der Tankerkönig-Key und das Backend direkt abrufbar.
+
+# Versteckte Dateien und Verzeichnisse (.git, .env, .htaccess …)
+location ~ /\.(?!well-known/) {
+    deny all;
+}
+
+# Interne Verzeichnisse
+location ~ ^/(backend|infra|database|tests|docs)/ {
+    deny all;
+}
+
+# Tankerkönig-API-Key
+location = /api/key.key {
+    deny all;
+}
+
+# includes/ enthält nur eingebundene Dateien – bis auf das Sortier-Formular
+location ~ ^/includes/(?!fahrzeug_sortieren\.php$) {
+    deny all;
+}
+
+# Hochgeladene Bilder: nie als PHP ausführen, nur Bildformate ausliefern
+location ^~ /uploads/ {
+    location ~* \.(jpe?g|png|gif|webp)$ {
+        add_header X-Content-Type-Options nosniff;
+        add_header Content-Security-Policy "default-src 'none'; img-src 'self'; sandbox";
+        try_files $uri =404;
+    }
+    deny all;
+}

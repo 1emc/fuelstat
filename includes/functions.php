@@ -710,7 +710,8 @@ function getNearbyStationsTankerkoenig(float $lat, float $lng, int $radius, stri
         . '&sort=dist'
         . '&apikey=' . urlencode($apikey);
 
-    $json = @file_get_contents($url);
+    $context = stream_context_create(['http' => ['timeout' => 10]]);
+    $json = @file_get_contents($url, false, $context);
     if ($json === false) {
         return null;
     }

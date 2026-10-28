@@ -27,9 +27,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: einstellungen.php');
             exit;
         } catch (Throwable $e) {
-            $error = $e->getMessage() === 'invalid_current_password'
-                ? 'Das aktuelle Passwort ist falsch.'
-                : 'Passwort konnte nicht geändert werden: ' . $e->getMessage();
+            $error = [
+                'invalid_current_password' => 'Das aktuelle Passwort ist falsch.',
+                'too_many_attempts' => 'Zu viele Fehlversuche. Bitte in 15 Minuten erneut versuchen.',
+            ][$e->getMessage()] ?? 'Passwort konnte nicht geändert werden: ' . $e->getMessage();
         }
     }
 }

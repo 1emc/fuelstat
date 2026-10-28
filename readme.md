@@ -67,6 +67,8 @@ ADMIN_USER_IDS=
 # MAIL_ENCRYPTION_KEY=eigener-schluessel-fuer-smtp-passwoerter   (Standard: aus JWT_SECRET abgeleitet)
 # ALLOW_PRIVATE_SMTP=true      Mailserver mit interner Adresse erlauben (z. B. im selben Netz)
 # NOTIFICATIONS_ENABLED=false  automatischen Versand abschalten
+# Optional: öffentliche Registrierung abschalten
+# REGISTRATION_ENABLED=false
 ```
 
 Wird `JWT_SECRET` ohne eigenen `MAIL_ENCRYPTION_KEY` geändert, müssen die Benutzer ihr SMTP-Passwort neu eingeben.
@@ -101,6 +103,14 @@ docker compose exec -T db psql -U fuelstat -d fuelstat < ../backend/database/pos
 - `/api/` an die Node-API weiterleiten, `/uploads/` aus dem Upload-Verzeichnis ausliefern.
 - **Wichtig:** Nur das Frontend gehört ins öffentliche Verzeichnis. Liegt das ganze Repository im Webroot, müssen mindestens `backend/`, `infra/`, `database/`, `tests/`, `.git/` und `api/key.key` gesperrt werden, sonst sind `.env`-Dateien und Schlüssel abrufbar.
 - Bei OPcache mit `opcache.validate_timestamps=0` nach jedem Deploy PHP-FPM neu laden (z. B. `systemctl reload php8.4-fpm`).
+- Die Regeln aus `infra/nginx-sicherheit.conf.example` in die nginx-Konfiguration übernehmen: Sie sperren interne Verzeichnisse, versteckte Dateien und den API-Key und verhindern, dass im Upload-Ordner jemals PHP ausgeführt wird.
+
+### Sicherheit
+
+- Uploads werden anhand ihres Inhalts geprüft (nur JPEG, PNG, GIF, WebP) und unter einem zufälligen Namen mit passender Endung gespeichert.
+- Login, 2FA-Code und Passwortänderung werden nach 10 bzw. 5 Fehlversuchen für 15 Minuten gesperrt (je E-Mail-Adresse bzw. Benutzer, im Speicher der API).
+- Alle Formulare sind per CSRF-Token geschützt; die Session-Cookies sind `HttpOnly` und `SameSite=Lax`.
+- Öffentliche Registrierung abschalten: `REGISTRATION_ENABLED=false` in der Backend-`.env` (Admins legen Konten dann z. B. über die Datenbank an).
 
 ## Entwicklung
 

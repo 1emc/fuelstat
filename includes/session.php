@@ -29,6 +29,25 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
 
+// CSRF-Schutz: jedes POST-Formular muss das Token dieser Session mitschicken.
+// Das Token wird per JavaScript (includes/footer.php) in alle POST-Formulare eingefügt.
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+if (!function_exists('csrfToken')) {
+    function csrfToken(): string
+    {
+        return $_SESSION['csrf_token'];
+    }
+}
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
+    && !hash_equals($_SESSION['csrf_token'], (string)($_POST['csrf_token'] ?? ''))) {
+    http_response_code(403);
+    header('Content-Type: text/html; charset=utf-8');
+    exit('<p>Die Anfrage wurde aus Sicherheitsgründen abgelehnt (Sitzung abgelaufen oder ungültiges Formular). '
+        . '<a href="javascript:history.back()">Zurück</a>, Seite neu laden und erneut versuchen.</p>');
+}
+
 // Dynamische Seiten nicht cachen (verhindert veraltete Anzeige bei F5 / alte MySQL-Daten)
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');

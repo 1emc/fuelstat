@@ -15,6 +15,18 @@
 <!-- Custom JS -->
 <script src="<?php echo htmlspecialchars($baseUrl); ?>js/script.js"></script>
 
+<!-- CSRF-Token in alle POST-Formulare einfügen (wird in includes/session.php geprüft) -->
+<script>
+  document.querySelectorAll('form').forEach(function (form) {
+    if ((form.getAttribute('method') || '').toLowerCase() !== 'post' || form.querySelector('input[name="csrf_token"]')) return;
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'csrf_token';
+    input.value = <?= json_encode(function_exists('csrfToken') ? csrfToken() : '') ?>;
+    form.appendChild(input);
+  });
+</script>
+
 <!-- Darkmode-Umschalter und Diagrammfarben -->
 <script>
   (function () {

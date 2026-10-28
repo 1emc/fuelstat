@@ -29,6 +29,8 @@ try {
                 $msg = $e->getMessage();
                 if (strpos($msg, 'email_already_exists') !== false || $e->getCode() === 409) {
                     $error = "Diese E-Mail-Adresse ist bereits registriert.";
+                } elseif ($msg === 'registration_disabled') {
+                    $error = "Die Registrierung neuer Konten ist auf dieser Installation deaktiviert.";
                 } else {
                     $error = $msg;
                 }

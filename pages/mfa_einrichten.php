@@ -41,6 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $meldungen = [
             'invalid_mfa_code' => 'Der Code ist falsch oder abgelaufen.',
             'invalid_current_password' => 'Das Passwort ist falsch.',
+            'too_many_attempts' => 'Zu viele Fehlversuche. Bitte in 15 Minuten erneut versuchen.',
         ];
         $error = $meldungen[$e->getMessage()] ?? $e->getMessage();
     }

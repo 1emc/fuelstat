@@ -3,7 +3,7 @@
 ?>
 <h2>Neue Ausgabe hinzufügen</h2>
 <form method="post" action="eintrag_speichern.php">
-    <input type="hidden" name="fahrzeug_id" value="<?php echo $fahrzeug_id; ?>">
+    <input type="hidden" name="fahrzeug_id" value="<?= htmlspecialchars($fahrzeug_id) ?>">
 
     <label for="kategorie">Kategorie:</label>
     <select name="kategorie" required>

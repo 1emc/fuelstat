@@ -31,7 +31,13 @@ app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 
 // Statischer File-Server für Uploads
-app.use(MEDIA_BASE_URL, express.static(UPLOAD_DIR));
+// Nur Bilddateien ausliefern; nosniff + CSP verhindern, dass Browser Uploads als HTML/Skript ausführen
+app.use(MEDIA_BASE_URL, (req, res, next) => {
+  if (!/\.(jpe?g|png|gif|webp)$/i.test(req.path)) return res.status(404).end();
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self'; sandbox");
+  return next();
+}, express.static(UPLOAD_DIR));
 
 const PORT = process.env.PORT || 3000;
 
@@ -53,12 +59,43 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, UPLOAD_DIR);
   },
+  // Nie den Dateinamen des Uploaders übernehmen: Endung wird erst nach Prüfung des Inhalts vergeben
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const filename = `${randomUUID()}${ext}`;
-    cb(null, filename);
+    cb(null, `${randomUUID()}.upload`);
   }
 });
+
+// Bildtyp anhand des Dateiinhalts (Magic Bytes) bestimmen – der vom Client gesendete Typ ist nicht vertrauenswürdig
+function detectImageType(buf) {
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return { ext: '.jpg', mime: 'image/jpeg' };
+  if (buf.length >= 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return { ext: '.png', mime: 'image/png' };
+  if (buf.length >= 6 && ['GIF87a', 'GIF89a'].includes(buf.subarray(0, 6).toString('ascii'))) return { ext: '.gif', mime: 'image/gif' };
+  if (buf.length >= 12 && buf.subarray(0, 4).toString('ascii') === 'RIFF' && buf.subarray(8, 12).toString('ascii') === 'WEBP') return { ext: '.webp', mime: 'image/webp' };
+  return null;
+}
+
+// Nach multer: nur echte Bilder behalten und mit passender Endung speichern
+async function verifyUploadedImage(req, res, next) {
+  if (!req.file) return next();
+  try {
+    const fd = await fs.promises.open(req.file.path, 'r');
+    const { buffer, bytesRead } = await fd.read(Buffer.alloc(16), 0, 16, 0);
+    await fd.close();
+    const type = detectImageType(buffer.subarray(0, bytesRead));
+    if (!type) {
+      await fs.promises.unlink(req.file.path).catch(() => {});
+      return res.status(400).json({ error: 'invalid_image' });
+    }
+    const filename = req.file.filename.replace(/\.upload$/, type.ext);
+    const target = path.join(UPLOAD_DIR, filename);
+    await fs.promises.rename(req.file.path, target);
+    Object.assign(req.file, { filename, path: target, mimetype: type.mime });
+    return next();
+  } catch (e) {
+    await fs.promises.unlink(req.file.path).catch(() => {});
+    return res.status(500).json({ error: 'server_error' });
+  }
+}
 
 const upload = multer({
   storage,
@@ -90,7 +127,7 @@ async function auth(req, res, next) {
   if (!m) return res.status(401).json({ error: 'missing_token' });
 
   try {
-    const payload = jwt.verify(m[1], process.env.JWT_SECRET);
+    const payload = jwt.verify(m[1], process.env.JWT_SECRET, { algorithms: ['HS256'] });
 
     // Falls Token eine jti besitzt, prüfen wir, ob es widerrufen wurde
     if (payload.jti) {
@@ -181,6 +218,49 @@ function verifyTotp(secretBase32, code) {
   return false;
 }
 
+// --- Schutz vor Durchprobieren (Passwort, 2FA-Code): Fehlversuche je Schlüssel zählen ---
+// Im Speicher des Prozesses; reicht für eine API-Instanz. Zählt nur Fehlversuche, Erfolg setzt zurück.
+const failedAttempts = new Map();
+const ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
+
+function isLockedOut(key, max) {
+  const entry = failedAttempts.get(key);
+  if (!entry || entry.resetAt < Date.now()) return false;
+  return entry.count >= max;
+}
+
+function recordFailure(key) {
+  const now = Date.now();
+  const entry = failedAttempts.get(key);
+  if (!entry || entry.resetAt < now) failedAttempts.set(key, { count: 1, resetAt: now + ATTEMPT_WINDOW_MS });
+  else entry.count++;
+}
+
+function clearFailures(key) {
+  failedAttempts.delete(key);
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of failedAttempts) if (entry.resetAt < now) failedAttempts.delete(key);
+}, 10 * 60 * 1000).unref();
+
+const LOGIN_MAX_FAILURES = 10;
+const MFA_MAX_FAILURES = 5;
+
+function tooManyAttempts(res) {
+  return res.status(429).json({ error: 'too_many_attempts', retry_after_minutes: 15 });
+}
+
+// Kurzlebiges Token für den 2FA-Schritt (eigener Schlüssel, kann nicht als Zugangstoken benutzt werden)
+const MFA_TOKEN_SECRET = `${process.env.JWT_SECRET}:mfa-step`;
+
+// Interne Fehler nur ins Log schreiben, nicht an den Client (verrät sonst Tabellen/Spalten)
+function serverError(res, e) {
+  console.error('[server_error]', e);
+  return res.status(500).json({ error: 'server_error' });
+}
+
 // Optionale Zahl aus dem Request: undefined bleibt undefined, null/'' wird null
 function optionalNumber(value) {
   if (value === undefined) return undefined;
@@ -257,7 +337,7 @@ app.get('/api/v1/whoami', auth, async (req, res) => {
       }
     });
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -267,12 +347,15 @@ app.get('/api/v1/db-ping', async (req, res) => {
     const r = await pool.query('SELECT 1 AS ok');
     res.json({ ok: true, result: r.rows[0] });
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+    console.error('[db-ping]', e);
+    res.status(500).json({ ok: false });
   }
 });
 
 // Register
 app.post('/api/v1/auth/register', async (req, res) => {
+  // Öffentliche Registrierung abschaltbar (z. B. für eine private Installation)
+  if (process.env.REGISTRATION_ENABLED === 'false') return res.status(403).json({ error: 'registration_disabled' });
   const email = String(req.body?.email || '').trim().toLowerCase();
   const password = String(req.body?.password || '');
 
@@ -291,7 +374,7 @@ app.post('/api/v1/auth/register', async (req, res) => {
     res.status(201).json({ token: signToken(user), user });
   } catch (e) {
     if (e.code === '23505') return res.status(409).json({ error: 'email_already_exists' });
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -308,27 +391,73 @@ app.post('/api/v1/auth/login', async (req, res) => {
        FROM users WHERE email = $1`,
       [email]
     );
-    if (r.rowCount === 0) return res.status(401).json({ error: 'invalid_credentials' });
+    const loginKey = `login:${email}`;
+    if (isLockedOut(loginKey, LOGIN_MAX_FAILURES)) return tooManyAttempts(res);
+
+    if (r.rowCount === 0) {
+      recordFailure(loginKey);
+      return res.status(401).json({ error: 'invalid_credentials' });
+    }
 
     const user = r.rows[0];
     const ok = await bcrypt.compare(password, user.password_hash);
-    if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
+    if (!ok) {
+      recordFailure(loginKey);
+      return res.status(401).json({ error: 'invalid_credentials' });
+    }
+    clearFailures(loginKey);
 
     // 2FA: erst nach korrektem Passwort nach dem Code fragen
     if (user.mfa_enabled) {
       if (req.body?.code === undefined || req.body?.code === '') {
-        return res.status(401).json({ error: 'mfa_required' });
+        // mfaToken erlaubt den zweiten Schritt (POST /auth/login/mfa), ohne das Passwort erneut zu senden
+        const mfaToken = jwt.sign({ sub: user.id }, MFA_TOKEN_SECRET, { expiresIn: '5m' });
+        return res.status(401).json({ error: 'mfa_required', mfaToken });
       }
+      const mfaKey = `mfa:${user.id}`;
+      if (isLockedOut(mfaKey, MFA_MAX_FAILURES)) return tooManyAttempts(res);
       if (!verifyTotp(user.mfa_secret, req.body.code)) {
+        recordFailure(mfaKey);
         return res.status(401).json({ error: 'invalid_mfa_code' });
       }
+      clearFailures(mfaKey);
     }
 
     delete user.password_hash;
     delete user.mfa_secret;
     res.json({ token: signToken(user), user });
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
+  }
+});
+
+// 2FA-Login, Schritt 2: mfaToken aus der mfa_required-Antwort + Code aus der Authenticator-App
+app.post('/api/v1/auth/login/mfa', async (req, res) => {
+  let payload;
+  try {
+    payload = jwt.verify(String(req.body?.mfaToken || ''), MFA_TOKEN_SECRET, { algorithms: ['HS256'] });
+  } catch {
+    return res.status(401).json({ error: 'invalid_mfa_token' });
+  }
+  const mfaKey = `mfa:${payload.sub}`;
+  if (isLockedOut(mfaKey, MFA_MAX_FAILURES)) return tooManyAttempts(res);
+  try {
+    const r = await pool.query(
+      `SELECT id, email, username, mfa_enabled, mfa_secret, profile_image_url, created_at, updated_at
+       FROM users WHERE id = $1`,
+      [payload.sub]
+    );
+    if (r.rowCount === 0 || !r.rows[0].mfa_enabled) return res.status(401).json({ error: 'invalid_mfa_token' });
+    const user = r.rows[0];
+    if (!verifyTotp(user.mfa_secret, req.body?.code)) {
+      recordFailure(mfaKey);
+      return res.status(401).json({ error: 'invalid_mfa_code' });
+    }
+    clearFailures(mfaKey);
+    delete user.mfa_secret;
+    res.json({ token: signToken(user), user });
+  } catch (e) {
+    serverError(res, e);
   }
 });
 
@@ -342,8 +471,14 @@ app.post('/api/v1/auth/password', auth, async (req, res) => {
   try {
     const r = await pool.query('SELECT id, email, password_hash FROM users WHERE id = $1', [req.user.sub]);
     if (r.rowCount === 0) return res.status(404).json({ error: 'user_not_found' });
+    const pwKey = `password:${req.user.sub}`;
+    if (isLockedOut(pwKey, LOGIN_MAX_FAILURES)) return tooManyAttempts(res);
     const ok = await bcrypt.compare(currentPassword, r.rows[0].password_hash);
-    if (!ok) return res.status(401).json({ error: 'invalid_current_password' });
+    if (!ok) {
+      recordFailure(pwKey);
+      return res.status(401).json({ error: 'invalid_current_password' });
+    }
+    clearFailures(pwKey);
 
     const passwordHash = await bcrypt.hash(newPassword, 12);
     await pool.query('UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2', [passwordHash, req.user.sub]);
@@ -357,7 +492,7 @@ app.post('/api/v1/auth/password', auth, async (req, res) => {
     await new Promise((resolve) => setTimeout(resolve, 1000));
     res.json({ token: signToken(r.rows[0]) });
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -376,7 +511,7 @@ app.post('/api/v1/auth/mfa/setup', auth, async (req, res) => {
       otpauthUrl: `otpauth://totp/${label}?secret=${secret}&issuer=Fuelstat&algorithm=SHA1&digits=6&period=30`
     });
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -387,12 +522,18 @@ app.post('/api/v1/auth/mfa/enable', auth, async (req, res) => {
     if (r.rowCount === 0) return res.status(404).json({ error: 'user_not_found' });
     if (r.rows[0].mfa_enabled) return res.status(409).json({ error: 'mfa_already_enabled' });
     if (!r.rows[0].mfa_secret) return res.status(400).json({ error: 'mfa_not_set_up' });
-    if (!verifyTotp(r.rows[0].mfa_secret, req.body?.code)) return res.status(400).json({ error: 'invalid_mfa_code' });
+    const mfaKey = `mfa:${req.user.sub}`;
+    if (isLockedOut(mfaKey, MFA_MAX_FAILURES)) return tooManyAttempts(res);
+    if (!verifyTotp(r.rows[0].mfa_secret, req.body?.code)) {
+      recordFailure(mfaKey);
+      return res.status(400).json({ error: 'invalid_mfa_code' });
+    }
+    clearFailures(mfaKey);
 
     await pool.query('UPDATE users SET mfa_enabled = true, updated_at = now() WHERE id = $1', [req.user.sub]);
     res.json({ mfa_enabled: true });
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -402,14 +543,19 @@ app.post('/api/v1/auth/mfa/disable', auth, async (req, res) => {
     const r = await pool.query('SELECT password_hash, mfa_secret, mfa_enabled FROM users WHERE id = $1', [req.user.sub]);
     if (r.rowCount === 0) return res.status(404).json({ error: 'user_not_found' });
     if (!r.rows[0].mfa_enabled) return res.status(400).json({ error: 'mfa_not_enabled' });
+    const mfaKey = `mfa:${req.user.sub}`;
+    if (isLockedOut(mfaKey, MFA_MAX_FAILURES)) return tooManyAttempts(res);
     const ok = await bcrypt.compare(String(req.body?.password || ''), r.rows[0].password_hash);
-    if (!ok) return res.status(401).json({ error: 'invalid_current_password' });
-    if (!verifyTotp(r.rows[0].mfa_secret, req.body?.code)) return res.status(400).json({ error: 'invalid_mfa_code' });
+    if (!ok || !verifyTotp(r.rows[0].mfa_secret, req.body?.code)) {
+      recordFailure(mfaKey);
+      return res.status(ok ? 400 : 401).json({ error: ok ? 'invalid_mfa_code' : 'invalid_current_password' });
+    }
+    clearFailures(mfaKey);
 
     await pool.query('UPDATE users SET mfa_enabled = false, mfa_secret = NULL, updated_at = now() WHERE id = $1', [req.user.sub]);
     res.json({ mfa_enabled: false });
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -430,7 +576,7 @@ app.get('/api/v1/auth/users', auth, requireAdmin, async (req, res) => {
     );
     res.json(r.rows);
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -460,7 +606,7 @@ app.get('/api/v1/auth/users/:userId', auth, requireSelfOrAdmin, async (req, res)
 
     res.json(r.rows[0]);
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -522,7 +668,7 @@ app.patch('/api/v1/auth/users/:userId', auth, requireSelfOrAdmin, async (req, re
     if (e.code === '23505') {
       return res.status(409).json({ error: 'email_already_exists' });
     }
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -543,7 +689,7 @@ app.delete('/api/v1/auth/users/:userId', auth, requireSelfOrAdmin, async (req, r
 
     return res.status(204).send();
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -585,7 +731,7 @@ app.post('/api/v1/auth/users/:userId/revoke-all', auth, requireSelfOrAdmin, asyn
         'Alle bestehenden Tokens dieses Benutzers wurden widerrufen. Neue Logins erhalten wieder gültige Tokens.'
     });
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -617,7 +763,7 @@ app.get('/api/v1/auth/tokens', auth, async (req, res) => {
 
     res.json(r.rows);
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -669,7 +815,7 @@ app.post('/api/v1/auth/tokens/revoke', auth, async (req, res) => {
     if (e.name === 'JsonWebTokenError' || e.name === 'TokenExpiredError') {
       return res.status(400).json({ error: 'invalid_token', detail: e.message });
     }
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -721,7 +867,7 @@ app.post('/api/v1/vehicles', auth, async (req, res) => {
     );
     res.status(201).json(r.rows[0]);
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -739,7 +885,7 @@ app.get('/api/v1/vehicles', auth, async (req, res) => {
     );
     res.json(r.rows);
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -776,7 +922,7 @@ app.get('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
 
     res.json(r.rows[0]);
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -922,7 +1068,7 @@ app.patch('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
 
     res.json(r.rows[0]);
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -944,7 +1090,7 @@ app.delete('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
     // 204 No Content, keine Response-Payload nötig
     return res.status(204).send();
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -1028,7 +1174,7 @@ app.post('/api/v1/fillups', auth, async (req, res) => {
 
     res.status(201).json(r.rows[0]);
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -1074,7 +1220,7 @@ app.get('/api/v1/fillups/:fillupId', auth, async (req, res) => {
 
     res.json({ ...row, ...legacy });
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -1269,7 +1415,7 @@ app.patch('/api/v1/fillups/:fillupId', auth, async (req, res) => {
 
     res.json({ ...updated, ...legacy });
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -1353,7 +1499,7 @@ app.delete('/api/v1/fillups/:fillupId', auth, async (req, res) => {
     });
   } catch (e) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   } finally {
     client.release();
   }
@@ -1397,7 +1543,7 @@ app.get('/api/v1/vehicles/:vehicleId/fillups', auth, async (req, res) => {
       price_per_liter: row.unit === 'l' ? row.price_per_unit : null
     })));
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -1470,7 +1616,7 @@ app.post('/api/v1/entries', auth, async (req, res) => {
 
     res.status(201).json(r.rows[0]);
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -1499,7 +1645,7 @@ app.get('/api/v1/entries/:entryId', auth, async (req, res) => {
     res.json(r.rows[0]);
   } catch (e) {
     if (e.code === '22P02') return res.status(404).json({ error: 'entry_not_found' });
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -1560,7 +1706,7 @@ app.patch('/api/v1/entries/:entryId', auth, async (req, res) => {
     res.json(r.rows[0]);
   } catch (e) {
     if (e.code === '22P02') return res.status(404).json({ error: 'entry_not_found' });
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -1576,7 +1722,7 @@ app.delete('/api/v1/entries/:entryId', auth, async (req, res) => {
     res.status(204).send();
   } catch (e) {
     if (e.code === '22P02') return res.status(404).json({ error: 'entry_not_found' });
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -1614,7 +1760,7 @@ app.get('/api/v1/vehicles/:vehicleId/entries', auth, async (req, res) => {
 
     res.json(r.rows);
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -1714,7 +1860,7 @@ app.post('/api/v1/vehicles/:vehicleId/import', auth, async (req, res) => {
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     if (e.code === '22P02') return res.status(404).json({ error: 'vehicle_not_found' });
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   } finally {
     client.release();
   }
@@ -1730,7 +1876,7 @@ app.get('/api/v1/vehicles/:vehicleId/reminders', auth, async (req, res) => {
     res.json(await getVehicleReminders(pool, req.user.sub, vehicleId, s.rows[0]?.reminder_days ?? 30));
   } catch (e) {
     if (e.code === '22P02') return res.status(404).json({ error: 'vehicle_not_found' });
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -1765,7 +1911,7 @@ app.get('/api/v1/auth/mail-settings', auth, async (req, res) => {
     const r = await pool.query('SELECT * FROM user_mail_settings WHERE user_id = $1', [req.user.sub]);
     res.json(mailSettingsResponse(r.rows[0]));
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -1818,7 +1964,7 @@ app.put('/api/v1/auth/mail-settings', auth, async (req, res) => {
     res.json(mailSettingsResponse(r.rows[0]));
   } catch (e) {
     if (e.code === 'smtp_host_not_allowed' || e.code === 'ENOTFOUND' || e.code === 'EAI_AGAIN') return mailErrorResponse(res, e);
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -1865,7 +2011,7 @@ app.get('/api/v1/vehicles/:vehicleId/stats', auth, async (req, res) => {
     if (data?.error === 'vehicle_not_found') return res.status(404).json({ error: 'vehicle_not_found' });
     res.json(data);
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -1875,7 +2021,7 @@ app.get('/api/v1/vehicles/:vehicleId/stats', auth, async (req, res) => {
 // ============================================
 
 // Upload user media
-app.post('/api/v1/media/upload', auth, upload.single('file'), async (req, res) => {
+app.post('/api/v1/media/upload', auth, upload.single('file'), verifyUploadedImage, async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'missing_file' });
   }
@@ -1897,7 +2043,7 @@ app.post('/api/v1/media/upload', auth, upload.single('file'), async (req, res) =
   } catch (e) {
     // Datei löschen falls DB-Insert fehlschlägt
     fs.unlink(req.file.path, () => {});
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -1913,7 +2059,7 @@ app.get('/api/v1/media', auth, async (req, res) => {
     );
     res.json(r.rows);
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -1936,7 +2082,7 @@ app.get('/api/v1/media/:mediaId', auth, async (req, res) => {
 
     res.json(r.rows[0]);
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -1972,7 +2118,7 @@ app.delete('/api/v1/media/:mediaId', auth, async (req, res) => {
 
     return res.status(204).send();
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -1981,7 +2127,7 @@ app.delete('/api/v1/media/:mediaId', auth, async (req, res) => {
 // ============================================
 
 // Upload vehicle media
-app.post('/api/v1/vehicles/:vehicleId/media/upload', auth, upload.single('file'), async (req, res) => {
+app.post('/api/v1/vehicles/:vehicleId/media/upload', auth, upload.single('file'), verifyUploadedImage, async (req, res) => {
   const vehicleId = String(req.params.vehicleId || '').trim();
   if (!vehicleId) return res.status(400).json({ error: 'missing_vehicleId' });
 
@@ -2016,7 +2162,7 @@ app.post('/api/v1/vehicles/:vehicleId/media/upload', auth, upload.single('file')
   } catch (e) {
     // Datei löschen falls DB-Insert fehlschlägt
     fs.unlink(req.file.path, () => {});
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -2044,7 +2190,7 @@ app.get('/api/v1/vehicles/:vehicleId/media', auth, async (req, res) => {
     );
     res.json(r.rows);
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
@@ -2083,7 +2229,7 @@ app.delete('/api/v1/vehicles/:vehicleId/media/:mediaId', auth, async (req, res) 
 
     return res.status(204).send();
   } catch (e) {
-    res.status(500).json({ error: 'server_error', detail: e.message });
+    serverError(res, e);
   }
 });
 
