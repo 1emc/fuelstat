@@ -70,7 +70,7 @@ if ($benutzer_id !== null) {
                     <div class="card-body pb-0">
                         <h5 class="card-title mb-2 fw-semibold"><?= htmlspecialchars($displayName) ?></h5>
                     </div>
-                    <div class="card-footer bg-white border-0 pt-0 pb-3">
+                    <div class="card-footer bg-body border-0 pt-0 pb-3">
                         <div class="btn-group w-100">
                             <a href="pages/fahrzeug_detail.php?id=<?= htmlspecialchars(urlencode($vehicleId)) ?>" class="btn btn-outline-primary">
                                 <i class="fas fa-info-circle me-1"></i> Details

@@ -42,7 +42,7 @@ footer {
 
 /* Anpassung der Symbole */
 .card-body .fas {
-    color: #007bff; /* Primärfarbe für Icons */
+    color: var(--bs-primary); /* Primärfarbe für Icons */
 }
 
 /* Responsives Bild innerhalb der Karte */
@@ -68,7 +68,7 @@ footer {
 
 @media (max-width: 991.98px) {
   .navbar-collapse {
-    background: #fff !important;
+    background: var(--bs-body-bg) !important;
     box-shadow: 0 8px 24px rgba(0,0,0,0.18);
     border-radius: 0 0 18px 18px;
     margin-top: 8px;
@@ -79,7 +79,7 @@ footer {
     margin-bottom: 8px;
   }
   .dropdown-menu {
-    background: #f8f9fa !important;
+    background: var(--bs-tertiary-bg) !important;
     border-radius: 12px;
     margin-bottom: 8px;
     box-shadow: 0 4px 16px rgba(0,0,0,0.10);
@@ -94,6 +94,6 @@ footer {
 }
 
 .navbar-toggler {
-  border: 2px solid #007bff;
+  border: 2px solid var(--bs-primary);
   border-radius: 8px;
 }
