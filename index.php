@@ -43,6 +43,10 @@ if ($benutzer_id !== null) {
                     $verbrauch = $trend['current'] ?? null;
                 } catch (Throwable $e) {
                 }
+                $faellig = array_filter(
+                    getFaelligkeitenFromApi($api, $vehicleId, $currentOdo),
+                    fn($f) => in_array($f['status'], ['ueberfaellig', 'bald'], true)
+                );
                 $tooltip = $verbrauch !== null
                     ? 'Ø Verbrauch: ' . number_format($verbrauch, 2, ',', '.') . ' ' . einheitKurz(getEinheitFuerKraftstoff($row['fuel_type'] ?? null)) . '/100 km'
                     : 'Noch keine Verbrauchsdaten';
@@ -54,6 +58,15 @@ if ($benutzer_id !== null) {
                         <div class="ratio ratio-16x9">
                             <img src="<?= htmlspecialchars($bildUrl) ?>" class="w-100 h-100 object-fit-cover zoom-img" alt="<?= htmlspecialchars($displayName) ?>" loading="lazy">
                         </div>
+                        <?php if ($faellig): ?>
+                        <span class="position-absolute top-0 start-0 m-2 d-flex flex-column gap-1">
+                            <?php foreach ($faellig as $f): ?>
+                            <span class="badge km-badge text-bg-<?= $f['status'] === 'ueberfaellig' ? 'danger' : 'warning' ?>">
+                                <i class="fas fa-bell me-1"></i><?= htmlspecialchars($f['titel']) ?> <?= $f['status'] === 'ueberfaellig' ? 'überfällig' : 'bald fällig' ?>
+                            </span>
+                            <?php endforeach; ?>
+                        </span>
+                        <?php endif; ?>
                         <?php if ($currentOdo !== null): ?>
                         <span class="badge bg-secondary km-badge position-absolute top-0 end-0 m-2">
                             <?= number_format($currentOdo, 0, ',', '.') ?> km

@@ -60,6 +60,14 @@ body.dark .badge { background-color: #444; color: #fff; }
         <i class="fas fa-eye me-1"></i> Anzeigen
       </button>
     </form>
+    <div class="btn-group flex-shrink-0">
+      <a href="../pages/export.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?><?= $jahr !== null ? '&jahr=' . $jahr : '' ?>" class="btn btn-outline-primary" title="Als CSV für Excel herunterladen">
+        <i class="fas fa-file-csv me-1"></i> CSV
+      </a>
+      <a href="../pages/bericht.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?><?= $jahr !== null ? '&jahr=' . $jahr : '' ?>" class="btn btn-outline-primary" title="Druckansicht, auch zum Speichern als PDF" target="_blank">
+        <i class="fas fa-file-pdf me-1"></i> Bericht
+      </a>
+    </div>
   </div>
 
   <?php if (empty($eintraege)): ?>

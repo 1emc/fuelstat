@@ -24,8 +24,8 @@ function getMergedEintraegeFromApi($api, string $vehicleId): array
     $fillups = [];
     $entries = [];
     try {
-        $fillups = $api->getVehicleFillups($vehicleId, 200);
-        $entries = $api->getVehicleEntries($vehicleId, 200);
+        $fillups = $api->getAllVehicleFillups($vehicleId);
+        $entries = $api->getAllVehicleEntries($vehicleId);
     } catch (Throwable $e) {
         return ['eintraege' => [], 'jahrListe' => []];
     }
@@ -135,7 +135,7 @@ function getFahrleistungFromApi($api, string $vehicleId, array $fahrzeug, $curre
     }
 
     try {
-        $fillups = $api->getVehicleFillups($vehicleId, 200);
+        $fillups = $api->getAllVehicleFillups($vehicleId);
     } catch (Throwable $e) {
         return null;
     }
@@ -152,7 +152,7 @@ function getFahrleistungFromApi($api, string $vehicleId, array $fahrzeug, $curre
 function getLetzterEintragApi($api, string $vehicleId, string $category): ?array
 {
     try {
-        $entries = $api->getVehicleEntries($vehicleId, 200);
+        $entries = $api->getAllVehicleEntries($vehicleId);
         foreach ($entries as $e) {
             if (isset($e['category']) && strcasecmp($e['category'], $category) === 0) {
                 return [
@@ -201,7 +201,8 @@ function getStatistikDatenFromApi($api, string $vehicleId): array
     foreach ($fillupsOnly as $row) {
         $mengeSeitVoll += (float)($row['menge'] ?? 0);
         if (!empty($row['vollgetankt'])) {
-            if ($letzteVoll && ($row['tachostand'] - $letzteVoll['tachostand']) > 0) {
+            // skip_previous: nur neuer Startpunkt, kein Verbrauch über die Lücke
+            if ($letzteVoll && empty($row['skip_previous']) && ($row['tachostand'] - $letzteVoll['tachostand']) > 0) {
                 $km = $row['tachostand'] - $letzteVoll['tachostand'];
                 $monat = substr($row['datum'], 0, 7);
                 if (!isset($verbrauchProMonat[$monat])) {
@@ -261,7 +262,7 @@ function getStatistikDatenFromApi($api, string $vehicleId): array
         $jahresdaten[$y]['gekauft_ausgaben'] += (float)($row['kosten'] ?? 0);
         $mengeSeitVoll2 += (float)($row['menge'] ?? 0);
         if (!empty($row['vollgetankt'])) {
-            if ($letzteVoll2 && ($row['tachostand'] - $letzteVoll2['tachostand']) > 0) {
+            if ($letzteVoll2 && empty($row['skip_previous']) && ($row['tachostand'] - $letzteVoll2['tachostand']) > 0) {
                 $km = $row['tachostand'] - $letzteVoll2['tachostand'];
                 $jahresdaten[$y]['verbrauch_menge'] += $mengeSeitVoll2;
                 $jahresdaten[$y]['verbrauch_km'] += $km;
@@ -435,4 +436,73 @@ function speichereFahrzeugBild($api, string $vehicleId, array $files, array $pos
         }
     }
     return null;
+}
+
+/**
+ * Fälligkeiten (TÜV, Wartung, Versicherung, Steuer) aus den erfassten Ausgaben ableiten.
+ * Regeln: TÜV alle 24 Monate, Wartung/Inspektion alle 12 Monate oder 15.000 km,
+ * Versicherung und Steuer jährlich – jeweils ab dem letzten Eintrag der Kategorie.
+ * @return array Liste mit titel, kategorie, letzte, faellig_datum, faellig_km, status (ok|bald|ueberfaellig|unbekannt), tage
+ */
+function getFaelligkeitenFromApi($api, string $vehicleId, $currentOdo): array
+{
+    $regeln = [
+        ['titel' => 'TÜV', 'kategorien' => ['TUV'], 'monate' => 24, 'km' => null],
+        ['titel' => 'Wartung / Inspektion', 'kategorien' => ['Wartung', 'Inspektion'], 'monate' => 12, 'km' => 15000],
+        ['titel' => 'Versicherung', 'kategorien' => ['Versicherung'], 'monate' => 12, 'km' => null],
+        ['titel' => 'Kfz-Steuer', 'kategorien' => ['Steuer'], 'monate' => 12, 'km' => null],
+    ];
+
+    try {
+        $entries = $api->getAllVehicleEntries($vehicleId);
+    } catch (Throwable $e) {
+        return [];
+    }
+
+    $heute = new DateTimeImmutable('today');
+    $ergebnis = [];
+    foreach ($regeln as $regel) {
+        $letzte = null;
+        foreach ($entries as $e) {
+            if (in_array($e['category'] ?? '', $regel['kategorien'], true) && !empty($e['occurred_at'])) {
+                if ($letzte === null || strtotime($e['occurred_at']) > strtotime($letzte['occurred_at'])) {
+                    $letzte = $e;
+                }
+            }
+        }
+
+        $zeile = [
+            'titel' => $regel['titel'],
+            'kategorie' => $regel['kategorien'][0],
+            'letzte' => null,
+            'faellig_datum' => null,
+            'faellig_km' => null,
+            'status' => 'unbekannt',
+            'tage' => null,
+        ];
+        if ($letzte !== null) {
+            $letztesDatum = (new DateTimeImmutable($letzte['occurred_at']))->setTime(0, 0);
+            $faellig = $letztesDatum->modify('+' . $regel['monate'] . ' months');
+            $tage = (int)$heute->diff($faellig)->format('%r%a');
+            $zeile['letzte'] = $letztesDatum->format('Y-m-d');
+            $zeile['faellig_datum'] = $faellig->format('Y-m-d');
+            $zeile['tage'] = $tage;
+
+            $restKm = null;
+            if ($regel['km'] !== null && isset($letzte['odometer_km']) && $currentOdo !== null) {
+                $zeile['faellig_km'] = (int)$letzte['odometer_km'] + $regel['km'];
+                $restKm = $zeile['faellig_km'] - (int)$currentOdo;
+            }
+
+            if ($tage < 0 || ($restKm !== null && $restKm <= 0)) {
+                $zeile['status'] = 'ueberfaellig';
+            } elseif ($tage <= 30 || ($restKm !== null && $restKm <= 1000)) {
+                $zeile['status'] = 'bald';
+            } else {
+                $zeile['status'] = 'ok';
+            }
+        }
+        $ergebnis[] = $zeile;
+    }
+    return $ergebnis;
 }

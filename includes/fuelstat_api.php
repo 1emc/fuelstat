@@ -6,6 +6,8 @@ class FuelstatApi
 {
     private string $baseUrl;
     private ?string $token;
+    /** GET-Antworten innerhalb eines Seitenaufrufs; wird bei jeder Änderung geleert */
+    private array $getCache = [];
 
     public function __construct(?string $token = null, ?string $baseUrl = null)
     {
@@ -67,6 +69,24 @@ class FuelstatApi
     public function deleteFillup(string $fillupId): array { return $this->request('DELETE', '/fillups/' . rawurlencode($fillupId)); }
     public function getVehicleStats(string $vehicleId): array { return $this->request('GET', '/vehicles/' . rawurlencode($vehicleId) . '/stats'); }
     public function getVehicleEntries(string $vehicleId, int $limit = 50): array { return $this->request('GET', '/vehicles/' . rawurlencode($vehicleId) . '/entries?limit=' . $limit); }
+
+    /** Alle Tankfüllungen eines Fahrzeugs (seitenweise geladen, ohne 200er-Grenze). */
+    public function getAllVehicleFillups(string $vehicleId): array { return $this->getAllPages('/vehicles/' . rawurlencode($vehicleId) . '/fillups'); }
+
+    /** Alle Ausgaben eines Fahrzeugs (seitenweise geladen, ohne 200er-Grenze). */
+    public function getAllVehicleEntries(string $vehicleId): array { return $this->getAllPages('/vehicles/' . rawurlencode($vehicleId) . '/entries'); }
+
+    private function getAllPages(string $path): array
+    {
+        $alle = [];
+        $offset = 0;
+        do {
+            $seite = $this->request('GET', $path . '?limit=200&offset=' . $offset);
+            $alle = array_merge($alle, $seite);
+            $offset += 200;
+        } while (count($seite) === 200);
+        return $alle;
+    }
     public function postEntry(array $data): array { return $this->request('POST', '/entries', $data); }
     public function getEntry(string $entryId): array { return $this->request('GET', '/entries/' . rawurlencode($entryId)); }
     public function patchEntry(string $entryId, array $data): array { return $this->request('PATCH', '/entries/' . rawurlencode($entryId), $data); }
@@ -78,6 +98,12 @@ class FuelstatApi
     private function request(string $method, string $path, ?array $payload = null, ?array $multipart = null): array
     {
         $url = $this->baseUrl . '/' . ltrim($path, '/');
+        if ($method === 'GET' && array_key_exists($url, $this->getCache)) {
+            return $this->getCache[$url];
+        }
+        if ($method !== 'GET') {
+            $this->getCache = [];
+        }
         $ch = curl_init($url);
         if ($ch === false) {
             throw new RuntimeException('curl_init failed');
@@ -133,6 +159,9 @@ class FuelstatApi
             throw new RuntimeException((string)$message, $httpCode);
         }
 
+        if ($method === 'GET') {
+            $this->getCache[$url] = $data;
+        }
         return $data;
     }
 }

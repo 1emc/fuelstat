@@ -1359,6 +1359,7 @@ app.delete('/api/v1/fillups/:fillupId', auth, async (req, res) => {
 app.get('/api/v1/vehicles/:vehicleId/fillups', auth, async (req, res) => {
   const vehicleId = String(req.params.vehicleId || '').trim();
   const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));
+  const offset = Math.max(0, Math.floor(Number(req.query.offset || 0)) || 0);
 
   try {
     const v = await pool.query('SELECT 1 FROM vehicles WHERE id = $1 AND user_id = $2', [vehicleId, req.user.sub]);
@@ -1379,9 +1380,9 @@ app.get('/api/v1/vehicles/:vehicleId/fillups', auth, async (req, res) => {
          skip_previous
        FROM fillups
        WHERE user_id = $1 AND vehicle_id = $2
-       ORDER BY filled_at DESC
-       LIMIT $3`,
-      [req.user.sub, vehicleId, limit]
+       ORDER BY filled_at DESC, created_at DESC
+       LIMIT $3 OFFSET $4`,
+      [req.user.sub, vehicleId, limit, offset]
     );
 
     // Für ältere Clients zusätzlich kompatible Felder anbieten
@@ -1578,6 +1579,7 @@ app.delete('/api/v1/entries/:entryId', auth, async (req, res) => {
 app.get('/api/v1/vehicles/:vehicleId/entries', auth, async (req, res) => {
   const vehicleId = String(req.params.vehicleId || '').trim();
   const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));
+  const offset = Math.max(0, Math.floor(Number(req.query.offset || 0)) || 0);
 
   try {
     // Fahrzeug-Besitz prüfen
@@ -1602,8 +1604,8 @@ app.get('/api/v1/vehicles/:vehicleId/entries', auth, async (req, res) => {
        FROM expenses
        WHERE user_id = $1 AND vehicle_id = $2
        ORDER BY occurred_at DESC, created_at DESC
-       LIMIT $3`,
-      [req.user.sub, vehicleId, limit]
+       LIMIT $3 OFFSET $4`,
+      [req.user.sub, vehicleId, limit, offset]
     );
 
     res.json(r.rows);

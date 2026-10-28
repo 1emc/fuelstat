@@ -8,6 +8,7 @@ $currentOdo = $stats['currentOdo'] ?? null;
 $trend = $stats['trend'] ?? null;
 $avgPrice = $stats['avgPricePerLiter'] ?? null;
 $fahrleistung = getFahrleistungFromApi($api, $fahrzeug_id, $fahrzeug, $currentOdo);
+$faelligkeiten = getFaelligkeitenFromApi($api, $fahrzeug_id, $currentOdo);
 
 $letzterReifen = getLetzterEintragApi($api, $fahrzeug_id, 'Reifen');
 $letzteWartung = getLetzterEintragApi($api, $fahrzeug_id, 'Wartung');
@@ -148,6 +149,30 @@ $fahrzeugDetails = array_filter([
                     </div>
                 </div>
             </div>
+
+            <h3 class="mt-4">Fälligkeiten</h3>
+            <ul class="list-group mb-2">
+                <?php foreach ($faelligkeiten as $f):
+                    $farbe = ['ueberfaellig' => 'danger', 'bald' => 'warning', 'ok' => 'success', 'unbekannt' => 'secondary'][$f['status']];
+                    $text = ['ueberfaellig' => 'überfällig', 'bald' => 'bald fällig', 'ok' => 'ok', 'unbekannt' => 'kein Eintrag'][$f['status']];
+                ?>
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong><?= htmlspecialchars($f['titel']) ?></strong><br>
+                        <small class="text-muted">
+                            <?php if ($f['faellig_datum']): ?>
+                                fällig am <?= date('d.m.Y', strtotime($f['faellig_datum'])) ?>
+                                <?php if ($f['faellig_km']): ?> oder bei <?= number_format($f['faellig_km'], 0, ',', '.') ?> km<?php endif; ?>
+                                · zuletzt <?= date('d.m.Y', strtotime($f['letzte'])) ?>
+                            <?php else: ?>
+                                <a href="../pages/eintrag_hinzufuegen.php?fahrzeug_id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?>&kategorie=<?= urlencode($f['kategorie']) ?>">Letzten Termin erfassen</a>, um eine Erinnerung zu bekommen
+                            <?php endif; ?>
+                        </small>
+                    </div>
+                    <span class="badge text-bg-<?= $farbe ?>"><?= $text ?></span>
+                </li>
+                <?php endforeach; ?>
+            </ul>
         </div>
     </div>
     <div class="d-flex gap-2 mt-3">
