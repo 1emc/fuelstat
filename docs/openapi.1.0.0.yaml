@@ -909,6 +909,156 @@ paths:
         "500":
           $ref: "#/components/responses/ServerError"
 
+  /api/v1/vehicles/{vehicleId}/import:
+    post:
+      tags: [Entries]
+      summary: Import fillups and entries (e.g. from CSV)
+      description: "Max. 1000 Zeilen, alles in einer Transaktion. Duplikate (gleiches Datum + Tachostand bzw. Datum + Kategorie + Betrag) werden übersprungen."
+      operationId: postVehicleImport
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fillups:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/FillupCreateRequest"
+                entries:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/EntryCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  imported:
+                    type: object
+                    properties:
+                      fillups: { type: integer }
+                      entries: { type: integer }
+                  skipped:
+                    type: object
+                    properties:
+                      fillups: { type: integer }
+                      entries: { type: integer }
+        "400":
+          description: nothing_to_import | too_many_rows | invalid_rows
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/vehicles/{vehicleId}/reminders:
+    get:
+      tags: [Vehicles]
+      summary: Due dates (TÜV, service, insurance, tax)
+      operationId: getVehicleReminders
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Reminder"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/auth/mail-settings:
+    get:
+      tags: [Users]
+      summary: Get own e-mail notification settings
+      operationId: getMailSettings
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MailSettings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      tags: [Users]
+      summary: Save own e-mail notification settings
+      operationId: putMailSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MailSettingsRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MailSettings"
+        "400":
+          description: invalid_* | mail_not_configured | smtp_host_not_allowed | smtp_host_not_found
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/auth/mail-settings/test:
+    post:
+      tags: [Users]
+      summary: Send a test mail with the saved settings
+      operationId: postMailTest
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: mail_not_configured | smtp_host_not_allowed | smtp_host_not_found
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "502":
+          description: smtp_failed (detail enthält die Meldung des Mailservers)
+
+  /api/v1/auth/mail-settings/send-now:
+    post:
+      tags: [Users]
+      summary: Send reminders or the report for the previous month now
+      operationId: postMailSendNow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: [reminders, report]
+              required: [type]
+      responses:
+        "200":
+          description: "OK ({ sent: true } oder { sent: false, reason: nothing_due })"
+        "400":
+          description: invalid_type | mail_not_configured
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "502":
+          description: smtp_failed
+
 components:
   securitySchemes:
     BearerAuth:
@@ -1524,6 +1674,48 @@ components:
           type: string
           description: Nur bei /auth/mfa/disable erforderlich
       required: [code]
+
+    Reminder:
+      type: object
+      properties:
+        title: { type: string, example: "TÜV" }
+        category: { type: string, example: "TUV" }
+        last: { type: string, format: date, nullable: true }
+        due_date: { type: string, format: date, nullable: true }
+        due_km: { type: integer, nullable: true }
+        status: { type: string, enum: [ok, bald, ueberfaellig, unbekannt] }
+        days: { type: integer, nullable: true }
+
+    MailSettings:
+      type: object
+      properties:
+        smtp_host: { type: string, nullable: true }
+        smtp_port: { type: integer, nullable: true }
+        smtp_security: { type: string, enum: [tls, starttls, none] }
+        smtp_user: { type: string, nullable: true }
+        has_password: { type: boolean }
+        from_address: { type: string, nullable: true }
+        to_address: { type: string, nullable: true }
+        reminders_enabled: { type: boolean }
+        reminder_days: { type: integer }
+        monthly_report: { type: boolean }
+        last_sent_at: { type: string, format: date-time, nullable: true }
+        last_error: { type: string, nullable: true }
+
+    MailSettingsRequest:
+      type: object
+      properties:
+        smtpHost: { type: string, nullable: true }
+        smtpPort: { type: integer, enum: [25, 465, 587, 2525] }
+        smtpSecurity: { type: string, enum: [tls, starttls, none] }
+        smtpUser: { type: string, nullable: true }
+        smtpPassword: { type: string, description: "Nur senden, wenn es sich ändert" }
+        clearPassword: { type: boolean }
+        fromAddress: { type: string, nullable: true }
+        toAddress: { type: string, nullable: true }
+        remindersEnabled: { type: boolean }
+        reminderDays: { type: integer, minimum: 1, maximum: 180 }
+        monthlyReport: { type: boolean }
 
     EntryListResponse:
       type: array

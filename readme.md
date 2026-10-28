@@ -22,6 +22,12 @@ Fuelstat ist eine Web-App, mit der du Tankfüllungen, Ladevorgänge und alle and
 - CO₂-Ausstoß gesamt und pro km
 - Fälligkeiten: TÜV alle 24 Monate, Wartung alle 12 Monate oder 15.000 km, Versicherung und Steuer jährlich – jeweils ab dem letzten erfassten Eintrag
 - Export als CSV (für Excel) und als Bericht zum Drucken bzw. Speichern als PDF
+- Import aus CSV (z. B. Excel-Listen, andere Apps oder ein Fuelstat-Export) mit Spaltenzuordnung, Vorschau und Duplikaterkennung
+
+**E-Mail-Benachrichtigungen**
+- Jeder Benutzer hinterlegt seinen eigenen Mailserver (SMTP) in den Einstellungen
+- Erinnerung, wenn TÜV, Wartung, Versicherung oder Steuer bald fällig sind (Vorlaufzeit einstellbar) und noch einmal, wenn sie überfällig sind
+- Monatsbericht mit Kosten, Strecke, Verbrauch und anstehenden Terminen je Fahrzeug
 
 **Konto**
 - Registrierung und Login, optional mit Zwei-Faktor-Authentifizierung (Authenticator-App)
@@ -57,7 +63,13 @@ ADMIN_USER_IDS=
 # Optional: Ablage und URL-Pfad für hochgeladene Bilder
 # UPLOAD_DIR=../uploads
 # MEDIA_BASE_URL=/uploads
+# Optional: E-Mail-Benachrichtigungen
+# MAIL_ENCRYPTION_KEY=eigener-schluessel-fuer-smtp-passwoerter   (Standard: aus JWT_SECRET abgeleitet)
+# ALLOW_PRIVATE_SMTP=true      Mailserver mit interner Adresse erlauben (z. B. im selben Netz)
+# NOTIFICATIONS_ENABLED=false  automatischen Versand abschalten
 ```
+
+Wird `JWT_SECRET` ohne eigenen `MAIL_ENCRYPTION_KEY` geändert, müssen die Benutzer ihr SMTP-Passwort neu eingeben.
 
 Dann starten:
 
@@ -69,7 +81,7 @@ Die API läuft danach auf `127.0.0.1:3000` (nur lokal erreichbar).
 
 ### 2. Datenbankschema
 
-Neue Installation: `backend/database/postgres_init.sql` einspielen, danach `postgres_006_fix_fillup_units.sql`.
+Neue Installation: `backend/database/postgres_init.sql` einspielen, danach `postgres_006_fix_fillup_units.sql` und `postgres_007_mail_settings.sql`.
 
 Bestehende Installation: alle noch nicht eingespielten `postgres_00X_*.sql` der Reihe nach ausführen, z. B. über Adminer oder:
 
@@ -95,7 +107,8 @@ docker compose exec -T db psql -U fuelstat -d fuelstat < ../backend/database/pos
 ```bash
 cd backend && npm install && npm run dev   # API mit Auto-Reload
 php -S 127.0.0.1:8088                      # Frontend
-php tests/VerbrauchProMonatTest.php        # PHP-Test
+php tests/VerbrauchProMonatTest.php        # PHP-Tests
+php tests/CsvImportTest.php
 ```
 
 ## Kontakt
