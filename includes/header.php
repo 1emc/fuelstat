@@ -88,6 +88,18 @@ if (isApiAuthenticated()) {
 	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 
 
+    <!-- Darkmode: gespeicherte Wahl, sonst Systemeinstellung (vor dem CSS, damit nichts aufblitzt) -->
+    <script>
+      (function () {
+        var theme = null;
+        try { theme = localStorage.getItem('fuelstat-theme'); } catch (e) {}
+        if (theme !== 'light' && theme !== 'dark') {
+          theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-bs-theme', theme);
+      })();
+    </script>
+
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
@@ -101,7 +113,7 @@ if (isApiAuthenticated()) {
 <body>
 
 <!-- Navigation Menu -->
-<nav class="navbar sticky-top navbar-expand-lg navbar-light bg-light">
+<nav class="navbar sticky-top navbar-expand-lg bg-body-tertiary">
     <div class="container-fluid">
         <a class="navbar-brand" href="<?= htmlspecialchars($baseUrl) ?>index.php">
             <i class="fas fa-gas-pump"></i> Fuelstat
@@ -110,7 +122,7 @@ if (isApiAuthenticated()) {
             aria-controls="navbarNav" aria-expanded="false" aria-label="Navigation umschalten">
             <span class="navbar-toggler-icon"></span>
         </button>
-        <div class="collapse navbar-collapse justify-content-end bg-light" id="navbarNav">
+        <div class="collapse navbar-collapse justify-content-end bg-body-tertiary" id="navbarNav">
             <ul class="navbar-nav">
                 <!-- Menüelemente -->
                 <li class="nav-item">
@@ -173,6 +185,12 @@ if (isApiAuthenticated()) {
                         <a class="nav-link" href="<?= htmlspecialchars($baseUrl) ?>pages/login.php">Anmelden</a>
                     </li>
                 <?php endif; ?>
+                <!-- Darkmode umschalten -->
+                <li class="nav-item">
+                    <button type="button" class="nav-link" id="themeToggle" aria-label="Darstellung umschalten">
+                        <i class="fas fa-moon"></i> <span class="d-lg-none">Darstellung</span>
+                    </button>
+                </li>
             </ul>
         </div>
     </div>
