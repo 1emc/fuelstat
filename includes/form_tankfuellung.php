@@ -3,7 +3,7 @@
 ?>
 <h2>Neue Tankfüllung hinzufügen</h2>
 <form method="post" action="eintrag_speichern.php">
-    <input type="hidden" name="fahrzeug_id" value="<?php echo $fahrzeug_id; ?>">
+    <input type="hidden" name="fahrzeug_id" value="<?= htmlspecialchars($fahrzeug_id) ?>">
     <input type="hidden" name="kategorie" value="Tankfüllung">
 
     <label for="datum">Datum:</label>

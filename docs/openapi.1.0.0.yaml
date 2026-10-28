@@ -1059,6 +1059,34 @@ paths:
         "502":
           description: smtp_failed
 
+  /api/v1/auth/login/mfa:
+    post:
+      tags: [Auth]
+      summary: Login step 2 with 2FA code
+      description: "mfaToken aus der mfa_required-Antwort von /auth/login (5 Minuten gültig) plus TOTP-Code."
+      operationId: postAuthLoginMfa
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mfaToken: { type: string }
+                code: { type: string, example: "123456" }
+              required: [mfaToken, code]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: invalid_mfa_token | invalid_mfa_code
+        "429":
+          description: too_many_attempts
+
 components:
   securitySchemes:
     BearerAuth:

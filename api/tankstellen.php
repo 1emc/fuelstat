@@ -1,66 +1,51 @@
 <?php
-// api/tankstellen.php
-require_once '../includes/functions.php';
+// api/tankstellen.php – Tankstellen in der Nähe über Tankerkönig (nur für angemeldete Nutzer)
+include __DIR__ . '/../includes/session.php';
+require_once __DIR__ . '/../includes/api_config.php';
+require_once __DIR__ . '/../includes/functions.php';
 header('Content-Type: application/json');
 
-if (!isset($_GET['lat'], $_GET['lng'], $_GET['radius'], $_GET['type'])) {
-    http_response_code(400);
-    echo json_encode(['error' => 'Fehlende Parameter'], JSON_UNESCAPED_UNICODE);
+$antwort = function (int $status, array $daten) {
+    http_response_code($status);
+    echo json_encode($daten, JSON_UNESCAPED_UNICODE);
     exit;
-}
-$lat = floatval($_GET['lat']);
-$lng = floatval($_GET['lng']);
-$radius = intval($_GET['radius']);
-$type = $_GET['type'];
+};
 
-// API-Key nur hier im Backend!
-$keyfile = __DIR__ . '/key.key';
-if (!file_exists($keyfile)) {
-    http_response_code(500);
-    echo json_encode(['error' => 'API-Key-Datei fehlt: key.key'], JSON_UNESCAPED_UNICODE);
-    exit;
+// Ohne Login würde jeder Besucher das Kontingent des API-Keys nutzen können
+if (!isApiAuthenticated()) {
+    $antwort(401, ['error' => 'Bitte anmelden.']);
 }
-$apikey = trim(file_get_contents($keyfile));
-if (!$apikey) {
-    http_response_code(500);
-    echo json_encode(['error' => 'API-Key in key.key ist leer'], JSON_UNESCAPED_UNICODE);
-    exit;
+// Session nicht länger sperren als nötig (der Tankerkönig-Aufruf kann dauern)
+session_write_close();
+
+$lat = filter_var($_GET['lat'] ?? null, FILTER_VALIDATE_FLOAT);
+$lng = filter_var($_GET['lng'] ?? null, FILTER_VALIDATE_FLOAT);
+$radius = filter_var($_GET['radius'] ?? null, FILTER_VALIDATE_INT);
+$type = $_GET['type'] ?? '';
+
+if ($lat === false || $lng === false || $lat === null || $lng === null || abs($lat) > 90 || abs($lng) > 180) {
+    $antwort(400, ['error' => 'Ungültige Koordinaten']);
+}
+if ($radius === false || $radius === null || $radius < 1 || $radius > 25) {
+    $antwort(400, ['error' => 'Radius muss zwischen 1 und 25 km liegen']);
+}
+// Tankerkönig kennt nur diese Sorten; alles andere (Elektro, Gas …) sucht alle Tankstellen
+if (!in_array($type, ['e5', 'e10', 'diesel', 'all'], true)) {
+    $type = 'all';
+}
+
+// API-Key nur hier im Backend – wird nie an den Browser ausgegeben
+$keyfile = __DIR__ . '/key.key';
+$apikey = is_readable($keyfile) ? trim((string)file_get_contents($keyfile)) : '';
+if ($apikey === '') {
+    error_log('[Tankstellen] API-Key-Datei api/key.key fehlt oder ist leer');
+    $antwort(500, ['error' => 'Die Tankstellensuche ist nicht eingerichtet.']);
 }
 
 $stations = getNearbyStationsTankerkoenig($lat, $lng, $radius, $type, $apikey);
-
 if ($stations === null) {
-    // Versuche, mehr Details zu liefern
-    $url = 'https://creativecommons.tankerkoenig.de/json/list.php'
-        . '?lat=' . urlencode($lat)
-        . '&lng=' . urlencode($lng)
-        . '&rad=' . urlencode($radius)
-        . '&type=' . urlencode($type)
-        . '&apikey=' . urlencode($apikey);
-    $context = stream_context_create(['http' => ['ignore_errors' => true]]);
-    $json = @file_get_contents($url, false, $context);
-    $httpStatus = isset($http_response_header[0]) ? $http_response_header[0] : 'unbekannt';
-    $apiError = null;
-    if ($json !== false) {
-        $data = json_decode($json, true);
-        if (isset($data['message'])) {
-            $apiError = $data['message'];
-        } elseif (isset($data['note'])) {
-            $apiError = $data['note'];
-        } elseif (isset($data['error'])) {
-            $apiError = $data['error'];
-        }
-    }
-    http_response_code(500);
-    echo json_encode([
-        'error' => 'Tankerkönig-API-Fehler',
-        'http_status' => $httpStatus,
-        'api_error' => $apiError,
-        'url' => $url
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
+    error_log('[Tankstellen] Tankerkönig-Anfrage fehlgeschlagen');
+    $antwort(502, ['error' => 'Tankerkönig-API-Fehler']);
 }
 
-echo json_encode(['stations' => $stations], JSON_UNESCAPED_UNICODE); 
-
-?>
+$antwort(200, ['stations' => $stations]);

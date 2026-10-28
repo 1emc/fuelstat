@@ -12,7 +12,7 @@ if (isApiAuthenticated()) {
 }
 
 $error = '';
-// 2FA-Zwischenschritt: E-Mail/Passwort liegen max. 5 Minuten serverseitig in der Session
+// 2FA-Zwischenschritt: nur das kurzlebige mfaToken der API liegt in der Session (kein Passwort)
 $pending = $_SESSION['mfa_pending'] ?? null;
 if ($pending && ($pending['time'] ?? 0) < time() - 300) {
     unset($_SESSION['mfa_pending']);
@@ -28,23 +28,19 @@ try {
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         include '../includes/db_connect.php';
 
-        $code = null;
-        if (isset($_POST['code']) && $pending) {
-            $email = $pending['email'];
-            $password = $pending['password'];
-            $code = preg_replace('/\s+/', '', (string)$_POST['code']);
-        } else {
-            $email = trim($_POST['email'] ?? '');
-            $password = $_POST['password'] ?? '';
-        }
+        $mfaSchritt = isset($_POST['code']) && $pending;
+        $email = $mfaSchritt ? ($pending['email'] ?? '') : trim($_POST['email'] ?? '');
+        $password = $_POST['password'] ?? '';
 
-        if ($email === '' || $password === '') {
+        if (!$mfaSchritt && ($email === '' || $password === '')) {
             $error = "Bitte E-Mail und Passwort eingeben.";
         } else {
             try {
                 // Login ohne Session-Token aufrufen (sonst wird alter Bearer mitgeschickt → 401)
                 $apiLogin = getApiClient(null);
-                $response = $apiLogin->postAuthLogin($email, $password, $code);
+                $response = $mfaSchritt
+                    ? $apiLogin->postAuthLoginMfa($pending['mfa_token'], preg_replace('/\s+/', '', (string)$_POST['code']))
+                    : $apiLogin->postAuthLogin($email, $password);
                 $data = $response['data'] ?? $response;
                 $token = $data['token'] ?? $data['access_token'] ?? $data['accessToken'] ?? '';
                 $user = $data['user'] ?? [];
@@ -68,12 +64,18 @@ try {
             } catch (RuntimeException $e) {
                 $msg = $e->getMessage();
                 error_log('[Login] API-Fehler: ' . $e->getCode() . ' ' . $msg);
-                if ($msg === 'mfa_required') {
-                    $_SESSION['mfa_pending'] = ['email' => $email, 'password' => $password, 'time' => time()];
+                if ($msg === 'mfa_required' && $e instanceof FuelstatApiException && !empty($e->data['mfaToken'])) {
+                    $_SESSION['mfa_pending'] = ['email' => $email, 'mfa_token' => $e->data['mfaToken'], 'time' => time()];
                     $show_mfa_form = true;
                 } elseif ($msg === 'invalid_mfa_code') {
                     $show_mfa_form = true;
                     $error = 'Der Code ist falsch oder abgelaufen.';
+                } elseif ($msg === 'too_many_attempts') {
+                    $error = 'Zu viele Fehlversuche. Bitte in 15 Minuten erneut versuchen.';
+                } elseif ($msg === 'invalid_mfa_token') {
+                    unset($_SESSION['mfa_pending']);
+                    $show_mfa_form = false;
+                    $error = 'Die Anmeldung ist abgelaufen. Bitte erneut anmelden.';
                 } elseif ($e->getCode() === 401 || $msg === 'invalid_credentials') {
                     unset($_SESSION['mfa_pending']);
                     $show_mfa_form = false;

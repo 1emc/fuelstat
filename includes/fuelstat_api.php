@@ -6,11 +6,14 @@ require_once __DIR__ . '/api_config.php';
 class FuelstatApiException extends RuntimeException
 {
     public ?string $detail;
+    /** Vollständige Fehlerantwort der API (z. B. mfaToken bei mfa_required) */
+    public array $data;
 
-    public function __construct(string $message, int $code, ?string $detail = null)
+    public function __construct(string $message, int $code, ?string $detail = null, array $data = [])
     {
         parent::__construct($message, $code);
         $this->detail = $detail;
+        $this->data = $data;
     }
 }
 
@@ -34,6 +37,11 @@ class FuelstatApi
             $payload['code'] = $code;
         }
         return $this->request('POST', '/auth/login', $payload);
+    }
+
+    public function postAuthLoginMfa(string $mfaToken, string $code): array
+    {
+        return $this->request('POST', '/auth/login/mfa', ['mfaToken' => $mfaToken, 'code' => $code]);
     }
 
     public function postAuthPassword(string $currentPassword, string $newPassword): array
@@ -174,7 +182,7 @@ class FuelstatApi
         if ($httpCode >= 400) {
             $message = $data['error'] ?? $data['message'] ?? ('HTTP ' . $httpCode);
             error_log('[FuelstatApi] ' . $method . ' ' . $url . ' => ' . $httpCode . ' ' . (string)$message);
-            throw new FuelstatApiException((string)$message, $httpCode, isset($data['detail']) ? (string)$data['detail'] : null);
+            throw new FuelstatApiException((string)$message, $httpCode, isset($data['detail']) ? (string)$data['detail'] : null, $data);
         }
 
         if ($method === 'GET') {

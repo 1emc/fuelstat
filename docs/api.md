@@ -299,7 +299,11 @@ Fremde oder ungültige IDs liefern 404 `entry_not_found`.
 * `POST /auth/mfa/enable` `{ "code" }` – aktiviert 2FA nach korrektem Code
 * `POST /auth/mfa/disable` `{ "password", "code" }` – deaktiviert 2FA
 
-Bei aktivem 2FA antwortet `POST /auth/login` ohne `code` mit 401 `mfa_required`, mit falschem Code mit 401 `invalid_mfa_code`. TOTP: 30 Sekunden, 6 Stellen, SHA1 (kompatibel mit Google Authenticator, Aegis, 1Password usw.).
+Bei aktivem 2FA antwortet `POST /auth/login` ohne `code` mit 401 `{ "error": "mfa_required", "mfaToken": "…" }`. Das `mfaToken` ist 5 Minuten gültig und wird mit dem Code an `POST /auth/login/mfa` `{ "mfaToken", "code" }` geschickt; die Antwort enthält dann das Zugangstoken. Ein falscher Code liefert 401 `invalid_mfa_code`, ein abgelaufenes `mfaToken` 401 `invalid_mfa_token`. Alternativ kann `code` direkt bei `/auth/login` mitgeschickt werden.
+
+**Fehlversuche:** Nach 10 falschen Passwörtern je E-Mail-Adresse bzw. 5 falschen 2FA-Codes je Benutzer antworten Login, 2FA und Passwortänderung 15 Minuten lang mit 429 `too_many_attempts`.
+
+**Registrierung:** Mit `REGISTRATION_ENABLED=false` antwortet `POST /auth/register` mit 403 `registration_disabled`. TOTP: 30 Sekunden, 6 Stellen, SHA1 (kompatibel mit Google Authenticator, Aegis, 1Password usw.).
 
 `GET /whoami` liefert zusätzlich `is_admin`.
 
@@ -350,11 +354,7 @@ Umgebungsvariablen des Backends:
 { "error": "some_error_code" }
 ```
 
-Manchmal zusätzlich:
-
-```json
-{ "error": "server_error", "detail": "..." }
-```
+Interne Fehler (500) enthalten keine Details mehr; sie stehen nur im Log der API.
 
 ## Quick curl examples
 
