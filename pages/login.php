@@ -4,52 +4,74 @@ require_once __DIR__ . '/../includes/api_helpers.php';
 ob_start();
 
 $error = '';
-$show_mfa_form = false;
+// 2FA-Zwischenschritt: E-Mail/Passwort liegen max. 5 Minuten serverseitig in der Session
+$pending = $_SESSION['mfa_pending'] ?? null;
+if ($pending && ($pending['time'] ?? 0) < time() - 300) {
+    unset($_SESSION['mfa_pending']);
+    $pending = null;
+}
+if (isset($_GET['abbrechen'])) {
+    unset($_SESSION['mfa_pending']);
+    $pending = null;
+}
+$show_mfa_form = $pending !== null;
 
 try {
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isApiAuthenticated()) {
         include '../includes/db_connect.php';
 
-        // API-Login: E-Mail + Passwort (OpenAPI Auth)
-        if (!isApiAuthenticated() && isset($_POST['email']) && isset($_POST['password'])) {
+        $code = null;
+        if (isset($_POST['code']) && $pending) {
+            $email = $pending['email'];
+            $password = $pending['password'];
+            $code = preg_replace('/\s+/', '', (string)$_POST['code']);
+        } else {
             $email = trim($_POST['email'] ?? '');
             $password = $_POST['password'] ?? '';
+        }
 
-            if ($email === '' || $password === '') {
-                $error = "Bitte E-Mail und Passwort eingeben.";
-            } else {
-                try {
-                    // Login ohne Session-Token aufrufen (sonst wird alter Bearer mitgeschickt → 401)
-                    $apiLogin = getApiClient(null);
-                    $response = $apiLogin->postAuthLogin($email, $password);
-                    $data = $response['data'] ?? $response;
-                    $token = $data['token'] ?? $data['access_token'] ?? $data['accessToken'] ?? '';
-                    $user = $data['user'] ?? [];
-                    $userId = $user['id'] ?? $user['userId'] ?? null;
-                    if ($token !== '') {
-                        setApiToken($token, [
-                            'id' => $userId,
-                            'email' => $user['email'] ?? $email,
-                        ]);
-                        error_log('[Login] success token_len=' . strlen($token) . ' session_id=' . session_id() . ' stored_token_len=' . strlen((string)getApiToken()));
-                        session_write_close();
-                        while (ob_get_level()) {
-                            ob_end_clean();
-                        }
-                        header('Location: /index.php', true, 302);
-                        exit;
+        if ($email === '' || $password === '') {
+            $error = "Bitte E-Mail und Passwort eingeben.";
+        } else {
+            try {
+                // Login ohne Session-Token aufrufen (sonst wird alter Bearer mitgeschickt → 401)
+                $apiLogin = getApiClient(null);
+                $response = $apiLogin->postAuthLogin($email, $password, $code);
+                $data = $response['data'] ?? $response;
+                $token = $data['token'] ?? $data['access_token'] ?? $data['accessToken'] ?? '';
+                $user = $data['user'] ?? [];
+                $userId = $user['id'] ?? $user['userId'] ?? null;
+                if ($token !== '') {
+                    unset($_SESSION['mfa_pending']);
+                    session_regenerate_id(true);
+                    setApiToken($token, [
+                        'id' => $userId,
+                        'email' => $user['email'] ?? $email,
+                    ]);
+                    session_write_close();
+                    while (ob_get_level()) {
+                        ob_end_clean();
                     }
-                    error_log('[Login] missing token in response for ' . $email . ', keys=' . implode(',', array_keys($data)));
-                    $error = 'Login-Antwort enthielt kein Token.';
-                } catch (RuntimeException $e) {
-                    $code = $e->getCode();
-                    $msg = $e->getMessage();
-                    error_log('[Login] API-Fehler: ' . $code . ' ' . $msg);
-                    if ($code === 401 || stripos($msg, 'invalid_credentials') !== false) {
-                        $error = "Ungültige E-Mail oder Passwort.";
-                    } else {
-                        $error = $msg;
-                    }
+                    header('Location: /index.php', true, 302);
+                    exit;
+                }
+                error_log('[Login] missing token in response for ' . $email . ', keys=' . implode(',', array_keys($data)));
+                $error = 'Login-Antwort enthielt kein Token.';
+            } catch (RuntimeException $e) {
+                $msg = $e->getMessage();
+                error_log('[Login] API-Fehler: ' . $e->getCode() . ' ' . $msg);
+                if ($msg === 'mfa_required') {
+                    $_SESSION['mfa_pending'] = ['email' => $email, 'password' => $password, 'time' => time()];
+                    $show_mfa_form = true;
+                } elseif ($msg === 'invalid_mfa_code') {
+                    $show_mfa_form = true;
+                    $error = 'Der Code ist falsch oder abgelaufen.';
+                } elseif ($e->getCode() === 401 || $msg === 'invalid_credentials') {
+                    unset($_SESSION['mfa_pending']);
+                    $show_mfa_form = false;
+                    $error = "Ungültige E-Mail oder Passwort.";
+                } else {
+                    $error = $msg;
                 }
             }
         }
@@ -88,6 +110,25 @@ try {
                         </div>
                     <?php endif; ?>
 
+                    <?php if ($show_mfa_form): ?>
+                    <form method="post">
+                        <p class="text-muted">Gib den 6-stelligen Code aus deiner Authenticator-App ein.</p>
+                        <div class="mb-4">
+                            <label for="code" class="form-label">Bestätigungscode</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-shield-alt"></i></span>
+                                <input type="text" class="form-control" id="code" name="code" inputmode="numeric" pattern="[0-9 ]{6,7}"
+                                       autocomplete="one-time-code" placeholder="123456" required autofocus>
+                            </div>
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-sign-in-alt me-2"></i> Bestätigen
+                            </button>
+                            <a href="login.php?abbrechen=1" class="btn btn-outline-secondary">Abbrechen</a>
+                        </div>
+                    </form>
+                    <?php else: ?>
                     <form method="post">
                         <div class="mb-3">
                             <label for="email" class="form-label">E-Mail</label>
@@ -111,6 +152,7 @@ try {
                             </button>
                         </div>
                     </form>
+                    <?php endif; ?>
 
                     <div class="text-center mt-4">
                         <p class="text-muted mb-0">

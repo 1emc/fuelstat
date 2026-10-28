@@ -13,12 +13,30 @@ class FuelstatApi
         $this->token = $token ?? getApiToken();
     }
 
-    public function postAuthLogin(string $email, string $password): array
+    public function postAuthLogin(string $email, string $password, ?string $code = null): array
     {
-        return $this->request('POST', '/auth/login', [
-            'email' => $email,
-            'password' => $password,
-        ]);
+        $payload = ['email' => $email, 'password' => $password];
+        if ($code !== null) {
+            $payload['code'] = $code;
+        }
+        return $this->request('POST', '/auth/login', $payload);
+    }
+
+    public function postAuthPassword(string $currentPassword, string $newPassword): array
+    {
+        return $this->request('POST', '/auth/password', ['currentPassword' => $currentPassword, 'newPassword' => $newPassword]);
+    }
+
+    public function postMfaSetup(): array { return $this->request('POST', '/auth/mfa/setup', []); }
+    public function postMfaEnable(string $code): array { return $this->request('POST', '/auth/mfa/enable', ['code' => $code]); }
+    public function postMfaDisable(string $password, string $code): array { return $this->request('POST', '/auth/mfa/disable', ['password' => $password, 'code' => $code]); }
+    public function revokeToken(string $token): array { return $this->request('POST', '/auth/tokens/revoke', ['token' => $token, 'reason' => 'logout']); }
+    public function revokeAllTokens(string $userId): array { return $this->request('POST', '/auth/users/' . rawurlencode($userId) . '/revoke-all', ['reason' => 'logout_all']); }
+    public function getUsers(): array { return $this->request('GET', '/auth/users'); }
+    public function deleteUser(string $userId): void { $this->request('DELETE', '/auth/users/' . rawurlencode($userId)); }
+    public function uploadUserMedia(string $filePath, string $mimeType, string $fileName): array
+    {
+        return $this->request('POST', '/media/upload', null, ['file' => new CURLFile($filePath, $mimeType, $fileName)]);
     }
 
     public function postAuthRegister(string $email, string $password): array

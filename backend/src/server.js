@@ -4,7 +4,7 @@ const cors = require('cors');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
-const { randomUUID } = require('crypto');
+const { randomUUID, randomBytes, createHmac, timingSafeEqual } = require('crypto');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -121,6 +121,62 @@ async function auth(req, res, next) {
   }
 }
 
+// --- TOTP (RFC 6238) für 2FA: 30 s, 6 Stellen, SHA1 – kompatibel mit gängigen Authenticator-Apps ---
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+function base32Encode(buf) {
+  let bits = 0;
+  let value = 0;
+  let out = '';
+  for (const byte of buf) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      out += BASE32_ALPHABET[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  if (bits > 0) out += BASE32_ALPHABET[(value << (5 - bits)) & 31];
+  return out;
+}
+
+function base32Decode(str) {
+  const clean = String(str).toUpperCase().replace(/[^A-Z2-7]/g, '');
+  let bits = 0;
+  let value = 0;
+  const out = [];
+  for (const ch of clean) {
+    value = (value << 5) | BASE32_ALPHABET.indexOf(ch);
+    bits += 5;
+    if (bits >= 8) {
+      out.push((value >>> (bits - 8)) & 255);
+      bits -= 8;
+    }
+  }
+  return Buffer.from(out);
+}
+
+function totpCode(secretBase32, counter) {
+  const msg = Buffer.alloc(8);
+  msg.writeBigUInt64BE(BigInt(counter));
+  const hmac = createHmac('sha1', base32Decode(secretBase32)).update(msg).digest();
+  const offset = hmac[hmac.length - 1] & 0xf;
+  const num = (hmac.readUInt32BE(offset) & 0x7fffffff) % 1000000;
+  return String(num).padStart(6, '0');
+}
+
+// Erlaubt ±1 Zeitfenster (je 30 s) für leicht abweichende Uhren
+function verifyTotp(secretBase32, code) {
+  const given = String(code || '').replace(/\s/g, '');
+  if (!secretBase32 || !/^\d{6}$/.test(given)) return false;
+  const counter = Math.floor(Date.now() / 1000 / 30);
+  for (const delta of [-1, 0, 1]) {
+    const expected = Buffer.from(totpCode(secretBase32, counter + delta));
+    if (timingSafeEqual(expected, Buffer.from(given))) return true;
+  }
+  return false;
+}
+
 // Optionale Zahl aus dem Request: undefined bleibt undefined, null/'' wird null
 function optionalNumber(value) {
   if (value === undefined) return undefined;
@@ -189,6 +245,7 @@ app.get('/api/v1/whoami', auth, async (req, res) => {
       profile_image_url: r.rows[0].profile_image_url,
       created_at: r.rows[0].created_at,
       updated_at: r.rows[0].updated_at,
+      is_admin: isAdmin(req),
       token: {
         jti: req.user.jti || null,
         iat: req.user.iat ? new Date(req.user.iat * 1000).toISOString() : null,
@@ -243,7 +300,7 @@ app.post('/api/v1/auth/login', async (req, res) => {
 
   try {
     const r = await pool.query(
-      `SELECT id, email, password_hash, username, mfa_enabled, profile_image_url, created_at, updated_at
+      `SELECT id, email, password_hash, username, mfa_enabled, mfa_secret, profile_image_url, created_at, updated_at
        FROM users WHERE email = $1`,
       [email]
     );
@@ -253,8 +310,100 @@ app.post('/api/v1/auth/login', async (req, res) => {
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
 
+    // 2FA: erst nach korrektem Passwort nach dem Code fragen
+    if (user.mfa_enabled) {
+      if (req.body?.code === undefined || req.body?.code === '') {
+        return res.status(401).json({ error: 'mfa_required' });
+      }
+      if (!verifyTotp(user.mfa_secret, req.body.code)) {
+        return res.status(401).json({ error: 'invalid_mfa_code' });
+      }
+    }
+
     delete user.password_hash;
+    delete user.mfa_secret;
     res.json({ token: signToken(user), user });
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// Change own password (current password required). Revokes all existing tokens and returns a new one.
+app.post('/api/v1/auth/password', auth, async (req, res) => {
+  const currentPassword = String(req.body?.currentPassword || '');
+  const newPassword = String(req.body?.newPassword || '');
+  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'missing_password' });
+  if (newPassword.length < 8) return res.status(400).json({ error: 'password_too_short' });
+
+  try {
+    const r = await pool.query('SELECT id, email, password_hash FROM users WHERE id = $1', [req.user.sub]);
+    if (r.rowCount === 0) return res.status(404).json({ error: 'user_not_found' });
+    const ok = await bcrypt.compare(currentPassword, r.rows[0].password_hash);
+    if (!ok) return res.status(401).json({ error: 'invalid_current_password' });
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await pool.query('UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2', [passwordHash, req.user.sub]);
+    await pool.query(
+      `INSERT INTO user_token_revocations (user_id, revoked_after, reason)
+       VALUES ($1, now(), 'password_changed')
+       ON CONFLICT (user_id) DO UPDATE SET revoked_after = now(), reason = 'password_changed'`,
+      [req.user.sub]
+    );
+    // JWT-iat hat Sekundengenauigkeit: kurz warten, damit das neue Token nach revoked_after liegt
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    res.json({ token: signToken(r.rows[0]) });
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// 2FA einrichten: neues Secret erzeugen (noch nicht aktiv, erst nach /mfa/enable)
+app.post('/api/v1/auth/mfa/setup', auth, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT email, mfa_enabled FROM users WHERE id = $1', [req.user.sub]);
+    if (r.rowCount === 0) return res.status(404).json({ error: 'user_not_found' });
+    if (r.rows[0].mfa_enabled) return res.status(409).json({ error: 'mfa_already_enabled' });
+
+    const secret = base32Encode(randomBytes(20));
+    await pool.query('UPDATE users SET mfa_secret = $1, updated_at = now() WHERE id = $2', [secret, req.user.sub]);
+    const label = encodeURIComponent(`Fuelstat:${r.rows[0].email}`);
+    res.json({
+      secret,
+      otpauthUrl: `otpauth://totp/${label}?secret=${secret}&issuer=Fuelstat&algorithm=SHA1&digits=6&period=30`
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// 2FA aktivieren: Code aus der Authenticator-App bestätigen
+app.post('/api/v1/auth/mfa/enable', auth, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT mfa_secret, mfa_enabled FROM users WHERE id = $1', [req.user.sub]);
+    if (r.rowCount === 0) return res.status(404).json({ error: 'user_not_found' });
+    if (r.rows[0].mfa_enabled) return res.status(409).json({ error: 'mfa_already_enabled' });
+    if (!r.rows[0].mfa_secret) return res.status(400).json({ error: 'mfa_not_set_up' });
+    if (!verifyTotp(r.rows[0].mfa_secret, req.body?.code)) return res.status(400).json({ error: 'invalid_mfa_code' });
+
+    await pool.query('UPDATE users SET mfa_enabled = true, updated_at = now() WHERE id = $1', [req.user.sub]);
+    res.json({ mfa_enabled: true });
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// 2FA deaktivieren: Passwort und aktueller Code erforderlich
+app.post('/api/v1/auth/mfa/disable', auth, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT password_hash, mfa_secret, mfa_enabled FROM users WHERE id = $1', [req.user.sub]);
+    if (r.rowCount === 0) return res.status(404).json({ error: 'user_not_found' });
+    if (!r.rows[0].mfa_enabled) return res.status(400).json({ error: 'mfa_not_enabled' });
+    const ok = await bcrypt.compare(String(req.body?.password || ''), r.rows[0].password_hash);
+    if (!ok) return res.status(401).json({ error: 'invalid_current_password' });
+    if (!verifyTotp(r.rows[0].mfa_secret, req.body?.code)) return res.status(400).json({ error: 'invalid_mfa_code' });
+
+    await pool.query('UPDATE users SET mfa_enabled = false, mfa_secret = NULL, updated_at = now() WHERE id = $1', [req.user.sub]);
+    res.json({ mfa_enabled: false });
   } catch (e) {
     res.status(500).json({ error: 'server_error', detail: e.message });
   }
