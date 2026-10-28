@@ -3,6 +3,14 @@ include '../includes/session.php';
 require_once __DIR__ . '/../includes/api_helpers.php';
 ob_start();
 
+// Bereits angemeldet (z. B. doppelt abgeschicktes Formular, Lesezeichen oder Home-Bildschirm-Symbol
+// auf die Login-Seite): direkt zur Übersicht statt ein leeres Login-Formular zu zeigen
+if (isApiAuthenticated()) {
+    unset($_SESSION['mfa_pending']);
+    header('Location: ../index.php', true, 303);
+    exit;
+}
+
 $error = '';
 // 2FA-Zwischenschritt: E-Mail/Passwort liegen max. 5 Minuten serverseitig in der Session
 $pending = $_SESSION['mfa_pending'] ?? null;
@@ -17,7 +25,7 @@ if (isset($_GET['abbrechen'])) {
 $show_mfa_form = $pending !== null;
 
 try {
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isApiAuthenticated()) {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         include '../includes/db_connect.php';
 
         $code = null;
@@ -52,7 +60,7 @@ try {
                     while (ob_get_level()) {
                         ob_end_clean();
                     }
-                    header('Location: /index.php', true, 302);
+                    header('Location: ../index.php', true, 303);
                     exit;
                 }
                 error_log('[Login] missing token in response for ' . $email . ', keys=' . implode(',', array_keys($data)));
@@ -166,4 +174,20 @@ try {
     </div>
 </div>
 
+<script>
+// Formular nur einmal abschicken (Handy: Enter auf der Tastatur + Tipp auf den Button)
+document.querySelectorAll('form[method="post"]').forEach(form => {
+    form.addEventListener('submit', event => {
+        if (form.dataset.gesendet) {
+            event.preventDefault();
+            return;
+        }
+        form.dataset.gesendet = '1';
+        const button = form.querySelector('button[type="submit"]');
+        if (button) {
+            button.disabled = true;
+        }
+    });
+});
+</script>
 <?php include '../includes/footer.php'; ?>
