@@ -1190,18 +1190,29 @@ app.get('/api/v1/vehicles/:vehicleId/fillups', auth, async (req, res) => {
       `SELECT
          id,
          odometer_km,
-         amount       AS liters,
-         total_cost_eur AS price_total_eur,
+         amount,
+         unit,
+         total_cost_eur,
+         price_per_unit,
          station,
          filled_at,
-         created_at
+         created_at,
+         is_full,
+         skip_previous
        FROM fillups
        WHERE user_id = $1 AND vehicle_id = $2
        ORDER BY filled_at DESC
        LIMIT $3`,
       [req.user.sub, vehicleId, limit]
     );
-    res.json(r.rows);
+
+    // Für ältere Clients zusätzlich kompatible Felder anbieten
+    res.json(r.rows.map((row) => ({
+      ...row,
+      liters: row.unit === 'l' ? row.amount : null,
+      price_total_eur: row.total_cost_eur,
+      price_per_liter: row.unit === 'l' ? row.price_per_unit : null
+    })));
   } catch (e) {
     res.status(500).json({ error: 'server_error', detail: e.message });
   }

@@ -168,7 +168,6 @@ $farben = array_map('getCategoryColor', $kategorien);
             <div class="card h-100">
                 <div class="card-body">
                     <h5 class="card-title">Kosten pro Kilometer</h5>
-                    ?>
                     <div class="text-center">
                         <h3 class="mb-0"><?= number_format($kostenProKm, 2, ',', '.') ?> €/km</h3>
                         <p class="text-muted mb-0">bei <?= number_format($gefahreneKm, 0, ',', '.') ?> km</p>
