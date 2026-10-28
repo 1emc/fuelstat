@@ -88,6 +88,7 @@ class FuelstatApi
         return $alle;
     }
     public function postEntry(array $data): array { return $this->request('POST', '/entries', $data); }
+    public function postVehicleImport(string $vehicleId, array $fillups, array $entries): array { return $this->request('POST', '/vehicles/' . rawurlencode($vehicleId) . '/import', ['fillups' => $fillups, 'entries' => $entries]); }
     public function getEntry(string $entryId): array { return $this->request('GET', '/entries/' . rawurlencode($entryId)); }
     public function patchEntry(string $entryId, array $data): array { return $this->request('PATCH', '/entries/' . rawurlencode($entryId), $data); }
     public function deleteEntry(string $entryId): void { $this->request('DELETE', '/entries/' . rawurlencode($entryId)); }

@@ -37,7 +37,7 @@ header('Content-Type: text/csv; charset=utf-8');
 header('Content-Disposition: attachment; filename="' . $dateiname . '"');
 $out = fopen('php://output', 'w');
 fwrite($out, "\xEF\xBB\xBF");
-fputcsv($out, ['Datum', 'Kategorie', 'Tachostand (km)', 'Menge (' . $einheit . ')', 'Kosten (EUR)', 'Vollgetankt', 'Verbrauch (' . $einheit . '/100km)', 'Ort/Anbieter', 'Beschreibung'], ';');
+fputcsv($out, ['Datum', 'Kategorie', 'Tachostand (km)', 'Menge (' . $einheit . ')', 'Kosten (EUR)', 'Vollgetankt', 'Lücke davor', 'Verbrauch (' . $einheit . '/100km)', 'Ort/Anbieter', 'Beschreibung'], ';');
 foreach ($zeilen as $e) {
     $istTank = $e['kategorie'] === 'Tankfuellung';
     fputcsv($out, [
@@ -47,6 +47,7 @@ foreach ($zeilen as $e) {
         $istTank ? $zahl($e['menge'], 2) : '',
         $zahl($e['kosten'], 2),
         $istTank ? (!empty($e['vollgetankt']) ? 'ja' : 'nein') : '',
+        $istTank ? (!empty($e['skip_previous']) ? 'ja' : 'nein') : '',
         $istTank ? $zahl($e['l_per_100km'] ?? null, 2) : '',
         $e['standort'] ?? '',
         $e['beschreibung'] ?? '',

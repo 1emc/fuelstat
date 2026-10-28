@@ -67,6 +67,9 @@ body.dark .badge { background-color: #444; color: #fff; }
       <a href="../pages/bericht.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?><?= $jahr !== null ? '&jahr=' . $jahr : '' ?>" class="btn btn-outline-primary" title="Druckansicht, auch zum Speichern als PDF" target="_blank">
         <i class="fas fa-file-pdf me-1"></i> Bericht
       </a>
+      <a href="../pages/import.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?>" class="btn btn-outline-primary" title="Einträge aus einer CSV-Datei übernehmen">
+        <i class="fas fa-file-import me-1"></i> Import
+      </a>
     </div>
   </div>
 

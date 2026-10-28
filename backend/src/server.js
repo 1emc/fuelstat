@@ -24,7 +24,8 @@ const app = express();
 
 app.use(helmet());
 app.use(cors());
-app.use(express.json());
+// 2 MB erlaubt größere CSV-Importe (Frontend sendet max. 500 Zeilen pro Anfrage)
+app.use(express.json({ limit: '2mb' }));
 
 // Statischer File-Server für Uploads
 app.use(MEDIA_BASE_URL, express.static(UPLOAD_DIR));
@@ -1615,6 +1616,107 @@ app.get('/api/v1/vehicles/:vehicleId/entries', auth, async (req, res) => {
 });
 
 // Statistics of Vehicle
+// Mengeneinheit aus dem Kraftstoff des Fahrzeugs
+function unitForFuelType(fuelType) {
+  const f = String(fuelType || '').toLowerCase();
+  if (f === 'electric') return 'kwh';
+  if (f === 'cng' || f === 'hydrogen') return 'kg';
+  return 'l';
+}
+
+// Massen-Import (z. B. aus CSV): alle Zeilen in einer Transaktion, Duplikate werden übersprungen
+app.post('/api/v1/vehicles/:vehicleId/import', auth, async (req, res) => {
+  const vehicleId = String(req.params.vehicleId || '').trim();
+  const fillups = Array.isArray(req.body?.fillups) ? req.body.fillups : [];
+  const entries = Array.isArray(req.body?.entries) ? req.body.entries : [];
+
+  if (fillups.length + entries.length === 0) return res.status(400).json({ error: 'nothing_to_import' });
+  if (fillups.length + entries.length > 1000) return res.status(400).json({ error: 'too_many_rows', max: 1000 });
+
+  // Validierung vorab: bei Fehlern wird nichts importiert
+  const errors = [];
+  const validDate = (v) => v && !Number.isNaN(new Date(v).getTime());
+  const nonNegative = (v) => Number.isFinite(Number(v)) && Number(v) >= 0;
+  fillups.forEach((f, index) => {
+    if (!validDate(f?.filledAt)) errors.push({ type: 'fillup', index, error: 'invalid_filledAt' });
+    else if (!nonNegative(f?.odometerKm)) errors.push({ type: 'fillup', index, error: 'invalid_odometerKm' });
+    else if (!nonNegative(f?.amount)) errors.push({ type: 'fillup', index, error: 'invalid_amount' });
+    else if (!nonNegative(f?.totalCostEur)) errors.push({ type: 'fillup', index, error: 'invalid_totalCostEur' });
+  });
+  entries.forEach((e, index) => {
+    if (!validDate(e?.occurredAt)) errors.push({ type: 'entry', index, error: 'invalid_occurredAt' });
+    else if (!String(e?.category || '').trim()) errors.push({ type: 'entry', index, error: 'missing_category' });
+    else if (!nonNegative(e?.amountEur)) errors.push({ type: 'entry', index, error: 'invalid_amountEur' });
+    else if (e?.odometerKm !== undefined && e?.odometerKm !== null && e?.odometerKm !== '' && !nonNegative(e.odometerKm)) {
+      errors.push({ type: 'entry', index, error: 'invalid_odometerKm' });
+    }
+  });
+  if (errors.length) return res.status(400).json({ error: 'invalid_rows', rows: errors.slice(0, 50) });
+
+  const client = await pool.connect();
+  try {
+    const v = await client.query('SELECT fuel_type FROM vehicles WHERE id = $1 AND user_id = $2', [vehicleId, req.user.sub]);
+    if (v.rowCount === 0) return res.status(404).json({ error: 'vehicle_not_found' });
+    const unit = unitForFuelType(v.rows[0].fuel_type);
+
+    await client.query('BEGIN');
+    const result = { imported: { fillups: 0, entries: 0 }, skipped: { fillups: 0, entries: 0 } };
+
+    for (const f of fillups) {
+      const filledAt = new Date(f.filledAt);
+      const dup = await client.query(
+        `SELECT 1 FROM fillups
+         WHERE vehicle_id = $1 AND user_id = $2 AND odometer_km = $3 AND filled_at::date = $4::date`,
+        [vehicleId, req.user.sub, Math.round(Number(f.odometerKm)), filledAt]
+      );
+      if (dup.rowCount > 0) { result.skipped.fillups++; continue; }
+      await client.query(
+        `INSERT INTO fillups (user_id, vehicle_id, odometer_km, amount, unit, total_cost_eur, price_per_unit, station, filled_at, is_full, skip_previous)
+         VALUES ($1, $2, $3, $4::numeric, $5, $6::numeric,
+                 CASE WHEN $4::numeric > 0 THEN ROUND($6::numeric / $4::numeric, 4) ELSE NULL END,
+                 $7, $8, $9, $10)`,
+        [
+          req.user.sub, vehicleId, Math.round(Number(f.odometerKm)), Number(f.amount), unit, Number(f.totalCostEur),
+          f.station ? String(f.station).trim() : null, filledAt,
+          f.isFull !== undefined ? Boolean(f.isFull) : true,
+          f.skipPrevious !== undefined ? Boolean(f.skipPrevious) : false
+        ]
+      );
+      result.imported.fillups++;
+    }
+
+    for (const e of entries) {
+      const occurredAt = new Date(e.occurredAt);
+      const category = String(e.category).trim();
+      const dup = await client.query(
+        `SELECT 1 FROM expenses
+         WHERE vehicle_id = $1 AND user_id = $2 AND category = $3 AND amount_eur = $4::numeric AND occurred_at::date = $5::date`,
+        [vehicleId, req.user.sub, category, Number(e.amountEur), occurredAt]
+      );
+      if (dup.rowCount > 0) { result.skipped.entries++; continue; }
+      const odometerKm = e.odometerKm === undefined || e.odometerKm === null || e.odometerKm === '' ? null : Math.round(Number(e.odometerKm));
+      await client.query(
+        `INSERT INTO expenses (user_id, vehicle_id, category, amount_eur, odometer_km, occurred_at, vendor, description)
+         VALUES ($1, $2, $3, $4::numeric, $5, $6, $7, $8)`,
+        [
+          req.user.sub, vehicleId, category, Number(e.amountEur), odometerKm, occurredAt,
+          e.vendor ? String(e.vendor).trim() : null, e.description ? String(e.description).trim() : null
+        ]
+      );
+      result.imported.entries++;
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json(result);
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (e.code === '22P02') return res.status(404).json({ error: 'vehicle_not_found' });
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  } finally {
+    client.release();
+  }
+});
+
 app.get('/api/v1/vehicles/:vehicleId/stats', auth, async (req, res) => {
   const vehicleId = String(req.params.vehicleId || '').trim();
 
