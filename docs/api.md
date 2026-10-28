@@ -280,6 +280,33 @@ Authorization: Bearer <jwt>
 * 404: `vehicle_not_found`
 * 500: `server_error`
 
+## Ausgaben (Entries) bearbeiten und löschen (Auth required)
+
+* `GET /entries/:entryId` – einzelne Ausgabe
+* `PATCH /entries/:entryId` – Felder `category`, `amountEur`, `odometerKm`, `occurredAt`, `vendor`, `description` (alle optional; `null` löscht optionale Felder)
+* `DELETE /entries/:entryId` – 204
+
+Fremde oder ungültige IDs liefern 404 `entry_not_found`.
+
+## Listen seitenweise laden
+
+`GET /vehicles/:vehicleId/fillups` und `GET /vehicles/:vehicleId/entries` akzeptieren neben `limit` (max. 200) auch `offset`. Das PHP-Frontend lädt so alle Einträge.
+
+## Passwort und 2FA (Auth required)
+
+* `POST /auth/password` `{ "currentPassword", "newPassword" }` – widerruft alle bestehenden Tokens und gibt `{ "token" }` zurück. Fehler: 401 `invalid_current_password`, 400 `password_too_short`
+* `POST /auth/mfa/setup` – erzeugt ein TOTP-Secret `{ "secret", "otpauthUrl" }` (noch nicht aktiv)
+* `POST /auth/mfa/enable` `{ "code" }` – aktiviert 2FA nach korrektem Code
+* `POST /auth/mfa/disable` `{ "password", "code" }` – deaktiviert 2FA
+
+Bei aktivem 2FA antwortet `POST /auth/login` ohne `code` mit 401 `mfa_required`, mit falschem Code mit 401 `invalid_mfa_code`. TOTP: 30 Sekunden, 6 Stellen, SHA1 (kompatibel mit Google Authenticator, Aegis, 1Password usw.).
+
+`GET /whoami` liefert zusätzlich `is_admin`.
+
+## Tankfüllungen: vollgetankt und Lücken
+
+`POST /fillups` übernimmt `isFull` (Standard `true`) und `skipPrevious` (Standard `false`). Eine Vollbetankung mit `skipPrevious = true` ist ein neuer Startpunkt für die Verbrauchsberechnung: Über die Lücke davor wird kein Verbrauch berechnet.
+
 ## Common error format
 
 ```json

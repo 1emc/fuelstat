@@ -545,6 +545,7 @@ paths:
       parameters:
         - $ref: "#/components/parameters/VehicleId"
         - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
       responses:
         "200":
           description: OK
@@ -736,6 +737,7 @@ paths:
       parameters:
         - $ref: "#/components/parameters/VehicleId"
         - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
       responses:
         "200":
           description: OK
@@ -747,6 +749,163 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/entries/{entryId}:
+    get:
+      tags: [Entries]
+      summary: Get Entry (details)
+      operationId: getEntry
+      parameters:
+        - $ref: "#/components/parameters/EntryId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    patch:
+      tags: [Entries]
+      summary: Patch Entry (details)
+      operationId: patchEntry
+      parameters:
+        - $ref: "#/components/parameters/EntryId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EntryPatchRequest"
+            example:
+              amountEur: 275.5
+              vendor: "ATU"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    delete:
+      tags: [Entries]
+      summary: Delete Entry
+      operationId: deleteEntry
+      parameters:
+        - $ref: "#/components/parameters/EntryId"
+      responses:
+        "204":
+          description: No Content
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/auth/password:
+    post:
+      tags: [Users]
+      summary: Change own password
+      description: "Prüft das aktuelle Passwort, setzt das neue, widerruft alle bestehenden Tokens und gibt ein neues Token zurück."
+      operationId: postAuthPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordChangeRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/auth/mfa/setup:
+    post:
+      tags: [Users]
+      summary: Start 2FA setup (TOTP)
+      description: "Erzeugt ein neues Secret. 2FA ist erst nach /auth/mfa/enable aktiv."
+      operationId: postMfaSetup
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MfaSetupResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: mfa_already_enabled
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/auth/mfa/enable:
+    post:
+      tags: [Users]
+      summary: Enable 2FA with a code from the authenticator app
+      operationId: postMfaEnable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MfaCodeRequest"
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: invalid_mfa_code | mfa_not_set_up
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/auth/mfa/disable:
+    post:
+      tags: [Users]
+      summary: Disable 2FA (password and current code required)
+      operationId: postMfaDisable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MfaCodeRequest"
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: invalid_mfa_code | mfa_not_enabled
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/ServerError"
 
@@ -788,6 +947,22 @@ components:
         minimum: 1
         maximum: 200
         default: 50
+    Offset:
+      name: offset
+      in: query
+      required: false
+      description: Anzahl zu überspringender Einträge (für seitenweises Laden)
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    EntryId:
+      name: entryId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     Cursor:
       name: cursor
       in: query
@@ -890,6 +1065,17 @@ components:
         created_at:
           type: string
           format: date-time
+        username:
+          type: string
+          nullable: true
+        mfa_enabled:
+          type: boolean
+        profile_image_url:
+          type: string
+          nullable: true
+        is_admin:
+          type: boolean
+          description: true, wenn die User-ID in ADMIN_USER_IDS steht
         token:
           type: object
           additionalProperties: false
@@ -929,6 +1115,9 @@ components:
         password:
           type: string
           minLength: 1
+        code:
+          type: string
+          description: "6-stelliger TOTP-Code; nur nötig, wenn 2FA aktiv ist (sonst 401 mfa_required)"
       required: [email, password]
 
     AuthResponse:
@@ -1279,6 +1468,62 @@ components:
           type: string
           format: date-time
       required: [id, vehicle_id, category, amount_eur, occurred_at, created_at]
+
+    EntryPatchRequest:
+      type: object
+      additionalProperties: false
+      description: Alle Felder optional; nur gesendete Felder werden geändert
+      properties:
+        category:
+          $ref: "#/components/schemas/EntryCategory"
+        amountEur:
+          type: number
+          minimum: 0
+        odometerKm:
+          type: integer
+          minimum: 0
+          nullable: true
+        occurredAt:
+          type: string
+          format: date-time
+        vendor:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+
+    PasswordChangeRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+          minLength: 8
+      required: [currentPassword, newPassword]
+
+    MfaSetupResponse:
+      type: object
+      properties:
+        secret:
+          type: string
+          description: Base32-Secret für die Authenticator-App
+        otpauthUrl:
+          type: string
+          description: otpauth://-URL für den QR-Code
+
+    MfaCodeRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          example: "123456"
+        password:
+          type: string
+          description: Nur bei /auth/mfa/disable erforderlich
+      required: [code]
 
     EntryListResponse:
       type: array

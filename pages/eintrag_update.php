@@ -59,7 +59,9 @@ try {
     ]);
     $_SESSION['success_message'] = 'Tankvorgang aktualisiert.';
 } catch (Throwable $e) {
-    $_SESSION['error_message'] = $e->getMessage();
+    $_SESSION['error_message'] = $e->getMessage() === 'fillup_edit_window_expired'
+        ? 'Tankvorgänge können nur innerhalb von 14 Tagen nach dem Tankdatum bearbeitet werden. Ältere Einträge kannst du löschen und neu anlegen.'
+        : $e->getMessage();
 }
 header('Location: fahrzeug_detail.php?id=' . rawurlencode($fahrzeug_id));
 exit;

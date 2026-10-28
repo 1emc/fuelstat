@@ -89,7 +89,10 @@ body.dark .badge { background-color: #444; color: #fff; }
                 <?= htmlspecialchars(getKategorieName($e['kategorie'])) ?>
               </div>
               <div class="text-muted small">
-                <?= number_format((int)($e['tachostand'] ?? 0), 0, ',', '.') ?> km<?= !empty($e['standort']) ? ' · ' . htmlspecialchars($e['standort']) : '' ?>
+                <?= implode(' · ', array_filter([
+                    !empty($e['tachostand']) ? number_format((int)$e['tachostand'], 0, ',', '.') . ' km' : '',
+                    !empty($e['standort']) ? htmlspecialchars($e['standort']) : '',
+                ])) ?>
               </div>
               <?php if (!empty($e['beschreibung'])): ?>
               <div class="small mt-1"><?= htmlspecialchars($e['beschreibung']) ?></div>

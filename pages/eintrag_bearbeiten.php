@@ -90,10 +90,17 @@ $vollgetankt = !empty($eintrag['is_full']);
 $skip_previous = !empty($eintrag['skip_previous']);
 $standort = $eintrag['station'] ?? '';
 $einheit = $eintrag['unit'] ?? 'l';
+$bearbeitbar = isset($eintrag['filled_at']) && strtotime($eintrag['filled_at']) >= time() - 14 * 24 * 3600;
 ?>
 
 <div class="container mt-5">
     <h2>Tankvorgang bearbeiten</h2>
+    <?php if (!$bearbeitbar): ?>
+        <div class="alert alert-info mt-3">
+            Dieser Tankvorgang ist älter als 14 Tage und kann nicht mehr geändert werden.
+            Bei Bedarf kannst du ihn löschen und neu anlegen.
+        </div>
+    <?php endif; ?>
     <form method="post" action="eintrag_update.php" class="mt-4">
         <input type="hidden" name="id" value="<?= htmlspecialchars($eintrag_id) ?>">
         <input type="hidden" name="fahrzeug_id" value="<?= htmlspecialchars($fahrzeug_id) ?>">
@@ -131,7 +138,7 @@ $einheit = $eintrag['unit'] ?? 'l';
             <label for="skip_previous" class="form-check-label">Vorherige Tankfüllung ignorieren</label>
         </div>
         <div class="d-flex mt-4">
-            <button type="submit" class="btn btn-primary me-2">Speichern</button>
+            <button type="submit" class="btn btn-primary me-2" <?= $bearbeitbar ? '' : 'disabled' ?>>Speichern</button>
             <a href="fahrzeug_detail.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?>" class="btn btn-secondary me-auto">Abbrechen</a>
         </div>
     </form>

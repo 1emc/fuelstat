@@ -1,4 +1,4 @@
-const cacheName = 'fahrzeugverwaltung-cache-v4';
+const cacheName = 'fahrzeugverwaltung-cache-v5';
 const assetsToCache = [
   './',
   './css/style.css',
