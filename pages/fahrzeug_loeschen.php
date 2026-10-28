@@ -13,6 +13,14 @@ if (!isset($_POST['fahrzeug_id'])) {
 $fahrzeug_id = trim($_POST['fahrzeug_id']);
 
 try {
+    // Bilddateien zuerst entfernen, sonst bleiben sie nach dem Löschen im Upload-Ordner liegen
+    try {
+        foreach ($api->getVehicleMedia($fahrzeug_id) as $media) {
+            $api->deleteVehicleMedia($fahrzeug_id, $media['id']);
+        }
+    } catch (Throwable $e) {
+        error_log('[Fahrzeug löschen] Bilder nicht entfernt: ' . $e->getMessage());
+    }
     $api->deleteVehicle($fahrzeug_id);
     $_SESSION['success_message'] = 'Fahrzeug erfolgreich gelöscht.';
 } catch (Throwable $e) {
