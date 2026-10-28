@@ -2,6 +2,18 @@
 
 require_once __DIR__ . '/api_config.php';
 
+/** API-Fehler: Nachricht ist der Fehlercode der API, $detail die optionale Zusatzinfo. */
+class FuelstatApiException extends RuntimeException
+{
+    public ?string $detail;
+
+    public function __construct(string $message, int $code, ?string $detail = null)
+    {
+        parent::__construct($message, $code);
+        $this->detail = $detail;
+    }
+}
+
 class FuelstatApi
 {
     private string $baseUrl;
@@ -95,6 +107,11 @@ class FuelstatApi
     public function getUser(string $userId): array { return $this->request('GET', '/auth/users/' . rawurlencode($userId)); }
     public function patchUser(string $userId, array $data): array { return $this->request('PATCH', '/auth/users/' . rawurlencode($userId), $data); }
     public function getWhoAmI(): array { return $this->request('GET', '/whoami'); }
+    public function getVehicleReminders(string $vehicleId): array { return $this->request('GET', '/vehicles/' . rawurlencode($vehicleId) . '/reminders'); }
+    public function getMailSettings(): array { return $this->request('GET', '/auth/mail-settings'); }
+    public function putMailSettings(array $data): array { return $this->request('PUT', '/auth/mail-settings', $data); }
+    public function postMailTest(): array { return $this->request('POST', '/auth/mail-settings/test', []); }
+    public function postMailSendNow(string $type): array { return $this->request('POST', '/auth/mail-settings/send-now', ['type' => $type]); }
 
     private function request(string $method, string $path, ?array $payload = null, ?array $multipart = null): array
     {
@@ -157,7 +174,7 @@ class FuelstatApi
         if ($httpCode >= 400) {
             $message = $data['error'] ?? $data['message'] ?? ('HTTP ' . $httpCode);
             error_log('[FuelstatApi] ' . $method . ' ' . $url . ' => ' . $httpCode . ' ' . (string)$message);
-            throw new RuntimeException((string)$message, $httpCode);
+            throw new FuelstatApiException((string)$message, $httpCode, isset($data['detail']) ? (string)$data['detail'] : null);
         }
 
         if ($method === 'GET') {

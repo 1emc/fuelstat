@@ -44,7 +44,7 @@ if ($benutzer_id !== null) {
                 } catch (Throwable $e) {
                 }
                 $faellig = array_filter(
-                    getFaelligkeitenFromApi($api, $vehicleId, $currentOdo),
+                    getFaelligkeitenFromApi($api, $vehicleId),
                     fn($f) => in_array($f['status'], ['ueberfaellig', 'bald'], true)
                 );
                 $tooltip = $verbrauch !== null

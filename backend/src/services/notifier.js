@@ -1,0 +1,246 @@
+// backend/src/services/notifier.js
+// Erinnerungs-Mails und Monatsberichte. Läuft stündlich (startNotifier) und lässt sich manuell auslösen.
+const { getVehicleReminders } = require('./reminders');
+const { getVehicleStats } = require('./stats');
+const { sendUserMail } = require('./mail');
+
+const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+const CATEGORY_NAMES = { Tankfuellung: 'Tankfüllung', TUV: 'TÜV' };
+const UNITS = { l: 'l', kwh: 'kWh', kg: 'kg' };
+
+const fmt = (n, digits = 2) => Number(n).toLocaleString('de-DE', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+const fmtDate = (iso) => iso.split('-').reverse().join('.');
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+async function loadUserSettings(pool, userId) {
+  const r = await pool.query(
+    `SELECT s.*, u.email AS account_email
+     FROM user_mail_settings s JOIN users u ON u.id = s.user_id
+     WHERE s.user_id = $1`,
+    [userId]
+  );
+  return r.rows[0] || null;
+}
+
+async function loadVehicles(pool, userId) {
+  const r = await pool.query(
+    'SELECT id, name, fuel_type FROM vehicles WHERE user_id = $1 ORDER BY sort_order ASC, created_at DESC',
+    [userId]
+  );
+  return r.rows;
+}
+
+/** Fällige bzw. bald fällige Termine aller Fahrzeuge, jeweils mit eindeutiger Referenz fürs Versandprotokoll. */
+async function collectDueReminders(pool, settings) {
+  const due = [];
+  for (const v of await loadVehicles(pool, settings.user_id)) {
+    const reminders = await getVehicleReminders(pool, settings.user_id, v.id, settings.reminder_days);
+    for (const r of reminders) {
+      if (r.status === 'bald' || r.status === 'ueberfaellig') {
+        due.push({ ...r, vehicle: v.name, ref: `${v.id}:${r.category}:${r.due_date}:${r.status}` });
+      }
+    }
+  }
+  return due;
+}
+
+function reminderMail(due) {
+  const line = (r) => {
+    const when = r.status === 'ueberfaellig' ? 'überfällig' : (r.days === 0 ? 'heute fällig' : `fällig in ${r.days} Tagen`);
+    const km = r.due_km ? ` oder bei ${fmt(r.due_km, 0)} km` : '';
+    return { text: `${r.vehicle}: ${r.title} – ${when} (${fmtDate(r.due_date)}${km})`, overdue: r.status === 'ueberfaellig' };
+  };
+  const lines = due.map(line);
+  const subject = due.some((r) => r.status === 'ueberfaellig')
+    ? 'Fuelstat: Termine überfällig'
+    : 'Fuelstat: Termine bald fällig';
+  const text = `Hallo,\n\nfolgende Termine stehen an:\n\n${lines.map((l) => '- ' + l.text).join('\n')}\n\nDeine Fuelstat-App`;
+  const html = `<p>Hallo,</p><p>folgende Termine stehen an:</p><ul>${lines
+    .map((l) => `<li${l.overdue ? ' style="color:#b02a37"' : ''}>${esc(l.text)}</li>`).join('')}</ul><p>Deine Fuelstat-App</p>`;
+  return { subject, text, html };
+}
+
+/** Monatsdaten aller Fahrzeuge für einen Monat (year, month 1-12). */
+async function buildMonthlyReport(pool, settings, year, month) {
+  const start = new Date(Date.UTC(year, month - 1, 1));
+  const end = new Date(Date.UTC(year, month, 1));
+  const label = `${MONTHS[month - 1]} ${year}`;
+  const sections = [];
+  let total = 0;
+
+  for (const v of await loadVehicles(pool, settings.user_id)) {
+    const f = await pool.query(
+      `SELECT COUNT(*)::int AS n, COALESCE(SUM(amount), 0) AS amount, COALESCE(SUM(total_cost_eur), 0) AS cost,
+              MAX(unit) AS unit
+       FROM fillups WHERE user_id = $1 AND vehicle_id = $2 AND filled_at >= $3 AND filled_at < $4`,
+      [settings.user_id, v.id, start, end]
+    );
+    const e = await pool.query(
+      `SELECT category, SUM(amount_eur) AS cost
+       FROM expenses WHERE user_id = $1 AND vehicle_id = $2 AND occurred_at >= $3 AND occurred_at < $4 AND category <> 'Fahrt'
+       GROUP BY category ORDER BY SUM(amount_eur) DESC`,
+      [settings.user_id, v.id, start, end]
+    );
+    const odo = await pool.query(
+      `SELECT (SELECT MAX(odometer_km) FROM fillups WHERE user_id = $1 AND vehicle_id = $2 AND filled_at < $4) AS end_odo,
+              (SELECT MAX(odometer_km) FROM fillups WHERE user_id = $1 AND vehicle_id = $2 AND filled_at < $3) AS start_odo`,
+      [settings.user_id, v.id, start, end]
+    );
+    const stats = await getVehicleStats(pool, settings.user_id, v.id);
+    const segs = (stats.segments || []).filter((s) => new Date(s.full_at) >= start && new Date(s.full_at) < end);
+    const segKm = segs.reduce((a, s) => a + Number(s.km), 0);
+    const segAmount = segs.reduce((a, s) => a + Number(s.liters_segment), 0);
+    const reminders = (await getVehicleReminders(pool, settings.user_id, v.id, settings.reminder_days))
+      .filter((r) => r.status === 'bald' || r.status === 'ueberfaellig');
+
+    const fuel = f.rows[0];
+    const otherCost = e.rows.reduce((a, r) => a + Number(r.cost), 0);
+    const cost = Number(fuel.cost) + otherCost;
+    total += cost;
+    const { end_odo: endOdo, start_odo: startOdo } = odo.rows[0];
+    sections.push({
+      name: v.name,
+      unit: UNITS[fuel.unit] || 'l',
+      fillups: fuel.n,
+      amount: Number(fuel.amount),
+      fuelCost: Number(fuel.cost),
+      expenses: e.rows.map((r) => ({ category: CATEGORY_NAMES[r.category] || r.category, cost: Number(r.cost) })),
+      cost,
+      km: endOdo !== null && startOdo !== null ? endOdo - startOdo : null,
+      consumption: segKm > 0 ? (segAmount / segKm) * 100 : null,
+      reminders
+    });
+  }
+  return { label, sections, total };
+}
+
+function reportMail(report) {
+  const textParts = [`Hallo,\n\nhier ist deine Fuelstat-Übersicht für ${report.label}.\n`];
+  const htmlParts = [`<p>Hallo,</p><p>hier ist deine Fuelstat-Übersicht für <strong>${esc(report.label)}</strong>.</p>`];
+
+  const active = report.sections.filter((s) => s.fillups > 0 || s.expenses.length > 0 || s.reminders.length > 0);
+  if (active.length === 0) {
+    textParts.push('\nIn diesem Monat wurden keine Einträge erfasst und es stehen keine Termine an.\n');
+    htmlParts.push('<p>In diesem Monat wurden keine Einträge erfasst und es stehen keine Termine an.</p>');
+  }
+  for (const s of active) {
+    const leer = s.fillups === 0 && s.expenses.length === 0;
+    const rows = leer ? [['Einträge', 'keine in diesem Monat']] : [
+      ['Tankfüllungen', `${s.fillups} (${fmt(s.amount)} ${s.unit}, ${fmt(s.fuelCost)} €)`],
+      ...s.expenses.map((x) => [x.category, `${fmt(x.cost)} €`]),
+      ['Kosten gesamt', `${fmt(s.cost)} €`],
+      ['Gefahrene Strecke', s.km !== null ? `${fmt(s.km, 0)} km` : '–'],
+      ['Ø Verbrauch', s.consumption !== null ? `${fmt(s.consumption)} ${s.unit}/100km` : '–']
+    ];
+    const due = s.reminders.map((r) => `${r.title}: ${r.status === 'ueberfaellig' ? 'überfällig' : 'fällig am ' + fmtDate(r.due_date)}`);
+    textParts.push(`\n${s.name}\n${rows.map(([k, v]) => `  ${k}: ${v}`).join('\n')}${due.length ? '\n  Termine: ' + due.join(', ') : ''}\n`);
+    htmlParts.push(`<h3 style="margin-bottom:4px">${esc(s.name)}</h3><table cellpadding="4" style="border-collapse:collapse">${rows
+      .map(([k, v]) => `<tr><td style="color:#555">${esc(k)}</td><td><strong>${esc(v)}</strong></td></tr>`).join('')}</table>${due.length
+      ? `<p style="color:#b02a37">Termine: ${esc(due.join(', '))}</p>` : ''}`);
+  }
+  textParts.push(`\nGesamtkosten aller Fahrzeuge: ${fmt(report.total)} €\n\nDeine Fuelstat-App`);
+  htmlParts.push(`<p><strong>Gesamtkosten aller Fahrzeuge: ${fmt(report.total)} €</strong></p><p>Deine Fuelstat-App</p>`);
+  return { subject: `Fuelstat: Monatsbericht ${report.label}`, text: textParts.join(''), html: htmlParts.join('') };
+}
+
+function previousMonth(now = new Date()) {
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
+}
+
+/** Referenzen im Protokoll reservieren; zurück kommen nur die noch nicht verschickten. */
+async function claim(pool, userId, kind, refs) {
+  if (refs.length === 0) return [];
+  const r = await pool.query(
+    `INSERT INTO mail_log (user_id, kind, ref)
+     SELECT $1, $2, unnest($3::text[])
+     ON CONFLICT (user_id, kind, ref) DO NOTHING
+     RETURNING ref`,
+    [userId, kind, refs]
+  );
+  return r.rows.map((row) => row.ref);
+}
+
+async function release(pool, userId, kind, refs) {
+  if (refs.length) await pool.query('DELETE FROM mail_log WHERE user_id = $1 AND kind = $2 AND ref = ANY($3)', [userId, kind, refs]);
+}
+
+async function recordResult(pool, userId, error) {
+  await pool.query(
+    error
+      ? 'UPDATE user_mail_settings SET last_error = $2 WHERE user_id = $1'
+      : 'UPDATE user_mail_settings SET last_sent_at = now(), last_error = NULL WHERE user_id = $1',
+    error ? [userId, String(error.message || error).slice(0, 500)] : [userId]
+  );
+}
+
+/** Neue Erinnerungen und den Bericht des Vormonats für einen Benutzer verschicken. */
+async function notifyUser(pool, settings, now = new Date()) {
+  if (settings.reminders_enabled) {
+    const due = await collectDueReminders(pool, settings);
+    const fresh = await claim(pool, settings.user_id, 'reminder', due.map((r) => r.ref));
+    if (fresh.length) {
+      try {
+        await sendUserMail(settings, reminderMail(due.filter((r) => fresh.includes(r.ref))));
+        await recordResult(pool, settings.user_id, null);
+      } catch (e) {
+        await release(pool, settings.user_id, 'reminder', fresh);
+        await recordResult(pool, settings.user_id, e);
+      }
+    }
+  }
+
+  if (settings.monthly_report) {
+    const { year, month } = previousMonth(now);
+    const ref = `${year}-${String(month).padStart(2, '0')}`;
+    const fresh = await claim(pool, settings.user_id, 'report', [ref]);
+    if (fresh.length) {
+      try {
+        await sendUserMail(settings, reportMail(await buildMonthlyReport(pool, settings, year, month)));
+        await recordResult(pool, settings.user_id, null);
+      } catch (e) {
+        await release(pool, settings.user_id, 'report', fresh);
+        await recordResult(pool, settings.user_id, e);
+      }
+    }
+  }
+}
+
+async function runNotifications(pool, now = new Date()) {
+  const r = await pool.query(
+    `SELECT s.*, u.email AS account_email
+     FROM user_mail_settings s JOIN users u ON u.id = s.user_id
+     WHERE s.smtp_host IS NOT NULL AND (s.reminders_enabled OR s.monthly_report)`
+  );
+  for (const settings of r.rows) {
+    try {
+      await notifyUser(pool, settings, now);
+    } catch (e) {
+      console.error('[notifier]', settings.user_id, e.message);
+    }
+  }
+}
+
+/** Stündlich prüfen (erstmals 1 Minute nach dem Start). Abschaltbar mit NOTIFICATIONS_ENABLED=false. */
+function startNotifier(pool) {
+  if (process.env.NOTIFICATIONS_ENABLED === 'false') return;
+  let running = false;
+  const tick = async () => {
+    if (running) return;
+    running = true;
+    try {
+      await runNotifications(pool);
+    } catch (e) {
+      console.error('[notifier]', e.message);
+    } finally {
+      running = false;
+    }
+  };
+  setTimeout(tick, 60 * 1000).unref();
+  setInterval(tick, 60 * 60 * 1000).unref();
+}
+
+module.exports = {
+  loadUserSettings, collectDueReminders, reminderMail, buildMonthlyReport, reportMail,
+  previousMonth, notifyUser, runNotifications, startNotifier
+};

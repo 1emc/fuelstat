@@ -125,6 +125,7 @@ include '../includes/header.php';
                     <div class="d-flex flex-wrap gap-2 mb-3">
                         <a href="passwort_aendern.php" class="btn btn-outline-primary"><i class="fas fa-key me-2"></i>Passwort ändern</a>
                         <a href="mfa_einrichten.php" class="btn btn-outline-primary"><i class="fas fa-shield-alt me-2"></i>2FA <?= !empty($user['mfa_enabled']) ? 'verwalten' : 'einrichten' ?></a>
+                        <a href="benachrichtigungen.php" class="btn btn-outline-primary"><i class="fas fa-envelope me-2"></i>E-Mail-Benachrichtigungen</a>
                     </div>
                     <p class="mb-2">2FA ist <strong><?= !empty($user['mfa_enabled']) ? 'aktiv' : 'nicht aktiv' ?></strong>.</p>
                     <form method="post" onsubmit="return confirm('Wirklich auf allen Geräten abmelden, auch hier?');">

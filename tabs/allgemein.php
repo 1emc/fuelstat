@@ -8,7 +8,7 @@ $currentOdo = $stats['currentOdo'] ?? null;
 $trend = $stats['trend'] ?? null;
 $avgPrice = $stats['avgPricePerLiter'] ?? null;
 $fahrleistung = getFahrleistungFromApi($api, $fahrzeug_id, $fahrzeug, $currentOdo);
-$faelligkeiten = getFaelligkeitenFromApi($api, $fahrzeug_id, $currentOdo);
+$faelligkeiten = getFaelligkeitenFromApi($api, $fahrzeug_id);
 
 $letzterReifen = getLetzterEintragApi($api, $fahrzeug_id, 'Reifen');
 $letzteWartung = getLetzterEintragApi($api, $fahrzeug_id, 'Wartung');

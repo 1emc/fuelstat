@@ -177,6 +177,11 @@ if (isApiAuthenticated()) {
                                     <i class="fas fa-shield-alt me-2"></i> 2FA einrichten
                                 </a>
                             </li>
+                            <li>
+                                <a class="dropdown-item" href="<?= htmlspecialchars($baseUrl) ?>pages/benachrichtigungen.php">
+                                    <i class="fas fa-envelope me-2"></i> E-Mail-Benachrichtigungen
+                                </a>
+                            </li>
                             <?php if (!empty($currentUser['is_admin'])): ?>
                             <li>
                                 <a class="dropdown-item" href="<?= htmlspecialchars($baseUrl) ?>pages/admin.php">
