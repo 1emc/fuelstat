@@ -31,7 +31,15 @@ class FuelstatApi
 
     public function getVehicles(): array { return $this->request('GET', '/vehicles'); }
     public function getVehicle(string $vehicleId): array { return $this->request('GET', '/vehicles/' . rawurlencode($vehicleId)); }
-    public function postVehicle(string $name, string $fuelType): array { return $this->request('POST', '/vehicles', ['name' => $name, 'fuelType' => $fuelType]); }
+    public function postVehicle(array $data): array { return $this->request('POST', '/vehicles', $data); }
+    public function getVehicleMedia(string $vehicleId): array { return $this->request('GET', '/vehicles/' . rawurlencode($vehicleId) . '/media'); }
+    public function deleteVehicleMedia(string $vehicleId, string $mediaId): void { $this->request('DELETE', '/vehicles/' . rawurlencode($vehicleId) . '/media/' . rawurlencode($mediaId)); }
+    public function uploadVehicleMedia(string $vehicleId, string $filePath, string $mimeType, string $fileName): array
+    {
+        return $this->request('POST', '/vehicles/' . rawurlencode($vehicleId) . '/media/upload', null, [
+            'file' => new CURLFile($filePath, $mimeType, $fileName),
+        ]);
+    }
     public function patchVehicle(string $vehicleId, array $data): array { return $this->request('PATCH', '/vehicles/' . rawurlencode($vehicleId), $data); }
     public function deleteVehicle(string $vehicleId): void { $this->request('DELETE', '/vehicles/' . rawurlencode($vehicleId)); }
     public function getVehicleFillups(string $vehicleId, int $limit = 50): array { return $this->request('GET', '/vehicles/' . rawurlencode($vehicleId) . '/fillups?limit=' . $limit); }
@@ -49,7 +57,7 @@ class FuelstatApi
     public function patchUser(string $userId, array $data): array { return $this->request('PATCH', '/auth/users/' . rawurlencode($userId), $data); }
     public function getWhoAmI(): array { return $this->request('GET', '/whoami'); }
 
-    private function request(string $method, string $path, ?array $payload = null): array
+    private function request(string $method, string $path, ?array $payload = null, ?array $multipart = null): array
     {
         $url = $this->baseUrl . '/' . ltrim($path, '/');
         $ch = curl_init($url);
@@ -65,6 +73,10 @@ class FuelstatApi
             }
             $headers[] = 'Content-Type: application/json';
             curl_setopt($ch, CURLOPT_POSTFIELDS, $json);
+        }
+        if ($multipart !== null) {
+            // curl setzt Content-Type multipart/form-data inkl. Boundary selbst
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $multipart);
         }
         if ($this->token !== null && $this->token !== '') {
             $headers[] = 'Authorization: Bearer ' . $this->token;

@@ -606,6 +606,39 @@ function getLetzterEintrag($fahrzeug_id, $kategorie) {
  * @return string Der benutzerfreundliche Name mit Umlauten
  */
 /**
+ * Kraftstoffarten, wie die API sie kennt, mit Anzeigenamen.
+ */
+function getKraftstoffOptionen(): array
+{
+    return [
+        'diesel' => 'Diesel',
+        'e5' => 'Benzin (E5)',
+        'e10' => 'Benzin (E10)',
+        'lpg' => 'Autogas (LPG)',
+        'cng' => 'Erdgas (CNG)',
+        'electric' => 'Elektro',
+        'hybrid' => 'Hybrid',
+        'hydrogen' => 'Wasserstoff',
+        'other' => 'Andere',
+    ];
+}
+
+/**
+ * URL des Fahrzeugbilds, sonst Platzhalter. $baseUrl ist die App-Basis-URL mit Slash am Ende.
+ */
+function fahrzeugBildUrl(array $fahrzeug, string $baseUrl): string
+{
+    $url = trim((string)($fahrzeug['image_url'] ?? ''));
+    if ($url === '') {
+        return $baseUrl . 'images/platzhalter.jpg';
+    }
+    if (preg_match('#^https?://#i', $url)) {
+        return $url;
+    }
+    return $baseUrl . ltrim($url, '/');
+}
+
+/**
  * Mengeneinheit passend zum Kraftstoff (wie im Backend abgeleitet): 'l', 'kwh' oder 'kg'.
  */
 function getEinheitFuerKraftstoff(?string $fuelType): string

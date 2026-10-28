@@ -121,6 +121,20 @@ async function auth(req, res, next) {
   }
 }
 
+// Optionale Zahl aus dem Request: undefined bleibt undefined, null/'' wird null
+function optionalNumber(value) {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  return Number(value);
+}
+
+// Optionaler Text aus dem Request: undefined bleibt undefined, null/leer wird null
+function optionalText(value) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  return String(value).trim() || null;
+}
+
 // Admins werden über ADMIN_USER_IDS (kommagetrennte User-IDs) in der .env festgelegt
 function isAdmin(req) {
   const adminIds = String(process.env.ADMIN_USER_IDS || '')
@@ -306,14 +320,8 @@ app.patch('/api/v1/auth/users/:userId', auth, requireSelfOrAdmin, async (req, re
     req.body?.email !== undefined
       ? String(req.body.email).trim().toLowerCase()
       : undefined;
-  const username =
-    req.body?.username !== undefined
-      ? String(req.body.username).trim() || null
-      : undefined;
-  const profileImageUrl =
-    req.body?.profileImageUrl !== undefined
-      ? String(req.body.profileImageUrl).trim() || null
-      : undefined;
+  const username = optionalText(req.body?.username);
+  const profileImageUrl = optionalText(req.body?.profileImageUrl);
 
   if (email === undefined && username === undefined && profileImageUrl === undefined) {
     return res.status(400).json({ error: 'nothing_to_update' });
@@ -523,11 +531,11 @@ app.post('/api/v1/vehicles', auth, async (req, res) => {
 
   const brand = req.body?.brand ? String(req.body.brand).trim() : null;
   const model = req.body?.model ? String(req.body.model).trim() : null;
-  const year = req.body?.year !== undefined ? Number(req.body.year) : null;
+  const year = optionalNumber(req.body?.year) ?? null;
   const imageUrl = req.body?.imageUrl ? String(req.body.imageUrl).trim() : null;
-  const odometerKm = req.body?.odometerKm !== undefined ? Number(req.body.odometerKm) : null;
-  const mileageKm = req.body?.mileageKm !== undefined ? Number(req.body.mileageKm) : null;
-  const tankCapacity = req.body?.tankCapacity !== undefined ? Number(req.body.tankCapacity) : null;
+  const odometerKm = optionalNumber(req.body?.odometerKm) ?? null;
+  const mileageKm = optionalNumber(req.body?.mileageKm) ?? null;
+  const tankCapacity = optionalNumber(req.body?.tankCapacity) ?? null;
   const sortOrder = req.body?.sortOrder !== undefined ? Number(req.body.sortOrder) : 0;
 
   if (year !== null && (!Number.isFinite(year) || year < 1886 || year > 2100)) {
@@ -630,26 +638,13 @@ app.patch('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
     req.body?.fuelType !== undefined
       ? String(req.body.fuelType).trim().toLowerCase()
       : undefined;
-  const brand =
-    req.body?.brand !== undefined
-      ? String(req.body.brand).trim() || null
-      : undefined;
-  const model =
-    req.body?.model !== undefined
-      ? String(req.body.model).trim() || null
-      : undefined;
-  const year =
-    req.body?.year !== undefined ? Number(req.body.year) : undefined;
-  const imageUrl =
-    req.body?.imageUrl !== undefined
-      ? String(req.body.imageUrl).trim() || null
-      : undefined;
-  const odometerKm =
-    req.body?.odometerKm !== undefined ? Number(req.body.odometerKm) : undefined;
-  const mileageKm =
-    req.body?.mileageKm !== undefined ? Number(req.body.mileageKm) : undefined;
-  const tankCapacity =
-    req.body?.tankCapacity !== undefined ? Number(req.body.tankCapacity) : undefined;
+  const brand = optionalText(req.body?.brand);
+  const model = optionalText(req.body?.model);
+  const year = optionalNumber(req.body?.year);
+  const imageUrl = optionalText(req.body?.imageUrl);
+  const odometerKm = optionalNumber(req.body?.odometerKm);
+  const mileageKm = optionalNumber(req.body?.mileageKm);
+  const tankCapacity = optionalNumber(req.body?.tankCapacity);
   const sortOrder =
     req.body?.sortOrder !== undefined ? Number(req.body.sortOrder) : undefined;
 

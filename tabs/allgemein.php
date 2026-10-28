@@ -14,27 +14,26 @@ $letzteWartung = getLetzterEintragApi($api, $fahrzeug_id, 'Wartung');
 $letzterTUV = getLetzterEintragApi($api, $fahrzeug_id, 'TUV');
 
 $fuel_type = $fahrzeug['fuel_type'] ?? $fahrzeug['kraftstoff'] ?? '';
-$kraftstoffTexte = [
-    'diesel' => 'Diesel',
-    'petrol' => 'Benzin',
-    'e5' => 'Benzin (E5)',
-    'e10' => 'Benzin (E10)',
-    'lpg' => 'Autogas (LPG)',
-    'cng' => 'Erdgas (CNG)',
-    'electric' => 'Elektro',
-    'hybrid' => 'Hybrid',
-    'hydrogen' => 'Wasserstoff',
-    'other' => 'Andere',
-];
+$kraftstoffTexte = getKraftstoffOptionen() + ['petrol' => 'Benzin'];
+
+// Marke, Modell, Baujahr und Tankgröße als eine Zeile
+$fahrzeugDetails = array_filter([
+    trim(($fahrzeug['brand'] ?? '') . ' ' . ($fahrzeug['model'] ?? '')),
+    !empty($fahrzeug['year']) ? 'Baujahr ' . (int)$fahrzeug['year'] : '',
+    !empty($fahrzeug['tank_capacity']) ? 'Tank ' . number_format((float)$fahrzeug['tank_capacity'], 0, ',', '.') . ' ' . $einheitKurz : '',
+]);
 ?>
 
 <div class="mt-4">
     <div class="row">
         <div class="col-md-4">
-            <img src="../images/platzhalter.jpg" alt="Fahrzeugbild" class="img-fluid">
+            <img src="<?= htmlspecialchars(fahrzeugBildUrl($fahrzeug, $baseUrl)) ?>" alt="Fahrzeugbild" class="img-fluid rounded">
         </div>
         <div class="col-md-8">
             <h2><?= htmlspecialchars($fahrzeug['name'] ?? trim($fahrzeug['marke'] . ' ' . $fahrzeug['modell'])) ?></h2>
+            <?php if ($fahrzeugDetails): ?>
+                <p class="text-muted"><?= htmlspecialchars(implode(' · ', $fahrzeugDetails)) ?></p>
+            <?php endif; ?>
             <p><strong>Tachostand:</strong>
                 <?= $currentOdo !== null ? number_format($currentOdo, 0, ',', '.') . ' km' : 'Keine Daten' ?>
             </p>

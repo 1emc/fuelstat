@@ -29,12 +29,10 @@ if ($benutzer_id !== null) {
 <div class="container mt-4">
     <?php if (count($vehicles) > 0): ?>
         <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-4">
-            <?php foreach ($vehicles as $row):
+            <?php foreach (array_values($vehicles) as $index => $row):
                 $vehicleId = $row['id'];
                 $displayName = $row['name'] ?? 'Fahrzeug';
-                $bildPfad = 'images/platzhalter.jpg';
-                $bildWebp = 'images/platzhalter.webp';
-                $hasWebp = file_exists($bildWebp);
+                $bildUrl = fahrzeugBildUrl($row, $baseUrl);
 
                 $currentOdo = null;
                 $verbrauch = null;
@@ -54,12 +52,7 @@ if ($benutzer_id !== null) {
                      data-bs-toggle="tooltip" data-bs-placement="top" title="<?= htmlspecialchars($tooltip) ?>">
                     <div class="position-relative overflow-hidden">
                         <div class="ratio ratio-16x9">
-                            <picture>
-                                <?php if ($hasWebp): ?>
-                                    <source srcset="<?= $bildWebp ?>" type="image/webp">
-                                <?php endif; ?>
-                                <img src="<?= $bildPfad ?>" class="w-100 h-100 object-fit-cover zoom-img" alt="<?= htmlspecialchars($displayName) ?>" loading="lazy">
-                            </picture>
+                            <img src="<?= htmlspecialchars($bildUrl) ?>" class="w-100 h-100 object-fit-cover zoom-img" alt="<?= htmlspecialchars($displayName) ?>" loading="lazy">
                         </div>
                         <?php if ($currentOdo !== null): ?>
                         <span class="badge bg-secondary km-badge position-absolute top-0 end-0 m-2">
@@ -68,7 +61,16 @@ if ($benutzer_id !== null) {
                         <?php endif; ?>
                     </div>
                     <div class="card-body pb-0">
-                        <h5 class="card-title mb-2 fw-semibold"><?= htmlspecialchars($displayName) ?></h5>
+                        <div class="d-flex justify-content-between align-items-start">
+                            <h5 class="card-title mb-2 fw-semibold"><?= htmlspecialchars($displayName) ?></h5>
+                            <?php if (count($vehicles) > 1): ?>
+                            <form method="post" action="includes/fahrzeug_sortieren.php" class="btn-group btn-group-sm ms-2" aria-label="Reihenfolge ändern">
+                                <input type="hidden" name="id" value="<?= htmlspecialchars($vehicleId) ?>">
+                                <button type="submit" name="richtung" value="hoch" class="btn btn-outline-secondary" title="Nach vorne" <?= $index === 0 ? 'disabled' : '' ?>><i class="fas fa-arrow-left"></i></button>
+                                <button type="submit" name="richtung" value="runter" class="btn btn-outline-secondary" title="Nach hinten" <?= $index === count($vehicles) - 1 ? 'disabled' : '' ?>><i class="fas fa-arrow-right"></i></button>
+                            </form>
+                            <?php endif; ?>
+                        </div>
                     </div>
                     <div class="card-footer bg-body border-0 pt-0 pb-3">
                         <div class="btn-group w-100">
