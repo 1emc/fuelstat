@@ -36,7 +36,7 @@ async function getVehicleStats(pool, userId, vehicleId) {
         LAG(odometer_km) OVER (ORDER BY filled_at) AS prev_full_odo,
         LAG(filled_at) OVER (ORDER BY filled_at) AS prev_full_at
       FROM ordered
-      WHERE is_full = true AND skip_previous = false
+      WHERE is_full = true
     ),
     seg AS (
       SELECT
@@ -49,14 +49,14 @@ async function getVehicleStats(pool, userId, vehicleId) {
           WHERE o.filled_at > f.prev_full_at AND o.filled_at <= f.filled_at
         ) AS liters_segment
       FROM fulls f
-      WHERE f.prev_full_at IS NOT NULL
+      -- skip_previous: Vollbetankung ist nur neuer Startpunkt (vorherige Tankfüllungen fehlen)
+      WHERE f.prev_full_at IS NOT NULL AND f.skip_previous = false
     )
     SELECT
       full_id, full_at, km, liters_segment,
       CASE WHEN km > 0 THEN ROUND(((liters_segment / km) * 100)::numeric, 2) ELSE NULL END AS l_per_100km
     FROM seg
     ORDER BY full_at DESC
-    LIMIT 12
     `,
     [userId, vehicleId]
   );

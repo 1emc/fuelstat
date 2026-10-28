@@ -8,33 +8,33 @@ $currentOdo = $stats['currentOdo'] ?? null;
 $trend = $stats['trend'] ?? null;
 $avgPrice = $stats['avgPricePerLiter'] ?? null;
 $fahrleistung = getFahrleistungFromApi($api, $fahrzeug_id, $fahrzeug, $currentOdo);
+$faelligkeiten = getFaelligkeitenFromApi($api, $fahrzeug_id);
 
 $letzterReifen = getLetzterEintragApi($api, $fahrzeug_id, 'Reifen');
 $letzteWartung = getLetzterEintragApi($api, $fahrzeug_id, 'Wartung');
 $letzterTUV = getLetzterEintragApi($api, $fahrzeug_id, 'TUV');
 
 $fuel_type = $fahrzeug['fuel_type'] ?? $fahrzeug['kraftstoff'] ?? '';
-$kraftstoffTexte = [
-    'diesel' => 'Diesel',
-    'petrol' => 'Benzin',
-    'e5' => 'Benzin (E5)',
-    'e10' => 'Benzin (E10)',
-    'lpg' => 'Autogas (LPG)',
-    'cng' => 'Erdgas (CNG)',
-    'electric' => 'Elektro',
-    'hybrid' => 'Hybrid',
-    'hydrogen' => 'Wasserstoff',
-    'other' => 'Andere',
-];
+$kraftstoffTexte = getKraftstoffOptionen() + ['petrol' => 'Benzin'];
+
+// Marke, Modell, Baujahr und Tankgröße als eine Zeile
+$fahrzeugDetails = array_filter([
+    trim(($fahrzeug['brand'] ?? '') . ' ' . ($fahrzeug['model'] ?? '')),
+    !empty($fahrzeug['year']) ? 'Baujahr ' . (int)$fahrzeug['year'] : '',
+    !empty($fahrzeug['tank_capacity']) ? 'Tank ' . number_format((float)$fahrzeug['tank_capacity'], 0, ',', '.') . ' ' . $einheitKurz : '',
+]);
 ?>
 
 <div class="mt-4">
     <div class="row">
         <div class="col-md-4">
-            <img src="../images/platzhalter.jpg" alt="Fahrzeugbild" class="img-fluid">
+            <img src="<?= htmlspecialchars(fahrzeugBildUrl($fahrzeug, $baseUrl)) ?>" alt="Fahrzeugbild" class="img-fluid rounded">
         </div>
         <div class="col-md-8">
             <h2><?= htmlspecialchars($fahrzeug['name'] ?? trim($fahrzeug['marke'] . ' ' . $fahrzeug['modell'])) ?></h2>
+            <?php if ($fahrzeugDetails): ?>
+                <p class="text-muted"><?= htmlspecialchars(implode(' · ', $fahrzeugDetails)) ?></p>
+            <?php endif; ?>
             <p><strong>Tachostand:</strong>
                 <?= $currentOdo !== null ? number_format($currentOdo, 0, ',', '.') . ' km' : 'Keine Daten' ?>
             </p>
@@ -54,7 +54,7 @@ $kraftstoffTexte = [
                 $aktuell = $trend['current'] ?? null;
                 $diff = $trend['diff'] ?? null;
                 if ($aktuell !== null) {
-                    echo number_format($aktuell, 2, ',', '.') . ' l/100km';
+                    echo number_format($aktuell, 2, ',', '.') . ' ' . $einheitKurz . '/100km';
                     if ($diff !== null && abs($diff) >= 0.01) {
                         $sign = $diff > 0 ? '+' : '';
                         echo ' <span class="text-muted">(' . $sign . number_format($diff, 2, ',', '.') . ' ggü. Ø)</span>';
@@ -149,6 +149,30 @@ $kraftstoffTexte = [
                     </div>
                 </div>
             </div>
+
+            <h3 class="mt-4">Fälligkeiten</h3>
+            <ul class="list-group mb-2">
+                <?php foreach ($faelligkeiten as $f):
+                    $farbe = ['ueberfaellig' => 'danger', 'bald' => 'warning', 'ok' => 'success', 'unbekannt' => 'secondary'][$f['status']];
+                    $text = ['ueberfaellig' => 'überfällig', 'bald' => 'bald fällig', 'ok' => 'ok', 'unbekannt' => 'kein Eintrag'][$f['status']];
+                ?>
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong><?= htmlspecialchars($f['titel']) ?></strong><br>
+                        <small class="text-muted">
+                            <?php if ($f['faellig_datum']): ?>
+                                fällig am <?= date('d.m.Y', strtotime($f['faellig_datum'])) ?>
+                                <?php if ($f['faellig_km']): ?> oder bei <?= number_format($f['faellig_km'], 0, ',', '.') ?> km<?php endif; ?>
+                                · zuletzt <?= date('d.m.Y', strtotime($f['letzte'])) ?>
+                            <?php else: ?>
+                                <a href="../pages/eintrag_hinzufuegen.php?fahrzeug_id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?>&kategorie=<?= urlencode($f['kategorie']) ?>">Letzten Termin erfassen</a>, um eine Erinnerung zu bekommen
+                            <?php endif; ?>
+                        </small>
+                    </div>
+                    <span class="badge text-bg-<?= $farbe ?>"><?= $text ?></span>
+                </li>
+                <?php endforeach; ?>
+            </ul>
         </div>
     </div>
     <div class="d-flex gap-2 mt-3">

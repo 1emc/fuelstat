@@ -280,6 +280,70 @@ Authorization: Bearer <jwt>
 * 404: `vehicle_not_found`
 * 500: `server_error`
 
+## Ausgaben (Entries) bearbeiten und löschen (Auth required)
+
+* `GET /entries/:entryId` – einzelne Ausgabe
+* `PATCH /entries/:entryId` – Felder `category`, `amountEur`, `odometerKm`, `occurredAt`, `vendor`, `description` (alle optional; `null` löscht optionale Felder)
+* `DELETE /entries/:entryId` – 204
+
+Fremde oder ungültige IDs liefern 404 `entry_not_found`.
+
+## Listen seitenweise laden
+
+`GET /vehicles/:vehicleId/fillups` und `GET /vehicles/:vehicleId/entries` akzeptieren neben `limit` (max. 200) auch `offset`. Das PHP-Frontend lädt so alle Einträge.
+
+## Passwort und 2FA (Auth required)
+
+* `POST /auth/password` `{ "currentPassword", "newPassword" }` – widerruft alle bestehenden Tokens und gibt `{ "token" }` zurück. Fehler: 401 `invalid_current_password`, 400 `password_too_short`
+* `POST /auth/mfa/setup` – erzeugt ein TOTP-Secret `{ "secret", "otpauthUrl" }` (noch nicht aktiv)
+* `POST /auth/mfa/enable` `{ "code" }` – aktiviert 2FA nach korrektem Code
+* `POST /auth/mfa/disable` `{ "password", "code" }` – deaktiviert 2FA
+
+Bei aktivem 2FA antwortet `POST /auth/login` ohne `code` mit 401 `mfa_required`, mit falschem Code mit 401 `invalid_mfa_code`. TOTP: 30 Sekunden, 6 Stellen, SHA1 (kompatibel mit Google Authenticator, Aegis, 1Password usw.).
+
+`GET /whoami` liefert zusätzlich `is_admin`.
+
+## Tankfüllungen: vollgetankt und Lücken
+
+`POST /fillups` übernimmt `isFull` (Standard `true`) und `skipPrevious` (Standard `false`). Eine Vollbetankung mit `skipPrevious = true` ist ein neuer Startpunkt für die Verbrauchsberechnung: Über die Lücke davor wird kein Verbrauch berechnet.
+
+## CSV-Import (Auth required)
+
+`POST /vehicles/:vehicleId/import`
+
+```json
+{
+  "fillups": [{ "filledAt": "2026-01-05", "odometerKm": 38337, "amount": 33.5, "totalCostEur": 61.2, "station": "Aral", "isFull": true, "skipPrevious": false }],
+  "entries": [{ "occurredAt": "2026-01-02", "category": "Versicherung", "amountEur": 420, "odometerKm": null, "vendor": "HUK", "description": "Jahresbeitrag" }]
+}
+```
+
+* max. 1000 Zeilen pro Anfrage, alles in einer Transaktion
+* bei ungültigen Zeilen 400 `invalid_rows` mit `rows: [{ type, index, error }]`, es wird nichts importiert
+* Duplikate werden übersprungen: Tankfüllung mit gleichem Datum und Tachostand, Ausgabe mit gleichem Datum, Kategorie und Betrag
+* Antwort 201: `{ "imported": { "fillups", "entries" }, "skipped": { "fillups", "entries" } }`
+
+## Fälligkeiten (Auth required)
+
+`GET /vehicles/:vehicleId/reminders` – Liste mit `title`, `category`, `last`, `due_date`, `due_km`, `status` (`ok`, `bald`, `ueberfaellig`, `unbekannt`) und `days`. Regeln: TÜV alle 24 Monate, Wartung/Inspektion alle 12 Monate oder 15.000 km, Versicherung und Steuer jährlich, jeweils ab dem letzten Eintrag. „bald“ = innerhalb der Vorlaufzeit aus den Mail-Einstellungen (Standard 30 Tage) oder weniger als 1.000 km.
+
+## E-Mail-Benachrichtigungen (Auth required)
+
+* `GET /auth/mail-settings` – Einstellungen; das Passwort wird nie zurückgegeben, nur `has_password`
+* `PUT /auth/mail-settings` – `smtpHost`, `smtpPort` (25, 465, 587, 2525), `smtpSecurity` (`tls`, `starttls`, `none`), `smtpUser`, `smtpPassword` (nur senden, wenn es sich ändert), `clearPassword`, `fromAddress`, `toAddress`, `remindersEnabled`, `reminderDays` (1–180), `monthlyReport`
+* `POST /auth/mail-settings/test` – Test-Mail
+* `POST /auth/mail-settings/send-now` `{ "type": "reminders" | "report" }` – sofort senden (Bericht für den Vormonat)
+
+Fehler: 400 `mail_not_configured`, 400 `smtp_host_not_allowed` (interne Adresse), 400 `smtp_host_not_found`, 502 `smtp_failed` mit `detail` (Meldung des Mailservers).
+
+Ein Job im Backend prüft stündlich: Erinnerungs-Mails, sobald ein Termin bald fällig ist und noch einmal, wenn er überfällig ist; der Monatsbericht des Vormonats geht am Monatsanfang raus. Jede Mail wird nur einmal verschickt (`mail_log`).
+
+Umgebungsvariablen des Backends:
+
+* `MAIL_ENCRYPTION_KEY` – Schlüssel für die SMTP-Passwörter (Standard: aus `JWT_SECRET` abgeleitet; wer `JWT_SECRET` ändert, muss dann die SMTP-Passwörter neu eingeben)
+* `ALLOW_PRIVATE_SMTP=true` – Mailserver mit internen Adressen erlauben (z. B. eigener Server im selben Netz)
+* `NOTIFICATIONS_ENABLED=false` – automatischen Versand abschalten
+
 ## Common error format
 
 ```json

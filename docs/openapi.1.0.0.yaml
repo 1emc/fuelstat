@@ -545,6 +545,7 @@ paths:
       parameters:
         - $ref: "#/components/parameters/VehicleId"
         - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
       responses:
         "200":
           description: OK
@@ -736,6 +737,7 @@ paths:
       parameters:
         - $ref: "#/components/parameters/VehicleId"
         - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
       responses:
         "200":
           description: OK
@@ -749,6 +751,313 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/ServerError"
+
+  /api/v1/entries/{entryId}:
+    get:
+      tags: [Entries]
+      summary: Get Entry (details)
+      operationId: getEntry
+      parameters:
+        - $ref: "#/components/parameters/EntryId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    patch:
+      tags: [Entries]
+      summary: Patch Entry (details)
+      operationId: patchEntry
+      parameters:
+        - $ref: "#/components/parameters/EntryId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EntryPatchRequest"
+            example:
+              amountEur: 275.5
+              vendor: "ATU"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    delete:
+      tags: [Entries]
+      summary: Delete Entry
+      operationId: deleteEntry
+      parameters:
+        - $ref: "#/components/parameters/EntryId"
+      responses:
+        "204":
+          description: No Content
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/auth/password:
+    post:
+      tags: [Users]
+      summary: Change own password
+      description: "Prüft das aktuelle Passwort, setzt das neue, widerruft alle bestehenden Tokens und gibt ein neues Token zurück."
+      operationId: postAuthPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordChangeRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/auth/mfa/setup:
+    post:
+      tags: [Users]
+      summary: Start 2FA setup (TOTP)
+      description: "Erzeugt ein neues Secret. 2FA ist erst nach /auth/mfa/enable aktiv."
+      operationId: postMfaSetup
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MfaSetupResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: mfa_already_enabled
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/auth/mfa/enable:
+    post:
+      tags: [Users]
+      summary: Enable 2FA with a code from the authenticator app
+      operationId: postMfaEnable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MfaCodeRequest"
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: invalid_mfa_code | mfa_not_set_up
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/auth/mfa/disable:
+    post:
+      tags: [Users]
+      summary: Disable 2FA (password and current code required)
+      operationId: postMfaDisable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MfaCodeRequest"
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: invalid_mfa_code | mfa_not_enabled
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/vehicles/{vehicleId}/import:
+    post:
+      tags: [Entries]
+      summary: Import fillups and entries (e.g. from CSV)
+      description: "Max. 1000 Zeilen, alles in einer Transaktion. Duplikate (gleiches Datum + Tachostand bzw. Datum + Kategorie + Betrag) werden übersprungen."
+      operationId: postVehicleImport
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fillups:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/FillupCreateRequest"
+                entries:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/EntryCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  imported:
+                    type: object
+                    properties:
+                      fillups: { type: integer }
+                      entries: { type: integer }
+                  skipped:
+                    type: object
+                    properties:
+                      fillups: { type: integer }
+                      entries: { type: integer }
+        "400":
+          description: nothing_to_import | too_many_rows | invalid_rows
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/vehicles/{vehicleId}/reminders:
+    get:
+      tags: [Vehicles]
+      summary: Due dates (TÜV, service, insurance, tax)
+      operationId: getVehicleReminders
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Reminder"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/auth/mail-settings:
+    get:
+      tags: [Users]
+      summary: Get own e-mail notification settings
+      operationId: getMailSettings
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MailSettings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      tags: [Users]
+      summary: Save own e-mail notification settings
+      operationId: putMailSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MailSettingsRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MailSettings"
+        "400":
+          description: invalid_* | mail_not_configured | smtp_host_not_allowed | smtp_host_not_found
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/auth/mail-settings/test:
+    post:
+      tags: [Users]
+      summary: Send a test mail with the saved settings
+      operationId: postMailTest
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: mail_not_configured | smtp_host_not_allowed | smtp_host_not_found
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "502":
+          description: smtp_failed (detail enthält die Meldung des Mailservers)
+
+  /api/v1/auth/mail-settings/send-now:
+    post:
+      tags: [Users]
+      summary: Send reminders or the report for the previous month now
+      operationId: postMailSendNow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: [reminders, report]
+              required: [type]
+      responses:
+        "200":
+          description: "OK ({ sent: true } oder { sent: false, reason: nothing_due })"
+        "400":
+          description: invalid_type | mail_not_configured
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "502":
+          description: smtp_failed
 
 components:
   securitySchemes:
@@ -788,6 +1097,22 @@ components:
         minimum: 1
         maximum: 200
         default: 50
+    Offset:
+      name: offset
+      in: query
+      required: false
+      description: Anzahl zu überspringender Einträge (für seitenweises Laden)
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    EntryId:
+      name: entryId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     Cursor:
       name: cursor
       in: query
@@ -890,6 +1215,17 @@ components:
         created_at:
           type: string
           format: date-time
+        username:
+          type: string
+          nullable: true
+        mfa_enabled:
+          type: boolean
+        profile_image_url:
+          type: string
+          nullable: true
+        is_admin:
+          type: boolean
+          description: true, wenn die User-ID in ADMIN_USER_IDS steht
         token:
           type: object
           additionalProperties: false
@@ -929,6 +1265,9 @@ components:
         password:
           type: string
           minLength: 1
+        code:
+          type: string
+          description: "6-stelliger TOTP-Code; nur nötig, wenn 2FA aktiv ist (sonst 401 mfa_required)"
       required: [email, password]
 
     AuthResponse:
@@ -1279,6 +1618,104 @@ components:
           type: string
           format: date-time
       required: [id, vehicle_id, category, amount_eur, occurred_at, created_at]
+
+    EntryPatchRequest:
+      type: object
+      additionalProperties: false
+      description: Alle Felder optional; nur gesendete Felder werden geändert
+      properties:
+        category:
+          $ref: "#/components/schemas/EntryCategory"
+        amountEur:
+          type: number
+          minimum: 0
+        odometerKm:
+          type: integer
+          minimum: 0
+          nullable: true
+        occurredAt:
+          type: string
+          format: date-time
+        vendor:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+
+    PasswordChangeRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+          minLength: 8
+      required: [currentPassword, newPassword]
+
+    MfaSetupResponse:
+      type: object
+      properties:
+        secret:
+          type: string
+          description: Base32-Secret für die Authenticator-App
+        otpauthUrl:
+          type: string
+          description: otpauth://-URL für den QR-Code
+
+    MfaCodeRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          example: "123456"
+        password:
+          type: string
+          description: Nur bei /auth/mfa/disable erforderlich
+      required: [code]
+
+    Reminder:
+      type: object
+      properties:
+        title: { type: string, example: "TÜV" }
+        category: { type: string, example: "TUV" }
+        last: { type: string, format: date, nullable: true }
+        due_date: { type: string, format: date, nullable: true }
+        due_km: { type: integer, nullable: true }
+        status: { type: string, enum: [ok, bald, ueberfaellig, unbekannt] }
+        days: { type: integer, nullable: true }
+
+    MailSettings:
+      type: object
+      properties:
+        smtp_host: { type: string, nullable: true }
+        smtp_port: { type: integer, nullable: true }
+        smtp_security: { type: string, enum: [tls, starttls, none] }
+        smtp_user: { type: string, nullable: true }
+        has_password: { type: boolean }
+        from_address: { type: string, nullable: true }
+        to_address: { type: string, nullable: true }
+        reminders_enabled: { type: boolean }
+        reminder_days: { type: integer }
+        monthly_report: { type: boolean }
+        last_sent_at: { type: string, format: date-time, nullable: true }
+        last_error: { type: string, nullable: true }
+
+    MailSettingsRequest:
+      type: object
+      properties:
+        smtpHost: { type: string, nullable: true }
+        smtpPort: { type: integer, enum: [25, 465, 587, 2525] }
+        smtpSecurity: { type: string, enum: [tls, starttls, none] }
+        smtpUser: { type: string, nullable: true }
+        smtpPassword: { type: string, description: "Nur senden, wenn es sich ändert" }
+        clearPassword: { type: boolean }
+        fromAddress: { type: string, nullable: true }
+        toAddress: { type: string, nullable: true }
+        remindersEnabled: { type: boolean }
+        reminderDays: { type: integer, minimum: 1, maximum: 180 }
+        monthlyReport: { type: boolean }
 
     EntryListResponse:
       type: array

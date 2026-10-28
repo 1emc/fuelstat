@@ -1,15 +1,37 @@
 <?php
-// Sortierung wird bei API-Anbindung nicht unterstützt (API liefert keine sortierung).
+// Fahrzeug in der Übersicht eine Position nach vorne oder hinten schieben (speichert sortOrder über die API)
 include 'session.php';
 require_once __DIR__ . '/api_config.php';
-include 'db_connect.php';
-header('Content-Type: text/plain; charset=utf-8');
+require_once __DIR__ . '/api_helpers.php';
+
 if (!isApiAuthenticated()) {
     http_response_code(403);
     exit('Nicht eingeloggt.');
 }
-if (!isset($_POST['order']) || !is_array($_POST['order'])) {
-    http_response_code(400);
-    exit('Fehlerhafte Daten.');
+
+$id = trim((string)($_POST['id'] ?? ''));
+$richtung = $_POST['richtung'] ?? '';
+$zurueck = '../index.php';
+
+if ($id === '' || !in_array($richtung, ['hoch', 'runter'], true)) {
+    header('Location: ' . $zurueck);
+    exit;
 }
-exit('Reihenfolge gespeichert!');
+
+try {
+    $api = getApiClient();
+    // Die API liefert die Fahrzeuge bereits in der gespeicherten Reihenfolge
+    $ids = array_column($api->getVehicles(), 'id');
+    $pos = array_search($id, $ids, true);
+    $ziel = $richtung === 'hoch' ? $pos - 1 : $pos + 1;
+    if ($pos !== false && $ziel >= 0 && $ziel < count($ids)) {
+        [$ids[$pos], $ids[$ziel]] = [$ids[$ziel], $ids[$pos]];
+        foreach ($ids as $i => $vehicleId) {
+            $api->patchVehicle($vehicleId, ['sortOrder' => $i]);
+        }
+    }
+} catch (Throwable $e) {
+    $_SESSION['error_message'] = 'Reihenfolge konnte nicht gespeichert werden: ' . $e->getMessage();
+}
+header('Location: ' . $zurueck);
+exit;

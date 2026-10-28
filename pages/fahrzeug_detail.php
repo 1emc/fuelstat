@@ -18,6 +18,9 @@ try {
 // Für Tabs: API-Fahrzeug in altes Format abbilden (marke/modell wo erwartet)
 $fahrzeug['marke'] = '';
 $fahrzeug['modell'] = $fahrzeug['name'] ?? '';
+
+// Mengeneinheit für alle Tabs (l, kWh oder kg)
+$einheitKurz = einheitKurz(getEinheitFuerKraftstoff($fahrzeug['fuel_type'] ?? null));
 ?>
 
 <div class="container mt-5">

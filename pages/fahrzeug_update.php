@@ -2,6 +2,7 @@
 include '../includes/session.php';
 include '../includes/db_connect.php';
 require_once __DIR__ . '/../includes/api_helpers.php';
+require_once __DIR__ . '/../includes/functions.php';
 $api = getApiClient();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['fahrzeug_id'])) {
@@ -9,22 +10,22 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['fahrzeug_id'])) {
     exit;
 }
 $fahrzeug_id = trim($_POST['fahrzeug_id']);
-$name = trim($_POST['name'] ?? '');
-$fuelType = $_POST['fuelType'] ?? 'diesel';
+$daten = fahrzeugDatenAusPost($_POST);
 
-if ($name === '') {
-    $_SESSION['error_message'] = 'Name ist erforderlich.';
+if ($daten['name'] === '' || !array_key_exists($daten['fuelType'], getKraftstoffOptionen())) {
+    $_SESSION['error_message'] = 'Name und gültige Kraftstoffart sind erforderlich.';
     header('Location: fahrzeug_bearbeiten.php?id=' . rawurlencode($fahrzeug_id));
     exit;
 }
-$allowed = ['diesel', 'petrol', 'electric', 'hybrid', 'cng', 'lpg', 'other'];
-if (!in_array($fuelType, $allowed, true)) {
-    $fuelType = 'diesel';
-}
 
 try {
-    $api->patchVehicle($fahrzeug_id, ['name' => $name, 'fuelType' => $fuelType]);
-    $_SESSION['success_message'] = 'Fahrzeug aktualisiert.';
+    $api->patchVehicle($fahrzeug_id, $daten);
+    $bildFehler = speichereFahrzeugBild($api, $fahrzeug_id, $_FILES, $_POST);
+    if ($bildFehler !== null) {
+        $_SESSION['warning_message'] = 'Fahrzeug gespeichert, aber: ' . $bildFehler;
+    } else {
+        $_SESSION['success_message'] = 'Fahrzeug aktualisiert.';
+    }
     header('Location: fahrzeug_detail.php?id=' . rawurlencode($fahrzeug_id));
     exit;
 } catch (Throwable $e) {

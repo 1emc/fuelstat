@@ -11,10 +11,12 @@ $fahrzeug_id = trim($_GET['fahrzeug_id']);
 
 $aktuellerTacho = null;
 $fahrzeugKraftstoff = 'diesel';
+$einheit = 'l';
 $standortOptionen = [];
 try {
     $vehicle = $api->getVehicle($fahrzeug_id);
     $fahrzeugKraftstoff = $vehicle['fuel_type'] ?? 'diesel';
+    $einheit = getEinheitFuerKraftstoff($fahrzeugKraftstoff);
     if ($fahrzeugKraftstoff === 'petrol') $fahrzeugKraftstoff = 'e10';
     $stats = $api->getVehicleStats($fahrzeug_id);
     $aktuellerTacho = $stats['currentOdo'] ?? null;
@@ -111,9 +113,9 @@ $allCategories = [
                 </datalist>
                 <div id="tankstellenVorschlaege" class="mt-2"></div>
             </div>
-			<!-- Menge (Liter) -->
+			<!-- Menge (Liter/kWh/kg) -->
 			<div class="mb-3">
-			  <label for="menge" class="form-label">Menge (Liter)</label>
+			  <label for="menge" class="form-label">Menge (<?= einheitLang($einheit) ?>)</label>
 			  <div class="input-group">
 				  <input type="number"
 						 inputmode="decimal"
@@ -130,9 +132,9 @@ $allCategories = [
 			  </div>
 			</div>
 
-			<!-- Preis pro Liter (€) -->
+			<!-- Preis pro Einheit (€) -->
 			<div class="mb-3">
-			  <label for="preis_pro_einheit" class="form-label">Preis pro Liter (€)</label>
+			  <label for="preis_pro_einheit" class="form-label">Preis pro <?= einheitLang($einheit) ?> (€)</label>
 			  <div class="input-group">
 				  <input type="number"
 						 inputmode="decimal"
@@ -292,7 +294,7 @@ const val = id => {
 // Zugriffskarte auf Felder + Buttons
 const F = {
     menge  : {input:'menge',  btn:'btnUseMenge',  step:0.01,  hint:'Menge automatisch berechnet.'},
-    preis  : {input:'preis_pro_einheit', btn:'btnUsePreis', step:0.001, hint:'Preis pro Liter automatisch berechnet.'},
+    preis  : {input:'preis_pro_einheit', btn:'btnUsePreis', step:0.001, hint:'Preis pro <?= einheitLang($einheit) ?> automatisch berechnet.'},
     kosten : {input:'kosten', btn:'btnUseKosten', step:0.01,  hint:'Gesamtpreis automatisch berechnet.'}
 };
 

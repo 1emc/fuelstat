@@ -44,9 +44,10 @@ function getUserVehicles($user_id) {
 }
 
 // Session validieren: Nur bei 401 (ungültiger/abgelaufener Token) ausloggen
+$currentUser = null;
 if (isApiAuthenticated()) {
     try {
-        $api->getWhoAmI();
+        $currentUser = $api->getWhoAmI();
     } catch (Throwable $e) {
         $code = method_exists($e, 'getCode') ? $e->getCode() : 0;
         error_log('[Header] getWhoAmI failed with code ' . $code . ': ' . $e->getMessage());
@@ -153,7 +154,12 @@ if (isApiAuthenticated()) {
                     <!-- Benutzereinstellungen -->
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="userSettingsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="fas fa-user-cog"></i> Einstellungen
+                            <?php if (!empty($currentUser['profile_image_url'])): ?>
+                                <img src="<?= htmlspecialchars(preg_match('#^https?://#i', $currentUser['profile_image_url']) ? $currentUser['profile_image_url'] : $baseUrl . ltrim($currentUser['profile_image_url'], '/')) ?>" alt="" class="rounded-circle me-1" style="width:22px;height:22px;object-fit:cover;vertical-align:-5px">
+                                <?= htmlspecialchars($currentUser['username'] ?: 'Einstellungen') ?>
+                            <?php else: ?>
+                                <i class="fas fa-user-cog"></i> <?= htmlspecialchars(($currentUser['username'] ?? '') ?: 'Einstellungen') ?>
+                            <?php endif; ?>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userSettingsDropdown">
                             <li>
@@ -171,6 +177,18 @@ if (isApiAuthenticated()) {
                                     <i class="fas fa-shield-alt me-2"></i> 2FA einrichten
                                 </a>
                             </li>
+                            <li>
+                                <a class="dropdown-item" href="<?= htmlspecialchars($baseUrl) ?>pages/benachrichtigungen.php">
+                                    <i class="fas fa-envelope me-2"></i> E-Mail-Benachrichtigungen
+                                </a>
+                            </li>
+                            <?php if (!empty($currentUser['is_admin'])): ?>
+                            <li>
+                                <a class="dropdown-item" href="<?= htmlspecialchars($baseUrl) ?>pages/admin.php">
+                                    <i class="fas fa-users-cog me-2"></i> Benutzerverwaltung
+                                </a>
+                            </li>
+                            <?php endif; ?>
                             <li><hr class="dropdown-divider"></li>
                             <li>
                                 <a class="dropdown-item" href="<?= htmlspecialchars($baseUrl) ?>pages/logout.php">

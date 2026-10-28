@@ -605,6 +605,84 @@ function getLetzterEintrag($fahrzeug_id, $kategorie) {
  * @param string $kategorie Der interne Kategoriename
  * @return string Der benutzerfreundliche Name mit Umlauten
  */
+/**
+ * Kraftstoffarten, wie die API sie kennt, mit Anzeigenamen.
+ */
+function getKraftstoffOptionen(): array
+{
+    return [
+        'diesel' => 'Diesel',
+        'e5' => 'Benzin (E5)',
+        'e10' => 'Benzin (E10)',
+        'lpg' => 'Autogas (LPG)',
+        'cng' => 'Erdgas (CNG)',
+        'electric' => 'Elektro',
+        'hybrid' => 'Hybrid',
+        'hydrogen' => 'Wasserstoff',
+        'other' => 'Andere',
+    ];
+}
+
+/**
+ * URL des Fahrzeugbilds, sonst Platzhalter. $baseUrl ist die App-Basis-URL mit Slash am Ende.
+ */
+function fahrzeugBildUrl(array $fahrzeug, string $baseUrl): string
+{
+    $url = trim((string)($fahrzeug['image_url'] ?? ''));
+    if ($url === '') {
+        return $baseUrl . 'images/platzhalter.jpg';
+    }
+    if (preg_match('#^https?://#i', $url)) {
+        return $url;
+    }
+    return $baseUrl . ltrim($url, '/');
+}
+
+/**
+ * CO₂-Emissionsfaktor in kg pro Mengeneinheit (l, kWh bzw. kg).
+ * Verbrenner: direkte Emission bei der Verbrennung; Elektro: deutscher Strommix.
+ * @return float|null null, wenn kein sinnvoller Faktor bekannt ist
+ */
+function getCo2Faktor(?string $fuelType): ?float
+{
+    $faktoren = [
+        'e5' => 2.37, 'e10' => 2.37, 'petrol' => 2.37, 'hybrid' => 2.37,
+        'diesel' => 2.65,
+        'lpg' => 1.64,
+        'cng' => 2.79,
+        'electric' => 0.363,
+        'hydrogen' => 0.0,
+    ];
+    return $faktoren[strtolower((string)$fuelType)] ?? null;
+}
+
+/**
+ * Mengeneinheit passend zum Kraftstoff (wie im Backend abgeleitet): 'l', 'kwh' oder 'kg'.
+ */
+function getEinheitFuerKraftstoff(?string $fuelType): string
+{
+    $fuelType = strtolower((string)$fuelType);
+    if ($fuelType === 'electric') {
+        return 'kwh';
+    }
+    if ($fuelType === 'cng' || $fuelType === 'hydrogen') {
+        return 'kg';
+    }
+    return 'l';
+}
+
+/** Kurzform für Anzeigen wie "41,2 l" oder "kWh/100km". */
+function einheitKurz(?string $einheit): string
+{
+    return ['kwh' => 'kWh', 'kg' => 'kg'][strtolower((string)$einheit)] ?? 'l';
+}
+
+/** Langform für Formularbeschriftungen wie "Menge (Liter)". */
+function einheitLang(?string $einheit): string
+{
+    return ['kwh' => 'kWh', 'kg' => 'kg'][strtolower((string)$einheit)] ?? 'Liter';
+}
+
 function getKategorieName($kategorie) {
     $uebersetzung = [
         'Tankfuellung' => 'Tankfüllung',

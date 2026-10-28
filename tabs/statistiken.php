@@ -15,8 +15,37 @@ $verbrauchswerte = $d['verbrauchswerte'];
 $verbrauchProMonat = $d['verbrauchProMonat'];
 $kostenProMonat = $d['kostenProMonat'];
 $jahresdaten = $d['jahresdaten'];
-$basisKraftstoffKm = null;
+// Kraftstoffkosten pro km: Kosten aller Tankfüllungen nach der ersten / gefahrene km dazwischen
 $kraftstoffKostenProKm = null;
+$tankRows = [];
+foreach (getMergedEintraegeFromApi($api, $fahrzeug_id)['eintraege'] as $monatsEintraege) {
+    foreach ($monatsEintraege as $e) {
+        if (($e['kategorie'] ?? '') === 'Tankfuellung') {
+            $tankRows[] = $e;
+        }
+    }
+}
+usort($tankRows, fn($a, $b) => [(int)$a['tachostand'], $a['datum']] <=> [(int)$b['tachostand'], $b['datum']]);
+if (count($tankRows) >= 2) {
+    $kmSpanne = (int)end($tankRows)['tachostand'] - (int)$tankRows[0]['tachostand'];
+    $kostenNachErster = array_sum(array_map(fn($e) => (float)$e['kosten'], array_slice($tankRows, 1)));
+    if ($kmSpanne > 0) {
+        $kraftstoffKostenProKm = $kostenNachErster / $kmSpanne;
+    }
+}
+
+// CO₂: getankte Menge × Emissionsfaktor; Ø pro km aus dem Gesamtverbrauch
+$co2Faktor = getCo2Faktor($fahrzeug['fuel_type'] ?? null);
+$co2Gesamt = null;
+$co2ProKm = null;
+if ($co2Faktor !== null) {
+    $co2Gesamt = array_sum(array_map(fn($e) => (float)$e['menge'], $tankRows)) * $co2Faktor;
+    $summeMenge = array_sum(array_column($jahresdaten, 'verbrauch_menge'));
+    $summeKm = array_sum(array_column($jahresdaten, 'verbrauch_km'));
+    if ($summeKm > 0) {
+        $co2ProKm = $summeMenge / $summeKm * $co2Faktor * 1000; // g/km
+    }
+}
 $durchschnittPreis = null;
 try {
     $stats = $api->getVehicleStats($fahrzeug_id);
@@ -53,13 +82,13 @@ $teuersterMonatWert = !empty($kostenProMonatFormatted) ? max($kostenProMonatForm
     <div class="col-md-4 mb-2">
         <div class="card p-2 text-center">
             <strong title="Basis: Full-to-Full">Bester Monatsverbrauch</strong><br>
-            <span><?= $besterVerbrauch !== null ? $bestKey . ' (' . number_format($besterVerbrauch, 2, ',', '.') . ' l/100km)' : '–' ?></span>
+            <span><?= $besterVerbrauch !== null ? $bestKey . ' (' . number_format($besterVerbrauch, 2, ',', '.') . ' ' . $einheitKurz . '/100km)' : '–' ?></span>
         </div>
     </div>
     <div class="col-md-4 mb-2">
         <div class="card p-2 text-center">
             <strong>Schlechtester Monatsverbrauch</strong><br>
-            <span><?= $schlechtesterVerbrauch !== null ? $worstKey . ' (' . number_format($schlechtesterVerbrauch, 2, ',', '.') . ' l/100km)' : '–' ?></span>
+            <span><?= $schlechtesterVerbrauch !== null ? $worstKey . ' (' . number_format($schlechtesterVerbrauch, 2, ',', '.') . ' ' . $einheitKurz . '/100km)' : '–' ?></span>
         </div>
     </div>
     <div class="col-md-4 mb-2">
@@ -74,15 +103,29 @@ $teuersterMonatWert = !empty($kostenProMonatFormatted) ? max($kostenProMonatForm
     <div class="col-md-6 mb-2">
         <div class="card p-2 text-center">
             <strong>Kraftstoffkosten pro km</strong><br>
-            <span><?= $kraftstoffKostenProKm !== null ? number_format($kraftstoffKostenProKm, 2, ',', '.') . ' €' : '–' ?></span>
+            <span><?= $kraftstoffKostenProKm !== null ? number_format($kraftstoffKostenProKm, 3, ',', '.') . ' €/km' : '–' ?></span>
         </div>
     </div>
     <div class="col-md-6 mb-2">
         <div class="card p-2 text-center">
             <strong>Ø Kraftstoffpreis</strong><br>
-            <span><?= $durchschnittPreis !== null ? number_format($durchschnittPreis, 3, ',', '.') . ' €/l' : '–' ?></span>
+            <span><?= $durchschnittPreis !== null ? number_format($durchschnittPreis, 3, ',', '.') . ' €/' . $einheitKurz : '–' ?></span>
         </div>
     </div>
+    <?php if ($co2Faktor !== null): ?>
+    <div class="col-md-6 mb-2">
+        <div class="card p-2 text-center" title="<?= ($fahrzeug['fuel_type'] ?? '') === 'electric' ? 'Berechnet mit dem deutschen Strommix (0,363 kg CO₂/kWh)' : 'Direkte Emission bei der Verbrennung (' . number_format($co2Faktor, 2, ',', '.') . ' kg CO₂/' . $einheitKurz . ')' ?>">
+            <strong>CO₂-Ausstoß gesamt</strong><br>
+            <span><?= $co2Gesamt !== null ? number_format($co2Gesamt / 1000, 2, ',', '.') . ' t' : '–' ?></span>
+        </div>
+    </div>
+    <div class="col-md-6 mb-2">
+        <div class="card p-2 text-center">
+            <strong>Ø CO₂ pro km</strong><br>
+            <span><?= $co2ProKm !== null ? number_format($co2ProKm, 0, ',', '.') . ' g/km' : '–' ?></span>
+        </div>
+    </div>
+    <?php endif; ?>
 </div>
 
 <div class="row gy-4">
@@ -103,7 +146,7 @@ $teuersterMonatWert = !empty($kostenProMonatFormatted) ? max($kostenProMonatForm
         <div style="max-height:250px; overflow:auto;">
             <table class="table table-sm table-bordered mb-0">
                 <thead>
-                    <tr><th>Jahr</th><th># Stops</th><th>l gekauft</th><th>€ gekauft</th><th>l verbraucht</th><th>l/100km</th></tr>
+                    <tr><th>Jahr</th><th># Stops</th><th><?= $einheitKurz ?> gekauft</th><th>€ gekauft</th><th><?= $einheitKurz ?> verbraucht</th><th><?= $einheitKurz ?>/100km</th><?php if ($co2Faktor !== null): ?><th>CO₂</th><?php endif; ?></tr>
                 </thead>
                 <tbody>
                     <?php foreach ($jahresdaten as $jahr => $daten): ?>
@@ -114,6 +157,7 @@ $teuersterMonatWert = !empty($kostenProMonatFormatted) ? max($kostenProMonatForm
                         <td><?= number_format($daten['gekauft_ausgaben'], 2, ',', '.') ?></td>
                         <td><?= number_format($daten['verbrauch_menge'], 2, ',', '.') ?></td>
                         <td><?= $daten['verbrauch_l100km'] > 0 ? number_format($daten['verbrauch_l100km'], 2, ',', '.') . ' (' . number_format($daten['verbrauch_km'], 0, ',', '.') . ' km)' : '–' ?></td>
+                        <?php if ($co2Faktor !== null): ?><td><?= number_format($daten['gekauft_menge'] * $co2Faktor, 0, ',', '.') ?> kg</td><?php endif; ?>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>

@@ -27,7 +27,6 @@ try {
         $api->postFillup([
             'vehicleId' => $fahrzeug_id,
             'odometerKm' => $tachostand,
-            'unit' => 'l',
             'amount' => $menge,
             'totalCostEur' => $kosten,
             'station' => $station !== '' ? $station : null,

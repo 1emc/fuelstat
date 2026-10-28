@@ -3,12 +3,22 @@ ini_set('display_errors', 0);
 error_reporting(0);
 
 include '../includes/session.php';
-require_once __DIR__ . '/../includes/api_config.php';
+require_once __DIR__ . '/../includes/api_helpers.php';
 
 if (isset($_POST['csrf_token']) && isset($_SESSION['csrf_token'])) {
     if ($_POST['csrf_token'] !== $_SESSION['csrf_token']) {
         error_log("Möglicher CSRF-Angriff erkannt - IP: " . ($_SERVER['REMOTE_ADDR'] ?? ''));
         die("Ungültige Anfrage");
+    }
+}
+
+// Token auch in der API widerrufen, damit es nicht weiter benutzt werden kann
+$token = getApiToken();
+if ($token !== null) {
+    try {
+        getApiClient($token)->revokeToken($token);
+    } catch (Throwable $e) {
+        error_log('[Logout] Token-Widerruf fehlgeschlagen: ' . $e->getMessage());
     }
 }
 

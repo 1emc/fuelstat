@@ -60,6 +60,17 @@ body.dark .badge { background-color: #444; color: #fff; }
         <i class="fas fa-eye me-1"></i> Anzeigen
       </button>
     </form>
+    <div class="btn-group flex-shrink-0">
+      <a href="../pages/export.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?><?= $jahr !== null ? '&jahr=' . $jahr : '' ?>" class="btn btn-outline-primary" title="Als CSV für Excel herunterladen">
+        <i class="fas fa-file-csv me-1"></i> CSV
+      </a>
+      <a href="../pages/bericht.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?><?= $jahr !== null ? '&jahr=' . $jahr : '' ?>" class="btn btn-outline-primary" title="Druckansicht, auch zum Speichern als PDF" target="_blank">
+        <i class="fas fa-file-pdf me-1"></i> Bericht
+      </a>
+      <a href="../pages/import.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?>" class="btn btn-outline-primary" title="Einträge aus einer CSV-Datei übernehmen">
+        <i class="fas fa-file-import me-1"></i> Import
+      </a>
+    </div>
   </div>
 
   <?php if (empty($eintraege)): ?>
@@ -81,13 +92,20 @@ body.dark .badge { background-color: #444; color: #fff; }
                 <?= htmlspecialchars(getKategorieName($e['kategorie'])) ?>
               </div>
               <div class="text-muted small">
-                <?= number_format((int)($e['tachostand'] ?? 0), 0, ',', '.') ?> km<?= !empty($e['standort']) ? ' · ' . htmlspecialchars($e['standort']) : '' ?>
+                <?= implode(' · ', array_filter([
+                    !empty($e['tachostand']) ? number_format((int)$e['tachostand'], 0, ',', '.') . ' km' : '',
+                    !empty($e['standort']) ? htmlspecialchars($e['standort']) : '',
+                ])) ?>
               </div>
-              <?php if ($e['kategorie'] === 'Tankfuellung' && $v !== null): ?>
+              <?php if (!empty($e['beschreibung'])): ?>
+              <div class="small mt-1"><?= htmlspecialchars($e['beschreibung']) ?></div>
+              <?php endif; ?>
+              <?php if ($e['kategorie'] === 'Tankfuellung'): ?>
               <div class="text-info small mt-1">
                 <i class="fas fa-tint me-1"></i>
-                <?= number_format((float)($e['menge'] ?? 0), 2, ',', '.') ?> l ·
-                <?= number_format($v, 2, ',', '.') ?> l/100km
+                <?= number_format((float)($e['menge'] ?? 0), 2, ',', '.') ?> <?= $einheitKurz ?>
+                <?php if ($v !== null): ?>· <?= number_format($v, 2, ',', '.') ?> <?= $einheitKurz ?>/100km<?php endif; ?>
+                <?php if (empty($e['vollgetankt'])): ?><span class="badge text-bg-secondary ms-1">Teilbetankung</span><?php endif; ?>
               </div>
               <?php endif; ?>
             </div>

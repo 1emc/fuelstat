@@ -4,11 +4,14 @@ const cors = require('cors');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
-const { randomUUID } = require('crypto');
+const { randomUUID, randomBytes, createHmac, timingSafeEqual } = require('crypto');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { getVehicleStats } = require('./services/stats');
+const { getVehicleReminders } = require('./services/reminders');
+const { encryptSecret, sendUserMail, resolveSmtpHost, ALLOWED_PORTS } = require('./services/mail');
+const notifier = require('./services/notifier');
 
 // Media Upload Konfiguration
 // Standard-Uploadpfad: im Backend-Projektordner unter ../uploads (z. B. /srv/www/.../uploads)
@@ -24,7 +27,8 @@ const app = express();
 
 app.use(helmet());
 app.use(cors());
-app.use(express.json());
+// 2 MB erlaubt größere CSV-Importe (Frontend sendet max. 500 Zeilen pro Anfrage)
+app.use(express.json({ limit: '2mb' }));
 
 // Statischer File-Server für Uploads
 app.use(MEDIA_BASE_URL, express.static(UPLOAD_DIR));
@@ -121,6 +125,76 @@ async function auth(req, res, next) {
   }
 }
 
+// --- TOTP (RFC 6238) für 2FA: 30 s, 6 Stellen, SHA1 – kompatibel mit gängigen Authenticator-Apps ---
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+function base32Encode(buf) {
+  let bits = 0;
+  let value = 0;
+  let out = '';
+  for (const byte of buf) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      out += BASE32_ALPHABET[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  if (bits > 0) out += BASE32_ALPHABET[(value << (5 - bits)) & 31];
+  return out;
+}
+
+function base32Decode(str) {
+  const clean = String(str).toUpperCase().replace(/[^A-Z2-7]/g, '');
+  let bits = 0;
+  let value = 0;
+  const out = [];
+  for (const ch of clean) {
+    value = (value << 5) | BASE32_ALPHABET.indexOf(ch);
+    bits += 5;
+    if (bits >= 8) {
+      out.push((value >>> (bits - 8)) & 255);
+      bits -= 8;
+    }
+  }
+  return Buffer.from(out);
+}
+
+function totpCode(secretBase32, counter) {
+  const msg = Buffer.alloc(8);
+  msg.writeBigUInt64BE(BigInt(counter));
+  const hmac = createHmac('sha1', base32Decode(secretBase32)).update(msg).digest();
+  const offset = hmac[hmac.length - 1] & 0xf;
+  const num = (hmac.readUInt32BE(offset) & 0x7fffffff) % 1000000;
+  return String(num).padStart(6, '0');
+}
+
+// Erlaubt ±1 Zeitfenster (je 30 s) für leicht abweichende Uhren
+function verifyTotp(secretBase32, code) {
+  const given = String(code || '').replace(/\s/g, '');
+  if (!secretBase32 || !/^\d{6}$/.test(given)) return false;
+  const counter = Math.floor(Date.now() / 1000 / 30);
+  for (const delta of [-1, 0, 1]) {
+    const expected = Buffer.from(totpCode(secretBase32, counter + delta));
+    if (timingSafeEqual(expected, Buffer.from(given))) return true;
+  }
+  return false;
+}
+
+// Optionale Zahl aus dem Request: undefined bleibt undefined, null/'' wird null
+function optionalNumber(value) {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  return Number(value);
+}
+
+// Optionaler Text aus dem Request: undefined bleibt undefined, null/leer wird null
+function optionalText(value) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  return String(value).trim() || null;
+}
+
 // Admins werden über ADMIN_USER_IDS (kommagetrennte User-IDs) in der .env festgelegt
 function isAdmin(req) {
   const adminIds = String(process.env.ADMIN_USER_IDS || '')
@@ -175,6 +249,7 @@ app.get('/api/v1/whoami', auth, async (req, res) => {
       profile_image_url: r.rows[0].profile_image_url,
       created_at: r.rows[0].created_at,
       updated_at: r.rows[0].updated_at,
+      is_admin: isAdmin(req),
       token: {
         jti: req.user.jti || null,
         iat: req.user.iat ? new Date(req.user.iat * 1000).toISOString() : null,
@@ -229,7 +304,7 @@ app.post('/api/v1/auth/login', async (req, res) => {
 
   try {
     const r = await pool.query(
-      `SELECT id, email, password_hash, username, mfa_enabled, profile_image_url, created_at, updated_at
+      `SELECT id, email, password_hash, username, mfa_enabled, mfa_secret, profile_image_url, created_at, updated_at
        FROM users WHERE email = $1`,
       [email]
     );
@@ -239,8 +314,100 @@ app.post('/api/v1/auth/login', async (req, res) => {
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
 
+    // 2FA: erst nach korrektem Passwort nach dem Code fragen
+    if (user.mfa_enabled) {
+      if (req.body?.code === undefined || req.body?.code === '') {
+        return res.status(401).json({ error: 'mfa_required' });
+      }
+      if (!verifyTotp(user.mfa_secret, req.body.code)) {
+        return res.status(401).json({ error: 'invalid_mfa_code' });
+      }
+    }
+
     delete user.password_hash;
+    delete user.mfa_secret;
     res.json({ token: signToken(user), user });
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// Change own password (current password required). Revokes all existing tokens and returns a new one.
+app.post('/api/v1/auth/password', auth, async (req, res) => {
+  const currentPassword = String(req.body?.currentPassword || '');
+  const newPassword = String(req.body?.newPassword || '');
+  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'missing_password' });
+  if (newPassword.length < 8) return res.status(400).json({ error: 'password_too_short' });
+
+  try {
+    const r = await pool.query('SELECT id, email, password_hash FROM users WHERE id = $1', [req.user.sub]);
+    if (r.rowCount === 0) return res.status(404).json({ error: 'user_not_found' });
+    const ok = await bcrypt.compare(currentPassword, r.rows[0].password_hash);
+    if (!ok) return res.status(401).json({ error: 'invalid_current_password' });
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await pool.query('UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2', [passwordHash, req.user.sub]);
+    await pool.query(
+      `INSERT INTO user_token_revocations (user_id, revoked_after, reason)
+       VALUES ($1, now(), 'password_changed')
+       ON CONFLICT (user_id) DO UPDATE SET revoked_after = now(), reason = 'password_changed'`,
+      [req.user.sub]
+    );
+    // JWT-iat hat Sekundengenauigkeit: kurz warten, damit das neue Token nach revoked_after liegt
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    res.json({ token: signToken(r.rows[0]) });
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// 2FA einrichten: neues Secret erzeugen (noch nicht aktiv, erst nach /mfa/enable)
+app.post('/api/v1/auth/mfa/setup', auth, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT email, mfa_enabled FROM users WHERE id = $1', [req.user.sub]);
+    if (r.rowCount === 0) return res.status(404).json({ error: 'user_not_found' });
+    if (r.rows[0].mfa_enabled) return res.status(409).json({ error: 'mfa_already_enabled' });
+
+    const secret = base32Encode(randomBytes(20));
+    await pool.query('UPDATE users SET mfa_secret = $1, updated_at = now() WHERE id = $2', [secret, req.user.sub]);
+    const label = encodeURIComponent(`Fuelstat:${r.rows[0].email}`);
+    res.json({
+      secret,
+      otpauthUrl: `otpauth://totp/${label}?secret=${secret}&issuer=Fuelstat&algorithm=SHA1&digits=6&period=30`
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// 2FA aktivieren: Code aus der Authenticator-App bestätigen
+app.post('/api/v1/auth/mfa/enable', auth, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT mfa_secret, mfa_enabled FROM users WHERE id = $1', [req.user.sub]);
+    if (r.rowCount === 0) return res.status(404).json({ error: 'user_not_found' });
+    if (r.rows[0].mfa_enabled) return res.status(409).json({ error: 'mfa_already_enabled' });
+    if (!r.rows[0].mfa_secret) return res.status(400).json({ error: 'mfa_not_set_up' });
+    if (!verifyTotp(r.rows[0].mfa_secret, req.body?.code)) return res.status(400).json({ error: 'invalid_mfa_code' });
+
+    await pool.query('UPDATE users SET mfa_enabled = true, updated_at = now() WHERE id = $1', [req.user.sub]);
+    res.json({ mfa_enabled: true });
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// 2FA deaktivieren: Passwort und aktueller Code erforderlich
+app.post('/api/v1/auth/mfa/disable', auth, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT password_hash, mfa_secret, mfa_enabled FROM users WHERE id = $1', [req.user.sub]);
+    if (r.rowCount === 0) return res.status(404).json({ error: 'user_not_found' });
+    if (!r.rows[0].mfa_enabled) return res.status(400).json({ error: 'mfa_not_enabled' });
+    const ok = await bcrypt.compare(String(req.body?.password || ''), r.rows[0].password_hash);
+    if (!ok) return res.status(401).json({ error: 'invalid_current_password' });
+    if (!verifyTotp(r.rows[0].mfa_secret, req.body?.code)) return res.status(400).json({ error: 'invalid_mfa_code' });
+
+    await pool.query('UPDATE users SET mfa_enabled = false, mfa_secret = NULL, updated_at = now() WHERE id = $1', [req.user.sub]);
+    res.json({ mfa_enabled: false });
   } catch (e) {
     res.status(500).json({ error: 'server_error', detail: e.message });
   }
@@ -306,14 +473,8 @@ app.patch('/api/v1/auth/users/:userId', auth, requireSelfOrAdmin, async (req, re
     req.body?.email !== undefined
       ? String(req.body.email).trim().toLowerCase()
       : undefined;
-  const username =
-    req.body?.username !== undefined
-      ? String(req.body.username).trim() || null
-      : undefined;
-  const profileImageUrl =
-    req.body?.profileImageUrl !== undefined
-      ? String(req.body.profileImageUrl).trim() || null
-      : undefined;
+  const username = optionalText(req.body?.username);
+  const profileImageUrl = optionalText(req.body?.profileImageUrl);
 
   if (email === undefined && username === undefined && profileImageUrl === undefined) {
     return res.status(400).json({ error: 'nothing_to_update' });
@@ -523,11 +684,11 @@ app.post('/api/v1/vehicles', auth, async (req, res) => {
 
   const brand = req.body?.brand ? String(req.body.brand).trim() : null;
   const model = req.body?.model ? String(req.body.model).trim() : null;
-  const year = req.body?.year !== undefined ? Number(req.body.year) : null;
+  const year = optionalNumber(req.body?.year) ?? null;
   const imageUrl = req.body?.imageUrl ? String(req.body.imageUrl).trim() : null;
-  const odometerKm = req.body?.odometerKm !== undefined ? Number(req.body.odometerKm) : null;
-  const mileageKm = req.body?.mileageKm !== undefined ? Number(req.body.mileageKm) : null;
-  const tankCapacity = req.body?.tankCapacity !== undefined ? Number(req.body.tankCapacity) : null;
+  const odometerKm = optionalNumber(req.body?.odometerKm) ?? null;
+  const mileageKm = optionalNumber(req.body?.mileageKm) ?? null;
+  const tankCapacity = optionalNumber(req.body?.tankCapacity) ?? null;
   const sortOrder = req.body?.sortOrder !== undefined ? Number(req.body.sortOrder) : 0;
 
   if (year !== null && (!Number.isFinite(year) || year < 1886 || year > 2100)) {
@@ -630,26 +791,13 @@ app.patch('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
     req.body?.fuelType !== undefined
       ? String(req.body.fuelType).trim().toLowerCase()
       : undefined;
-  const brand =
-    req.body?.brand !== undefined
-      ? String(req.body.brand).trim() || null
-      : undefined;
-  const model =
-    req.body?.model !== undefined
-      ? String(req.body.model).trim() || null
-      : undefined;
-  const year =
-    req.body?.year !== undefined ? Number(req.body.year) : undefined;
-  const imageUrl =
-    req.body?.imageUrl !== undefined
-      ? String(req.body.imageUrl).trim() || null
-      : undefined;
-  const odometerKm =
-    req.body?.odometerKm !== undefined ? Number(req.body.odometerKm) : undefined;
-  const mileageKm =
-    req.body?.mileageKm !== undefined ? Number(req.body.mileageKm) : undefined;
-  const tankCapacity =
-    req.body?.tankCapacity !== undefined ? Number(req.body.tankCapacity) : undefined;
+  const brand = optionalText(req.body?.brand);
+  const model = optionalText(req.body?.model);
+  const year = optionalNumber(req.body?.year);
+  const imageUrl = optionalText(req.body?.imageUrl);
+  const odometerKm = optionalNumber(req.body?.odometerKm);
+  const mileageKm = optionalNumber(req.body?.mileageKm);
+  const tankCapacity = optionalNumber(req.body?.tankCapacity);
   const sortOrder =
     req.body?.sortOrder !== undefined ? Number(req.body.sortOrder) : undefined;
 
@@ -811,6 +959,8 @@ app.post('/api/v1/fillups', auth, async (req, res) => {
 
   const station = req.body?.station ? String(req.body.station).trim() : null;
   const filledAt = req.body?.filledAt ? new Date(req.body.filledAt) : null;
+  const isFull = req.body?.isFull !== undefined ? Boolean(req.body.isFull) : true;
+  const skipPrevious = req.body?.skipPrevious !== undefined ? Boolean(req.body.skipPrevious) : false;
 
   // unit optional: wenn nicht gesetzt, wird es aus vehicle.fuel_type abgeleitet
   let unit = req.body?.unit ? String(req.body.unit).trim().toLowerCase() : null;
@@ -835,7 +985,7 @@ app.post('/api/v1/fillups', auth, async (req, res) => {
 
     if (!unit) {
       if (fuelType === 'electric') unit = 'kwh';
-      else if (fuelType === 'cng' || fuelType === 'lpg') unit = 'kg';
+      else if (fuelType === 'cng') unit = 'kg';
       else if (fuelType === 'hydrogen') unit = 'kg';
       else unit = 'l'; // diesel, e5, e10, hybrid, other
     }
@@ -851,7 +1001,9 @@ app.post('/api/v1/fillups', auth, async (req, res) => {
          total_cost_eur,
          price_per_unit,
          station,
-         filled_at
+         filled_at,
+         is_full,
+         skip_previous
        )
        VALUES (
          $1,
@@ -866,10 +1018,12 @@ app.post('/api/v1/fillups', auth, async (req, res) => {
            ELSE NULL
          END,
          $7,
-         COALESCE($8, now())
+         COALESCE($8, now()),
+         $9,
+         $10
        )
        RETURNING id, vehicle_id, odometer_km, amount, unit, total_cost_eur, price_per_unit, station, filled_at, created_at, is_full, skip_previous`,
-      [req.user.sub, vehicleId, odometerKm, amount, unit, totalCostEur, station, filledAt]
+      [req.user.sub, vehicleId, odometerKm, amount, unit, totalCostEur, station, filledAt, isFull, skipPrevious]
     );
 
     res.status(201).json(r.rows[0]);
@@ -1209,6 +1363,7 @@ app.delete('/api/v1/fillups/:fillupId', auth, async (req, res) => {
 app.get('/api/v1/vehicles/:vehicleId/fillups', auth, async (req, res) => {
   const vehicleId = String(req.params.vehicleId || '').trim();
   const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));
+  const offset = Math.max(0, Math.floor(Number(req.query.offset || 0)) || 0);
 
   try {
     const v = await pool.query('SELECT 1 FROM vehicles WHERE id = $1 AND user_id = $2', [vehicleId, req.user.sub]);
@@ -1229,9 +1384,9 @@ app.get('/api/v1/vehicles/:vehicleId/fillups', auth, async (req, res) => {
          skip_previous
        FROM fillups
        WHERE user_id = $1 AND vehicle_id = $2
-       ORDER BY filled_at DESC
-       LIMIT $3`,
-      [req.user.sub, vehicleId, limit]
+       ORDER BY filled_at DESC, created_at DESC
+       LIMIT $3 OFFSET $4`,
+      [req.user.sub, vehicleId, limit, offset]
     );
 
     // Für ältere Clients zusätzlich kompatible Felder anbieten
@@ -1320,9 +1475,115 @@ app.post('/api/v1/entries', auth, async (req, res) => {
 });
 
 // List expense entries by vehicle
+const ENTRY_COLUMNS = `
+  id,
+  user_id,
+  vehicle_id,
+  category,
+  amount_eur,
+  odometer_km,
+  occurred_at,
+  vendor,
+  description,
+  created_at`;
+
+// Get single entry (expense)
+app.get('/api/v1/entries/:entryId', auth, async (req, res) => {
+  const entryId = String(req.params.entryId || '').trim();
+  try {
+    const r = await pool.query(
+      `SELECT ${ENTRY_COLUMNS} FROM expenses WHERE id = $1 AND user_id = $2`,
+      [entryId, req.user.sub]
+    );
+    if (r.rowCount === 0) return res.status(404).json({ error: 'entry_not_found' });
+    res.json(r.rows[0]);
+  } catch (e) {
+    if (e.code === '22P02') return res.status(404).json({ error: 'entry_not_found' });
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// Patch single entry (expense)
+app.patch('/api/v1/entries/:entryId', auth, async (req, res) => {
+  const entryId = String(req.params.entryId || '').trim();
+  const body = req.body || {};
+  const fields = [];
+  const values = [];
+  let idx = 1;
+
+  if (body.category !== undefined) {
+    const category = String(body.category).trim();
+    if (!category) return res.status(400).json({ error: 'missing_category' });
+    fields.push(`category = $${idx++}`);
+    values.push(category);
+  }
+  if (body.amountEur !== undefined) {
+    const amountEur = Number(body.amountEur);
+    if (!Number.isFinite(amountEur) || amountEur < 0) return res.status(400).json({ error: 'invalid_amountEur' });
+    fields.push(`amount_eur = $${idx++}`);
+    values.push(amountEur);
+  }
+  if (body.odometerKm !== undefined) {
+    const odometerKm = body.odometerKm === null || body.odometerKm === '' ? null : Number(body.odometerKm);
+    if (odometerKm !== null && (!Number.isFinite(odometerKm) || odometerKm < 0)) {
+      return res.status(400).json({ error: 'invalid_odometerKm' });
+    }
+    fields.push(`odometer_km = $${idx++}`);
+    values.push(odometerKm);
+  }
+  if (body.occurredAt !== undefined) {
+    const occurredAt = new Date(body.occurredAt);
+    if (Number.isNaN(occurredAt.getTime())) return res.status(400).json({ error: 'invalid_occurredAt' });
+    fields.push(`occurred_at = $${idx++}`);
+    values.push(occurredAt);
+  }
+  if (body.vendor !== undefined) {
+    fields.push(`vendor = $${idx++}`);
+    values.push(body.vendor === null ? null : String(body.vendor).trim() || null);
+  }
+  if (body.description !== undefined) {
+    fields.push(`description = $${idx++}`);
+    values.push(body.description === null ? null : String(body.description).trim() || null);
+  }
+
+  if (fields.length === 0) return res.status(400).json({ error: 'nothing_to_update' });
+
+  try {
+    values.push(entryId, req.user.sub);
+    const r = await pool.query(
+      `UPDATE expenses SET ${fields.join(', ')}
+       WHERE id = $${idx++} AND user_id = $${idx}
+       RETURNING ${ENTRY_COLUMNS}`,
+      values
+    );
+    if (r.rowCount === 0) return res.status(404).json({ error: 'entry_not_found' });
+    res.json(r.rows[0]);
+  } catch (e) {
+    if (e.code === '22P02') return res.status(404).json({ error: 'entry_not_found' });
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// Delete single entry (expense)
+app.delete('/api/v1/entries/:entryId', auth, async (req, res) => {
+  const entryId = String(req.params.entryId || '').trim();
+  try {
+    const r = await pool.query(
+      'DELETE FROM expenses WHERE id = $1 AND user_id = $2 RETURNING id',
+      [entryId, req.user.sub]
+    );
+    if (r.rowCount === 0) return res.status(404).json({ error: 'entry_not_found' });
+    res.status(204).send();
+  } catch (e) {
+    if (e.code === '22P02') return res.status(404).json({ error: 'entry_not_found' });
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
 app.get('/api/v1/vehicles/:vehicleId/entries', auth, async (req, res) => {
   const vehicleId = String(req.params.vehicleId || '').trim();
   const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));
+  const offset = Math.max(0, Math.floor(Number(req.query.offset || 0)) || 0);
 
   try {
     // Fahrzeug-Besitz prüfen
@@ -1347,8 +1608,8 @@ app.get('/api/v1/vehicles/:vehicleId/entries', auth, async (req, res) => {
        FROM expenses
        WHERE user_id = $1 AND vehicle_id = $2
        ORDER BY occurred_at DESC, created_at DESC
-       LIMIT $3`,
-      [req.user.sub, vehicleId, limit]
+       LIMIT $3 OFFSET $4`,
+      [req.user.sub, vehicleId, limit, offset]
     );
 
     res.json(r.rows);
@@ -1358,6 +1619,244 @@ app.get('/api/v1/vehicles/:vehicleId/entries', auth, async (req, res) => {
 });
 
 // Statistics of Vehicle
+// Mengeneinheit aus dem Kraftstoff des Fahrzeugs
+function unitForFuelType(fuelType) {
+  const f = String(fuelType || '').toLowerCase();
+  if (f === 'electric') return 'kwh';
+  if (f === 'cng' || f === 'hydrogen') return 'kg';
+  return 'l';
+}
+
+// Massen-Import (z. B. aus CSV): alle Zeilen in einer Transaktion, Duplikate werden übersprungen
+app.post('/api/v1/vehicles/:vehicleId/import', auth, async (req, res) => {
+  const vehicleId = String(req.params.vehicleId || '').trim();
+  const fillups = Array.isArray(req.body?.fillups) ? req.body.fillups : [];
+  const entries = Array.isArray(req.body?.entries) ? req.body.entries : [];
+
+  if (fillups.length + entries.length === 0) return res.status(400).json({ error: 'nothing_to_import' });
+  if (fillups.length + entries.length > 1000) return res.status(400).json({ error: 'too_many_rows', max: 1000 });
+
+  // Validierung vorab: bei Fehlern wird nichts importiert
+  const errors = [];
+  const validDate = (v) => v && !Number.isNaN(new Date(v).getTime());
+  const nonNegative = (v) => Number.isFinite(Number(v)) && Number(v) >= 0;
+  fillups.forEach((f, index) => {
+    if (!validDate(f?.filledAt)) errors.push({ type: 'fillup', index, error: 'invalid_filledAt' });
+    else if (!nonNegative(f?.odometerKm)) errors.push({ type: 'fillup', index, error: 'invalid_odometerKm' });
+    else if (!nonNegative(f?.amount)) errors.push({ type: 'fillup', index, error: 'invalid_amount' });
+    else if (!nonNegative(f?.totalCostEur)) errors.push({ type: 'fillup', index, error: 'invalid_totalCostEur' });
+  });
+  entries.forEach((e, index) => {
+    if (!validDate(e?.occurredAt)) errors.push({ type: 'entry', index, error: 'invalid_occurredAt' });
+    else if (!String(e?.category || '').trim()) errors.push({ type: 'entry', index, error: 'missing_category' });
+    else if (!nonNegative(e?.amountEur)) errors.push({ type: 'entry', index, error: 'invalid_amountEur' });
+    else if (e?.odometerKm !== undefined && e?.odometerKm !== null && e?.odometerKm !== '' && !nonNegative(e.odometerKm)) {
+      errors.push({ type: 'entry', index, error: 'invalid_odometerKm' });
+    }
+  });
+  if (errors.length) return res.status(400).json({ error: 'invalid_rows', rows: errors.slice(0, 50) });
+
+  const client = await pool.connect();
+  try {
+    const v = await client.query('SELECT fuel_type FROM vehicles WHERE id = $1 AND user_id = $2', [vehicleId, req.user.sub]);
+    if (v.rowCount === 0) return res.status(404).json({ error: 'vehicle_not_found' });
+    const unit = unitForFuelType(v.rows[0].fuel_type);
+
+    await client.query('BEGIN');
+    const result = { imported: { fillups: 0, entries: 0 }, skipped: { fillups: 0, entries: 0 } };
+
+    for (const f of fillups) {
+      const filledAt = new Date(f.filledAt);
+      const dup = await client.query(
+        `SELECT 1 FROM fillups
+         WHERE vehicle_id = $1 AND user_id = $2 AND odometer_km = $3 AND filled_at::date = $4::date`,
+        [vehicleId, req.user.sub, Math.round(Number(f.odometerKm)), filledAt]
+      );
+      if (dup.rowCount > 0) { result.skipped.fillups++; continue; }
+      await client.query(
+        `INSERT INTO fillups (user_id, vehicle_id, odometer_km, amount, unit, total_cost_eur, price_per_unit, station, filled_at, is_full, skip_previous)
+         VALUES ($1, $2, $3, $4::numeric, $5, $6::numeric,
+                 CASE WHEN $4::numeric > 0 THEN ROUND($6::numeric / $4::numeric, 4) ELSE NULL END,
+                 $7, $8, $9, $10)`,
+        [
+          req.user.sub, vehicleId, Math.round(Number(f.odometerKm)), Number(f.amount), unit, Number(f.totalCostEur),
+          f.station ? String(f.station).trim() : null, filledAt,
+          f.isFull !== undefined ? Boolean(f.isFull) : true,
+          f.skipPrevious !== undefined ? Boolean(f.skipPrevious) : false
+        ]
+      );
+      result.imported.fillups++;
+    }
+
+    for (const e of entries) {
+      const occurredAt = new Date(e.occurredAt);
+      const category = String(e.category).trim();
+      const dup = await client.query(
+        `SELECT 1 FROM expenses
+         WHERE vehicle_id = $1 AND user_id = $2 AND category = $3 AND amount_eur = $4::numeric AND occurred_at::date = $5::date`,
+        [vehicleId, req.user.sub, category, Number(e.amountEur), occurredAt]
+      );
+      if (dup.rowCount > 0) { result.skipped.entries++; continue; }
+      const odometerKm = e.odometerKm === undefined || e.odometerKm === null || e.odometerKm === '' ? null : Math.round(Number(e.odometerKm));
+      await client.query(
+        `INSERT INTO expenses (user_id, vehicle_id, category, amount_eur, odometer_km, occurred_at, vendor, description)
+         VALUES ($1, $2, $3, $4::numeric, $5, $6, $7, $8)`,
+        [
+          req.user.sub, vehicleId, category, Number(e.amountEur), odometerKm, occurredAt,
+          e.vendor ? String(e.vendor).trim() : null, e.description ? String(e.description).trim() : null
+        ]
+      );
+      result.imported.entries++;
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json(result);
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (e.code === '22P02') return res.status(404).json({ error: 'vehicle_not_found' });
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Fälligkeiten (TÜV, Wartung, Versicherung, Steuer) eines Fahrzeugs
+app.get('/api/v1/vehicles/:vehicleId/reminders', auth, async (req, res) => {
+  const vehicleId = String(req.params.vehicleId || '').trim();
+  try {
+    const v = await pool.query('SELECT 1 FROM vehicles WHERE id = $1 AND user_id = $2', [vehicleId, req.user.sub]);
+    if (v.rowCount === 0) return res.status(404).json({ error: 'vehicle_not_found' });
+    const s = await pool.query('SELECT reminder_days FROM user_mail_settings WHERE user_id = $1', [req.user.sub]);
+    res.json(await getVehicleReminders(pool, req.user.sub, vehicleId, s.rows[0]?.reminder_days ?? 30));
+  } catch (e) {
+    if (e.code === '22P02') return res.status(404).json({ error: 'vehicle_not_found' });
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// --- E-Mail-Benachrichtigungen (SMTP-Zugang je Benutzer) ---
+function mailSettingsResponse(row) {
+  return {
+    smtp_host: row?.smtp_host ?? null,
+    smtp_port: row?.smtp_port ?? null,
+    smtp_security: row?.smtp_security ?? 'starttls',
+    smtp_user: row?.smtp_user ?? null,
+    has_password: Boolean(row?.smtp_password_enc),
+    from_address: row?.from_address ?? null,
+    to_address: row?.to_address ?? null,
+    reminders_enabled: row?.reminders_enabled ?? false,
+    reminder_days: row?.reminder_days ?? 30,
+    monthly_report: row?.monthly_report ?? false,
+    last_sent_at: row?.last_sent_at ?? null,
+    last_error: row?.last_error ?? null
+  };
+}
+
+const MAIL_ERROR_CODES = new Set(['mail_not_configured', 'smtp_host_not_allowed']);
+function mailErrorResponse(res, e) {
+  if (MAIL_ERROR_CODES.has(e.code)) return res.status(400).json({ error: e.code });
+  if (e.code === 'ENOTFOUND' || e.code === 'EAI_AGAIN') return res.status(400).json({ error: 'smtp_host_not_found' });
+  // SMTP-Fehler (Login, TLS, Verbindung) an den Benutzer weitergeben, damit er die Einstellungen korrigieren kann
+  return res.status(502).json({ error: 'smtp_failed', detail: e.message });
+}
+
+app.get('/api/v1/auth/mail-settings', auth, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT * FROM user_mail_settings WHERE user_id = $1', [req.user.sub]);
+    res.json(mailSettingsResponse(r.rows[0]));
+  } catch (e) {
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+app.put('/api/v1/auth/mail-settings', auth, async (req, res) => {
+  const b = req.body || {};
+  const host = optionalText(b.smtpHost) ?? null;
+  const port = optionalNumber(b.smtpPort) ?? null;
+  const security = b.smtpSecurity === undefined ? 'starttls' : String(b.smtpSecurity);
+  const emailOk = (v) => v === null || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  const fromAddress = optionalText(b.fromAddress) ?? null;
+  const toAddress = optionalText(b.toAddress) ?? null;
+  const reminderDays = optionalNumber(b.reminderDays) ?? 30;
+
+  if (host !== null && !/^[a-z0-9.-]+$/i.test(host)) return res.status(400).json({ error: 'invalid_smtpHost' });
+  if (host !== null && !ALLOWED_PORTS.includes(port)) return res.status(400).json({ error: 'invalid_smtpPort', allowed: ALLOWED_PORTS });
+  if (!['tls', 'starttls', 'none'].includes(security)) return res.status(400).json({ error: 'invalid_smtpSecurity' });
+  if (!emailOk(fromAddress)) return res.status(400).json({ error: 'invalid_fromAddress' });
+  if (!emailOk(toAddress)) return res.status(400).json({ error: 'invalid_toAddress' });
+  if (!Number.isInteger(reminderDays) || reminderDays < 1 || reminderDays > 180) return res.status(400).json({ error: 'invalid_reminderDays' });
+  if ((b.remindersEnabled || b.monthlyReport) && host === null) return res.status(400).json({ error: 'mail_not_configured' });
+
+  try {
+    if (host !== null) await resolveSmtpHost(host);
+
+    // Passwort: nur ändern, wenn ein neues gesendet wird; clearPassword löscht es
+    let passwordSql = 'smtp_password_enc';
+    const values = [req.user.sub, host, host ? port : null, security, optionalText(b.smtpUser) ?? null, fromAddress, toAddress,
+      Boolean(b.remindersEnabled), reminderDays, Boolean(b.monthlyReport)];
+    if (b.smtpPassword) {
+      values.push(encryptSecret(b.smtpPassword));
+      passwordSql = `$${values.length}`;
+    } else if (b.clearPassword) {
+      passwordSql = 'NULL';
+    }
+
+    const r = await pool.query(
+      `INSERT INTO user_mail_settings (user_id, smtp_host, smtp_port, smtp_security, smtp_user, from_address, to_address,
+                                       reminders_enabled, reminder_days, monthly_report, smtp_password_enc)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, ${passwordSql === 'smtp_password_enc' ? 'NULL' : passwordSql})
+       ON CONFLICT (user_id) DO UPDATE SET
+         smtp_host = EXCLUDED.smtp_host, smtp_port = EXCLUDED.smtp_port, smtp_security = EXCLUDED.smtp_security,
+         smtp_user = EXCLUDED.smtp_user, from_address = EXCLUDED.from_address, to_address = EXCLUDED.to_address,
+         reminders_enabled = EXCLUDED.reminders_enabled, reminder_days = EXCLUDED.reminder_days,
+         monthly_report = EXCLUDED.monthly_report,
+         smtp_password_enc = ${passwordSql === 'smtp_password_enc' ? 'user_mail_settings.smtp_password_enc' : passwordSql},
+         updated_at = now()
+       RETURNING *`,
+      values
+    );
+    res.json(mailSettingsResponse(r.rows[0]));
+  } catch (e) {
+    if (e.code === 'smtp_host_not_allowed' || e.code === 'ENOTFOUND' || e.code === 'EAI_AGAIN') return mailErrorResponse(res, e);
+    res.status(500).json({ error: 'server_error', detail: e.message });
+  }
+});
+
+// Test-Mail mit den gespeicherten Einstellungen
+app.post('/api/v1/auth/mail-settings/test', auth, async (req, res) => {
+  try {
+    const settings = await notifier.loadUserSettings(pool, req.user.sub);
+    await sendUserMail(settings, {
+      subject: 'Fuelstat: Test-Mail',
+      text: 'Hallo,\n\ndie E-Mail-Einstellungen in Fuelstat funktionieren.\n\nDeine Fuelstat-App',
+      html: '<p>Hallo,</p><p>die E-Mail-Einstellungen in Fuelstat funktionieren.</p><p>Deine Fuelstat-App</p>'
+    });
+    res.json({ sent: true });
+  } catch (e) {
+    mailErrorResponse(res, e);
+  }
+});
+
+// Erinnerungen bzw. Monatsbericht (Vormonat) sofort senden – unabhängig davon, ob sie schon verschickt wurden
+app.post('/api/v1/auth/mail-settings/send-now', auth, async (req, res) => {
+  const type = String(req.body?.type || '');
+  if (!['reminders', 'report'].includes(type)) return res.status(400).json({ error: 'invalid_type' });
+  try {
+    const settings = await notifier.loadUserSettings(pool, req.user.sub);
+    if (type === 'reminders') {
+      const due = await notifier.collectDueReminders(pool, settings || { user_id: req.user.sub, reminder_days: 30 });
+      if (due.length === 0) return res.json({ sent: false, reason: 'nothing_due' });
+      await sendUserMail(settings, notifier.reminderMail(due));
+      return res.json({ sent: true, count: due.length });
+    }
+    const { year, month } = notifier.previousMonth();
+    await sendUserMail(settings, notifier.reportMail(await notifier.buildMonthlyReport(pool, settings, year, month)));
+    res.json({ sent: true });
+  } catch (e) {
+    mailErrorResponse(res, e);
+  }
+});
+
 app.get('/api/v1/vehicles/:vehicleId/stats', auth, async (req, res) => {
   const vehicleId = String(req.params.vehicleId || '').trim();
 
@@ -1604,4 +2103,5 @@ app.use((error, req, res, next) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Backend V2 läuft auf Port ${PORT}`);
+  notifier.startNotifier(pool);
 });

@@ -45,6 +45,11 @@ footer {
     color: var(--bs-primary); /* Primärfarbe für Icons */
 }
 
+/* Icons in Buttons übernehmen die Button-Schriftfarbe */
+.card-body .btn .fas {
+    color: inherit;
+}
+
 /* Responsives Bild innerhalb der Karte */
 .card-img-top {
     height: 200px;

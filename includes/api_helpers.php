@@ -24,8 +24,8 @@ function getMergedEintraegeFromApi($api, string $vehicleId): array
     $fillups = [];
     $entries = [];
     try {
-        $fillups = $api->getVehicleFillups($vehicleId, 200);
-        $entries = $api->getVehicleEntries($vehicleId, 200);
+        $fillups = $api->getAllVehicleFillups($vehicleId);
+        $entries = $api->getAllVehicleEntries($vehicleId);
     } catch (Throwable $e) {
         return ['eintraege' => [], 'jahrListe' => []];
     }
@@ -135,7 +135,7 @@ function getFahrleistungFromApi($api, string $vehicleId, array $fahrzeug, $curre
     }
 
     try {
-        $fillups = $api->getVehicleFillups($vehicleId, 200);
+        $fillups = $api->getAllVehicleFillups($vehicleId);
     } catch (Throwable $e) {
         return null;
     }
@@ -152,7 +152,7 @@ function getFahrleistungFromApi($api, string $vehicleId, array $fahrzeug, $curre
 function getLetzterEintragApi($api, string $vehicleId, string $category): ?array
 {
     try {
-        $entries = $api->getVehicleEntries($vehicleId, 200);
+        $entries = $api->getAllVehicleEntries($vehicleId);
         foreach ($entries as $e) {
             if (isset($e['category']) && strcasecmp($e['category'], $category) === 0) {
                 return [
@@ -201,7 +201,8 @@ function getStatistikDatenFromApi($api, string $vehicleId): array
     foreach ($fillupsOnly as $row) {
         $mengeSeitVoll += (float)($row['menge'] ?? 0);
         if (!empty($row['vollgetankt'])) {
-            if ($letzteVoll && ($row['tachostand'] - $letzteVoll['tachostand']) > 0) {
+            // skip_previous: nur neuer Startpunkt, kein Verbrauch über die Lücke
+            if ($letzteVoll && empty($row['skip_previous']) && ($row['tachostand'] - $letzteVoll['tachostand']) > 0) {
                 $km = $row['tachostand'] - $letzteVoll['tachostand'];
                 $monat = substr($row['datum'], 0, 7);
                 if (!isset($verbrauchProMonat[$monat])) {
@@ -261,7 +262,7 @@ function getStatistikDatenFromApi($api, string $vehicleId): array
         $jahresdaten[$y]['gekauft_ausgaben'] += (float)($row['kosten'] ?? 0);
         $mengeSeitVoll2 += (float)($row['menge'] ?? 0);
         if (!empty($row['vollgetankt'])) {
-            if ($letzteVoll2 && ($row['tachostand'] - $letzteVoll2['tachostand']) > 0) {
+            if ($letzteVoll2 && empty($row['skip_previous']) && ($row['tachostand'] - $letzteVoll2['tachostand']) > 0) {
                 $km = $row['tachostand'] - $letzteVoll2['tachostand'];
                 $jahresdaten[$y]['verbrauch_menge'] += $mengeSeitVoll2;
                 $jahresdaten[$y]['verbrauch_km'] += $km;
@@ -349,4 +350,112 @@ function holeAnzahlMonateFromApi($api, string $vehicleId, ?int $jahr): int
         }, ARRAY_FILTER_USE_KEY);
     }
     return count($kosten);
+}
+
+/**
+ * Fahrzeugdaten aus dem Formular (includes/form_fahrzeug.php) für die API aufbereiten.
+ * Leere optionale Felder werden als null gesendet, damit sie beim Bearbeiten gelöscht werden.
+ */
+function fahrzeugDatenAusPost(array $post): array
+{
+    $optionalInt = function (string $key) use ($post) {
+        $v = trim((string)($post[$key] ?? ''));
+        return $v === '' ? null : (int)$v;
+    };
+    $optionalText = function (string $key) use ($post) {
+        $v = trim((string)($post[$key] ?? ''));
+        return $v === '' ? null : $v;
+    };
+    $tank = trim(str_replace(',', '.', (string)($post['tankCapacity'] ?? '')));
+
+    return [
+        'name' => trim((string)($post['name'] ?? '')),
+        'fuelType' => (string)($post['fuelType'] ?? ''),
+        'brand' => $optionalText('brand'),
+        'model' => $optionalText('model'),
+        'year' => $optionalInt('year'),
+        'odometerKm' => $optionalInt('odometerKm'),
+        'tankCapacity' => $tank === '' ? null : (float)$tank,
+    ];
+}
+
+/**
+ * Hochgeladenes Fahrzeugbild speichern bzw. Bild entfernen (Feld "bild" / Checkbox "bild_entfernen").
+ * Ältere Bilder des Fahrzeugs werden dabei gelöscht.
+ * @return string|null Fehlermeldung oder null bei Erfolg/keiner Änderung
+ */
+function speichereFahrzeugBild($api, string $vehicleId, array $files, array $post): ?string
+{
+    $datei = $files['bild'] ?? null;
+    $hatDatei = $datei && ($datei['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
+    $entfernen = !empty($post['bild_entfernen']);
+
+    if (!$hatDatei && !$entfernen) {
+        return null;
+    }
+
+    try {
+        $alteMedien = $api->getVehicleMedia($vehicleId);
+    } catch (Throwable $e) {
+        $alteMedien = [];
+    }
+
+    $neueMediaId = null;
+    if ($hatDatei) {
+        if ($datei['error'] !== UPLOAD_ERR_OK) {
+            return $datei['error'] === UPLOAD_ERR_INI_SIZE || $datei['error'] === UPLOAD_ERR_FORM_SIZE
+                ? 'Das Bild ist zu groß.'
+                : 'Das Bild konnte nicht hochgeladen werden.';
+        }
+        $mime = (new finfo(FILEINFO_MIME_TYPE))->file($datei['tmp_name']) ?: '';
+        if (!in_array($mime, ['image/jpeg', 'image/png', 'image/gif', 'image/webp'], true)) {
+            return 'Nur JPEG, PNG, GIF und WebP sind als Bild erlaubt.';
+        }
+        try {
+            $media = $api->uploadVehicleMedia($vehicleId, $datei['tmp_name'], $mime, basename((string)$datei['name']));
+            $api->patchVehicle($vehicleId, ['imageUrl' => $media['url']]);
+            $neueMediaId = $media['id'] ?? null;
+        } catch (Throwable $e) {
+            return 'Bild-Upload fehlgeschlagen: ' . $e->getMessage();
+        }
+    } else {
+        try {
+            $api->patchVehicle($vehicleId, ['imageUrl' => null]);
+        } catch (Throwable $e) {
+            return 'Bild konnte nicht entfernt werden: ' . $e->getMessage();
+        }
+    }
+
+    foreach ($alteMedien as $m) {
+        if (isset($m['id']) && $m['id'] !== $neueMediaId) {
+            try {
+                $api->deleteVehicleMedia($vehicleId, $m['id']);
+            } catch (Throwable $e) {
+                error_log('[Fahrzeugbild] Altes Bild nicht gelöscht: ' . $e->getMessage());
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * Fälligkeiten (TÜV, Wartung, Versicherung, Steuer) aus der API (Regeln in backend/src/services/reminders.js).
+ * @return array Liste mit titel, kategorie, letzte, faellig_datum, faellig_km, status (ok|bald|ueberfaellig|unbekannt), tage
+ */
+function getFaelligkeitenFromApi($api, string $vehicleId): array
+{
+    try {
+        $liste = $api->getVehicleReminders($vehicleId);
+    } catch (Throwable $e) {
+        return [];
+    }
+    return array_map(fn($r) => [
+        'titel' => $r['title'],
+        'kategorie' => $r['category'],
+        'letzte' => $r['last'],
+        'faellig_datum' => $r['due_date'],
+        'faellig_km' => $r['due_km'],
+        'status' => $r['status'],
+        'tage' => $r['days'],
+    ], $liste);
 }

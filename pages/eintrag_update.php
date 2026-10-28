@@ -2,6 +2,7 @@
 include '../includes/session.php';
 include '../includes/db_connect.php';
 require_once __DIR__ . '/../includes/api_helpers.php';
+require_once __DIR__ . '/../includes/functions.php';
 $api = getApiClient();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['id'], $_POST['fahrzeug_id'])) {
@@ -12,8 +13,24 @@ $eintrag_id = trim($_POST['id']);
 $fahrzeug_id = trim($_POST['fahrzeug_id']);
 $type = $_POST['type'] ?? 'fillup';
 
-if ($type !== 'fillup') {
-    $_SESSION['warning_message'] = 'Nur Tankvorgänge können bearbeitet werden.';
+if ($type === 'entry') {
+    $datum = $_POST['datum'] ?? '';
+    $tachostand = trim($_POST['tachostand'] ?? '');
+    $standort = trim($_POST['standort'] ?? '');
+    $beschreibung = trim($_POST['beschreibung'] ?? '');
+    try {
+        $api->patchEntry($eintrag_id, [
+            'category' => trim($_POST['kategorie'] ?? ''),
+            'amountEur' => (float)($_POST['kosten'] ?? 0),
+            'odometerKm' => $tachostand !== '' ? (int)$tachostand : null,
+            'occurredAt' => $datum . 'T12:00:00.000Z',
+            'vendor' => $standort !== '' ? $standort : null,
+            'description' => $beschreibung !== '' ? $beschreibung : null,
+        ]);
+        $_SESSION['success_message'] = 'Ausgabe aktualisiert.';
+    } catch (Throwable $e) {
+        $_SESSION['error_message'] = $e->getMessage();
+    }
     header('Location: fahrzeug_detail.php?id=' . rawurlencode($fahrzeug_id));
     exit;
 }
@@ -28,9 +45,11 @@ $skipPrevious = isset($_POST['skip_previous']);
 $filledAt = $datum ? $datum . 'T12:00:00.000Z' : null;
 
 try {
+    // Einheit aus dem Kraftstoff des Fahrzeugs (korrigiert auch früher falsch als Liter gespeicherte Einträge)
+    $vehicle = $api->getVehicle($fahrzeug_id);
     $api->patchFillup($eintrag_id, [
         'odometerKm' => $tachostand,
-        'unit' => 'l',
+        'unit' => getEinheitFuerKraftstoff($vehicle['fuel_type'] ?? null),
         'amount' => $menge,
         'totalCostEur' => $kosten,
         'station' => $standort !== '' ? $standort : null,
@@ -40,7 +59,9 @@ try {
     ]);
     $_SESSION['success_message'] = 'Tankvorgang aktualisiert.';
 } catch (Throwable $e) {
-    $_SESSION['error_message'] = $e->getMessage();
+    $_SESSION['error_message'] = $e->getMessage() === 'fillup_edit_window_expired'
+        ? 'Tankvorgänge können nur innerhalb von 14 Tagen nach dem Tankdatum bearbeitet werden. Ältere Einträge kannst du löschen und neu anlegen.'
+        : $e->getMessage();
 }
 header('Location: fahrzeug_detail.php?id=' . rawurlencode($fahrzeug_id));
 exit;
