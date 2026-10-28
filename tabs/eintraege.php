@@ -66,7 +66,7 @@ body.dark .badge { background-color: #444; color: #fff; }
     <div class="alert alert-warning">Keine Einträge vorhanden.</div>
   <?php else: ?>
     <?php foreach ($eintraege as $monat => $entries): ?>
-      <h5 class="mt-4 text-light-emphasis"><?= date('F Y', strtotime($monat . '-01')) ?></h5>
+      <h5 class="mt-4 text-light-emphasis"><?= htmlspecialchars(formatMonat($monat, true)) ?></h5>
       <?php foreach ($entries as $e):
         $v = ($e['kategorie'] === 'Tankfuellung' && isset($e['l_per_100km'])) ? $e['l_per_100km'] : null;
         $farbe = $farben[$e['kategorie']] ?? 'secondary';

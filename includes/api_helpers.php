@@ -54,8 +54,8 @@ function getMergedEintraegeFromApi($api, string $vehicleId): array
             'type' => 'fillup',
             'datum' => $datum,
             'kategorie' => 'Tankfuellung',
-            'menge' => $f['amount'] ?? 0,
-            'kosten' => $f['total_cost_eur'] ?? 0,
+            'menge' => $f['amount'] ?? $f['liters'] ?? 0,
+            'kosten' => $f['total_cost_eur'] ?? $f['price_total_eur'] ?? 0,
             'tachostand' => $f['odometer_km'] ?? 0,
             'vollgetankt' => $f['is_full'] ?? true,
             'skip_previous' => $f['skip_previous'] ?? false,
@@ -115,6 +115,35 @@ function getVehicleStatsForDisplay($api, string $vehicleId): array
     } catch (Throwable $e) {
         return [];
     }
+}
+
+/**
+ * Gefahrene Kilometer: aktueller Tachostand minus Anfangs-Tachostand des Fahrzeugs,
+ * ersatzweise minus Tachostand der ersten erfassten Tankfüllung.
+ * @return array|null [ 'km' => int, 'basis' => string ]
+ */
+function getFahrleistungFromApi($api, string $vehicleId, array $fahrzeug, $currentOdo): ?array
+{
+    if ($currentOdo === null) {
+        return null;
+    }
+    $currentOdo = (int)$currentOdo;
+
+    $initial = $fahrzeug['odometer_km'] ?? null;
+    if ($initial !== null && (int)$initial <= $currentOdo) {
+        return ['km' => $currentOdo - (int)$initial, 'basis' => 'seit Anschaffung'];
+    }
+
+    try {
+        $fillups = $api->getVehicleFillups($vehicleId, 200);
+    } catch (Throwable $e) {
+        return null;
+    }
+    $odos = array_filter(array_map(fn($f) => $f['odometer_km'] ?? null, $fillups), fn($o) => $o !== null);
+    if (!$odos) {
+        return null;
+    }
+    return ['km' => $currentOdo - (int)min($odos), 'basis' => 'seit erster Tankfüllung'];
 }
 
 /**

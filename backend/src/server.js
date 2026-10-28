@@ -121,6 +121,29 @@ async function auth(req, res, next) {
   }
 }
 
+// Admins werden über ADMIN_USER_IDS (kommagetrennte User-IDs) in der .env festgelegt
+function isAdmin(req) {
+  const adminIds = String(process.env.ADMIN_USER_IDS || '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+  return adminIds.includes(String(req.user?.sub || ''));
+}
+
+function requireAdmin(req, res, next) {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'forbidden' });
+  return next();
+}
+
+// Zugriff nur auf den eigenen User (:userId), außer für Admins
+function requireSelfOrAdmin(req, res, next) {
+  const userId = String(req.params.userId || '').trim();
+  if (userId !== String(req.user?.sub || '') && !isAdmin(req)) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  return next();
+}
+
 // Healthcheck
 app.get('/api/v1/health', (req, res) => {
   res.status(200).json({
@@ -223,8 +246,8 @@ app.post('/api/v1/auth/login', async (req, res) => {
   }
 });
 
-// List all users (Admin-Endpoint, aktuell ohne weitere Einschränkung)
-app.get('/api/v1/auth/users', auth, async (req, res) => {
+// List all users (Admin-Endpoint)
+app.get('/api/v1/auth/users', auth, requireAdmin, async (req, res) => {
   try {
     const r = await pool.query(
       `SELECT
@@ -244,8 +267,8 @@ app.get('/api/v1/auth/users', auth, async (req, res) => {
   }
 });
 
-// Get single user (Admin-Endpoint)
-app.get('/api/v1/auth/users/:userId', auth, async (req, res) => {
+// Get single user (eigener User oder Admin)
+app.get('/api/v1/auth/users/:userId', auth, requireSelfOrAdmin, async (req, res) => {
   const userId = String(req.params.userId || '').trim();
   if (!userId) return res.status(400).json({ error: 'missing_userId' });
 
@@ -274,8 +297,8 @@ app.get('/api/v1/auth/users/:userId', auth, async (req, res) => {
   }
 });
 
-// Patch single user (Admin-Endpoint)
-app.patch('/api/v1/auth/users/:userId', auth, async (req, res) => {
+// Patch single user (eigener User oder Admin)
+app.patch('/api/v1/auth/users/:userId', auth, requireSelfOrAdmin, async (req, res) => {
   const userId = String(req.params.userId || '').trim();
   if (!userId) return res.status(400).json({ error: 'missing_userId' });
 
@@ -342,8 +365,8 @@ app.patch('/api/v1/auth/users/:userId', auth, async (req, res) => {
   }
 });
 
-// Delete single user (Admin-Endpoint)
-app.delete('/api/v1/auth/users/:userId', auth, async (req, res) => {
+// Delete single user (eigener User oder Admin)
+app.delete('/api/v1/auth/users/:userId', auth, requireSelfOrAdmin, async (req, res) => {
   const userId = String(req.params.userId || '').trim();
   if (!userId) return res.status(400).json({ error: 'missing_userId' });
 
@@ -363,8 +386,8 @@ app.delete('/api/v1/auth/users/:userId', auth, async (req, res) => {
   }
 });
 
-// Revoke all tokens of a user (Admin-Endpoint)
-app.post('/api/v1/auth/users/:userId/revoke-all', auth, async (req, res) => {
+// Revoke all tokens of a user (eigener User oder Admin)
+app.post('/api/v1/auth/users/:userId/revoke-all', auth, requireSelfOrAdmin, async (req, res) => {
   const userId = String(req.params.userId || '').trim();
   if (!userId) return res.status(400).json({ error: 'missing_userId' });
 
@@ -405,10 +428,11 @@ app.post('/api/v1/auth/users/:userId/revoke-all', auth, async (req, res) => {
   }
 });
 
-// List revoked tokens (Admin-Endpoint)
+// List revoked tokens (Admins: alle bzw. ?userId=, sonst nur die eigenen)
 app.get('/api/v1/auth/tokens', auth, async (req, res) => {
-  const userId =
-    req.query.userId !== undefined
+  const userId = !isAdmin(req)
+    ? String(req.user.sub)
+    : req.query.userId !== undefined
       ? String(req.query.userId).trim()
       : null;
 
@@ -436,7 +460,7 @@ app.get('/api/v1/auth/tokens', auth, async (req, res) => {
   }
 });
 
-// Revoke a token (Admin-Endpoint)
+// Revoke a token (eigene Tokens oder Admin)
 app.post('/api/v1/auth/tokens/revoke', auth, async (req, res) => {
   const token = String(req.body?.token || '').trim();
   const reason =
@@ -461,6 +485,10 @@ app.post('/api/v1/auth/tokens/revoke', auth, async (req, res) => {
 
     const jti = String(payload.jti);
     const userId = String(payload.sub);
+
+    if (userId !== String(req.user.sub) && !isAdmin(req)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
 
     const r = await pool.query(
       `INSERT INTO revoked_tokens (jti, user_id, reason)
@@ -1190,18 +1218,29 @@ app.get('/api/v1/vehicles/:vehicleId/fillups', auth, async (req, res) => {
       `SELECT
          id,
          odometer_km,
-         amount       AS liters,
-         total_cost_eur AS price_total_eur,
+         amount,
+         unit,
+         total_cost_eur,
+         price_per_unit,
          station,
          filled_at,
-         created_at
+         created_at,
+         is_full,
+         skip_previous
        FROM fillups
        WHERE user_id = $1 AND vehicle_id = $2
        ORDER BY filled_at DESC
        LIMIT $3`,
       [req.user.sub, vehicleId, limit]
     );
-    res.json(r.rows);
+
+    // Für ältere Clients zusätzlich kompatible Felder anbieten
+    res.json(r.rows.map((row) => ({
+      ...row,
+      liters: row.unit === 'l' ? row.amount : null,
+      price_total_eur: row.total_cost_eur,
+      price_per_liter: row.unit === 'l' ? row.price_per_unit : null
+    })));
   } catch (e) {
     res.status(500).json({ error: 'server_error', detail: e.message });
   }

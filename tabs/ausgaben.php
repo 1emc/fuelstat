@@ -127,7 +127,7 @@ $farben = array_map('getCategoryColor', $kategorien);
         <tbody>
             <?php foreach ($detailDaten as $kategorie => $daten): ?>
             <tr>
-                <td><?php echo htmlspecialchars($kategorie); ?></td>
+                <td><?php echo htmlspecialchars(getKategorieName($kategorie)); ?></td>
                 <td><?php echo $daten['anzahl']; ?></td>
                 <td><?php echo $gesamtKosten > 0 ? number_format(($daten['summe'] / $gesamtKosten) * 100, 2, ',', '.') : '0,00'; ?>%</td>
                 <td><?php echo number_format($daten['summe'], 2, ',', '.'); ?> €</td>
@@ -168,7 +168,6 @@ $farben = array_map('getCategoryColor', $kategorien);
             <div class="card h-100">
                 <div class="card-body">
                     <h5 class="card-title">Kosten pro Kilometer</h5>
-                    ?>
                     <div class="text-center">
                         <h3 class="mb-0"><?= number_format($kostenProKm, 2, ',', '.') ?> €/km</h3>
                         <p class="text-muted mb-0">bei <?= number_format($gefahreneKm, 0, ',', '.') ?> km</p>
@@ -211,7 +210,7 @@ var ctx = document.getElementById('ausgabenChart').getContext('2d');
 var chart = new Chart(ctx, {
     type: 'pie',
     data: {
-        labels: <?php echo json_encode($kategorien); ?>,
+        labels: <?php echo json_encode(array_map('getKategorieName', $kategorien)); ?>,
         datasets: [{
             data: <?php echo json_encode($beträge); ?>,
             backgroundColor: <?php echo json_encode($farben); ?>

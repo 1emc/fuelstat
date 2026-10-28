@@ -7,6 +7,7 @@ $stats = getVehicleStatsForDisplay($api, $fahrzeug_id);
 $currentOdo = $stats['currentOdo'] ?? null;
 $trend = $stats['trend'] ?? null;
 $avgPrice = $stats['avgPricePerLiter'] ?? null;
+$fahrleistung = getFahrleistungFromApi($api, $fahrzeug_id, $fahrzeug, $currentOdo);
 
 $letzterReifen = getLetzterEintragApi($api, $fahrzeug_id, 'Reifen');
 $letzteWartung = getLetzterEintragApi($api, $fahrzeug_id, 'Wartung');
@@ -37,7 +38,14 @@ $kraftstoffTexte = [
             <p><strong>Tachostand:</strong>
                 <?= $currentOdo !== null ? number_format($currentOdo, 0, ',', '.') . ' km' : 'Keine Daten' ?>
             </p>
-            <p><strong>Fahrleistung:</strong> —</p>
+            <p><strong>Fahrleistung:</strong>
+                <?php if ($fahrleistung !== null): ?>
+                    <?= number_format($fahrleistung['km'], 0, ',', '.') ?> km
+                    <span class="text-muted">(<?= htmlspecialchars($fahrleistung['basis']) ?>)</span>
+                <?php else: ?>
+                    —
+                <?php endif; ?>
+            </p>
 
             <h3>Kraftstoffverbrauch</h3>
             <p><strong>Kraftstoff:</strong> <?= isset($kraftstoffTexte[$fuel_type]) ? $kraftstoffTexte[$fuel_type] : ucfirst($fuel_type) ?></p>
