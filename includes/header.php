@@ -160,7 +160,8 @@ $profilBildUrl = !empty($currentUser['profile_image_url'])
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
 
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="<?= htmlspecialchars($baseUrl) ?>css/style.css" />
+    <!-- ?v= ändert sich bei jeder neuen Datei, damit Browser und Service Worker nie eine alte Version liefern -->
+    <link rel="stylesheet" href="<?= htmlspecialchars($baseUrl) ?>css/style.css?v=<?= @filemtime(__DIR__ . '/../css/style.css') ?: 1 ?>" />
 </head>
 
 <body<?= $angemeldet ? ' class="mit-tabbar"' : '' ?>>
@@ -285,7 +286,7 @@ $profilBildUrl = !empty($currentUser['profile_image_url'])
     <?php endif; ?>
     <button type="button" class="tabbar-link<?= $tabbarAktiv === 'profil' ? ' active' : '' ?>" data-bs-toggle="offcanvas" data-bs-target="#blattProfil">
         <?php if ($profilBildUrl): ?>
-            <img src="<?= htmlspecialchars($profilBildUrl) ?>" alt="" class="tabbar-avatar">
+            <img src="<?= htmlspecialchars($profilBildUrl) ?>" alt="" class="tabbar-avatar" width="24" height="24">
         <?php else: ?>
             <i class="fas fa-circle-user"></i>
         <?php endif; ?>
