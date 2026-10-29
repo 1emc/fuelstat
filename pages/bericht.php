@@ -37,6 +37,16 @@ foreach (getMergedEintraegeFromApi($api, $fahrzeug_id)['eintraege'] as $monatsEi
 }
 usort($eintraege, fn($a, $b) => strcmp($a['datum'], $b['datum']));
 $co2Faktor = getCo2Faktor($fahrzeug['fuel_type'] ?? null);
+// Jahresübersicht je Einheit (Plug-in-Hybrid: eine Tabelle für Kraftstoff, eine für Strom)
+$tabellen = [];
+foreach ($daten['einheiten'] ?: [getEinheitFuerKraftstoff($fuelType) => ['jahresdaten' => $daten['jahresdaten']]] as $u => $ud) {
+    $tabellen[$u] = [
+        'kurz' => einheitKurz($u),
+        'begriffe' => begriffeFuerEinheit($fuelType, $u),
+        'faktor' => getCo2Faktor($fuelType, $u),
+        'jahre' => $jahr === null ? $ud['jahresdaten'] : array_intersect_key($ud['jahresdaten'], [$jahr => true]),
+    ];
+}
 $details = array_filter([
     trim(($fahrzeug['brand'] ?? '') . ' ' . ($fahrzeug['model'] ?? '')),
     !empty($fahrzeug['year']) ? 'Baujahr ' . (int)$fahrzeug['year'] : '',
@@ -66,22 +76,24 @@ $f2 = fn($v) => number_format((float)$v, 2, ',', '.');
     <h1 class="h3 mb-1"><?= htmlspecialchars($fahrzeug['name'] ?? 'Fahrzeug') ?></h1>
     <p class="text-muted mb-4"><?= htmlspecialchars(implode(' · ', $details)) ?> · Zeitraum: <?= $jahr ?: 'gesamt' ?> · erstellt am <?= date('d.m.Y') ?></p>
 
-    <h2 class="h5">Jahresübersicht</h2>
+    <?php foreach ($tabellen as $t): ?>
+    <h2 class="h5">Jahresübersicht<?= count($tabellen) > 1 ? ' ' . $t['begriffe']['energie'] : '' ?></h2>
     <table class="table table-sm table-bordered mb-4">
-        <thead><tr><th>Jahr</th><th><?= $begriffe['vorgaenge'] ?></th><th><?= $begriffe['menge'] ?> (<?= $einheit ?>)</th><th><?= $begriffe['kosten'] ?></th><th>Ø <?= $einheit ?>/100km</th><?php if ($co2Faktor !== null): ?><th>CO₂</th><?php endif; ?></tr></thead>
+        <thead><tr><th>Jahr</th><th><?= $t['begriffe']['vorgaenge'] ?></th><th><?= $t['begriffe']['menge'] ?> (<?= $t['kurz'] ?>)</th><th><?= $t['begriffe']['kosten'] ?></th><th>Ø <?= $t['kurz'] ?>/100km</th><?php if ($t['faktor'] !== null): ?><th>CO₂</th><?php endif; ?></tr></thead>
         <tbody>
-        <?php foreach ($jahresdaten as $y => $d): ?>
+        <?php foreach ($t['jahre'] as $y => $d): ?>
             <tr>
                 <td><?= $y ?></td>
                 <td><?= $d['anzahl_tankstops'] ?></td>
                 <td><?= $f2($d['gekauft_menge']) ?></td>
                 <td><?= $f2($d['gekauft_ausgaben']) ?> €</td>
                 <td><?= $d['verbrauch_l100km'] > 0 ? $f2($d['verbrauch_l100km']) : '–' ?></td>
-                <?php if ($co2Faktor !== null): ?><td><?= number_format($d['gekauft_menge'] * $co2Faktor, 0, ',', '.') ?> kg</td><?php endif; ?>
+                <?php if ($t['faktor'] !== null): ?><td><?= number_format($d['gekauft_menge'] * $t['faktor'], 0, ',', '.') ?> kg</td><?php endif; ?>
             </tr>
         <?php endforeach; ?>
         </tbody>
     </table>
+    <?php endforeach; ?>
 
     <h2 class="h5">Kosten nach Kategorie</h2>
     <table class="table table-sm table-bordered mb-4">
@@ -101,15 +113,18 @@ $f2 = fn($v) => number_format((float)$v, 2, ',', '.');
 
     <h2 class="h5">Alle Einträge</h2>
     <table class="table table-sm table-striped">
-        <thead><tr><th>Datum</th><th>Kategorie</th><th>km</th><th>Menge</th><th><?= $einheit ?>/100km</th><th>Kosten</th><th>Ort / Beschreibung</th></tr></thead>
+        <thead><tr><th>Datum</th><th>Kategorie</th><th>km</th><th>Menge</th><th><?= count($tabellen) > 1 ? 'pro 100 km' : $einheit . '/100km' ?></th><th>Kosten</th><th>Ort / Beschreibung</th></tr></thead>
         <tbody>
-        <?php foreach ($eintraege as $e): $istTank = $e['kategorie'] === 'Tankfuellung'; ?>
+        <?php foreach ($eintraege as $e):
+            $istTank = $e['kategorie'] === 'Tankfuellung';
+            $eEinheit = $e['einheit'] ?? null;
+            $eKurz = $eEinheit !== null ? einheitKurz($eEinheit) : $einheit; ?>
             <tr>
                 <td><?= date('d.m.Y', strtotime($e['datum'])) ?></td>
-                <td><?= htmlspecialchars(getKategorieName($e['kategorie'], $fuelType)) ?><?= $istTank && empty($e['vollgetankt']) ? ' (' . $begriffe['teil'] . ')' : '' ?></td>
+                <td><?= htmlspecialchars(getKategorieName($e['kategorie'], $fuelType, $eEinheit)) ?><?= $istTank && empty($e['vollgetankt']) ? ' (' . begriffeFuerEinheit($fuelType, $eEinheit)['teil'] . ')' : '' ?></td>
                 <td><?= $e['tachostand'] !== null ? number_format((int)$e['tachostand'], 0, ',', '.') : '' ?></td>
-                <td><?= $istTank ? $f2($e['menge']) . ' ' . $einheit : '' ?></td>
-                <td><?= $istTank && isset($e['l_per_100km']) ? $f2($e['l_per_100km']) : '' ?></td>
+                <td><?= $istTank ? $f2($e['menge']) . ' ' . $eKurz : '' ?></td>
+                <td><?= $istTank && isset($e['l_per_100km']) ? $f2($e['l_per_100km']) . (count($tabellen) > 1 ? ' ' . $eKurz : '') : '' ?></td>
                 <td><?= $f2($e['kosten']) ?> €</td>
                 <td><?= htmlspecialchars(trim(($e['standort'] ?? '') . ' ' . ($e['beschreibung'] ?? ''))) ?></td>
             </tr>

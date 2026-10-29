@@ -914,7 +914,7 @@ paths:
     post:
       tags: [Entries]
       summary: Import fillups and entries (e.g. from CSV)
-      description: "Max. 1000 Zeilen, alles in einer Transaktion. Duplikate (gleiches Datum + Tachostand bzw. Datum + Kategorie + Betrag) werden übersprungen."
+      description: "Max. 1000 Zeilen, alles in einer Transaktion. Duplikate (gleiches Datum + Tachostand + Einheit bzw. Datum + Kategorie + Betrag) werden übersprungen. `unit` je Zeile gilt nur bei Plug-in-Hybriden (l oder kwh); sonst immer die Einheit des Fahrzeugs."
       operationId: postVehicleImport
       parameters:
         - $ref: "#/components/parameters/VehicleId"
@@ -1446,8 +1446,8 @@ components:
 
     VehicleFuelType:
       type: string
-      description: Kraftstoffart des Fahrzeugs.
-      enum: [diesel, petrol, electric, hybrid, cng, lpg, other]
+      description: Kraftstoffart des Fahrzeugs. hybrid = Vollhybrid (tankt nur), phev = Plug-in-Hybrid (tankt und lädt).
+      enum: [diesel, e5, e10, lpg, cng, electric, hybrid, phev, hydrogen, other]
 
     VehicleCreateRequest:
       type: object
@@ -1458,6 +1458,14 @@ components:
           minLength: 1
         fuelType:
           $ref: "#/components/schemas/VehicleFuelType"
+        tankCapacity:
+          type: number
+          nullable: true
+          description: Tank in l bzw. kg, bei Elektroautos Akku in kWh
+        batteryCapacity:
+          type: number
+          nullable: true
+          description: Akku in kWh, nur für Plug-in-Hybride (zusätzlich zum Tank)
       required: [name, fuelType]
 
     VehiclePatchRequest:
@@ -1469,6 +1477,12 @@ components:
           minLength: 1
         fuelType:
           $ref: "#/components/schemas/VehicleFuelType"
+        tankCapacity:
+          type: number
+          nullable: true
+        batteryCapacity:
+          type: number
+          nullable: true
 
     Vehicle:
       type: object
@@ -1481,6 +1495,13 @@ components:
           type: string
         fuel_type:
           $ref: "#/components/schemas/VehicleFuelType"
+        tank_capacity:
+          type: number
+          nullable: true
+        battery_capacity:
+          type: number
+          nullable: true
+          description: Nur Plug-in-Hybride
         created_at:
           type: string
           format: date-time
@@ -1493,7 +1514,7 @@ components:
 
     FillupUnit:
       type: string
-      description: Einheit der Menge (Verbrenner meist l, Elektro meist kWh, CNG/LPG meist kg).
+      description: Einheit der Menge (Verbrenner l, Elektro kWh, CNG/Wasserstoff kg; Plug-in-Hybride l beim Tanken, kWh beim Laden).
       enum: [l, kwh, kg]
 
     FillupCreateRequest:
@@ -1508,7 +1529,7 @@ components:
           minimum: 0
         unit:
           $ref: "#/components/schemas/FillupUnit"
-          description: Optional, wird aus vehicle.fuel_type abgeleitet wenn nicht gesetzt
+          description: Optional, wird aus vehicle.fuel_type abgeleitet wenn nicht gesetzt (Plug-in-Hybrid ohne Angabe = l)
         amount:
           type: number
           minimum: 0
@@ -1645,6 +1666,9 @@ components:
         full_at:
           type: string
           format: date-time
+        unit:
+          $ref: "#/components/schemas/FillupUnit"
+          description: Abschnitte laufen je Einheit von voller Füllung zu voller Füllung (Plug-in-Hybrid getrennt für l und kWh)
         km:
           type: integer
           minimum: 0
@@ -1680,7 +1704,7 @@ components:
         avgPricePerLiter:
           type: number
           nullable: true
-          description: Durchschnittlicher Preis pro Einheit (Liter/kWh/kg)
+          description: Durchschnittlicher Preis pro Einheit des Fahrzeugs (Liter/kWh/kg; Plug-in-Hybrid Liter)
         segments:
           type: array
           items:
@@ -1688,6 +1712,18 @@ components:
         trend:
           $ref: "#/components/schemas/VehicleStatsTrend"
           nullable: true
+        units:
+          type: object
+          description: Ø Preis und Trend je vorhandener Einheit, z. B. { l: {...}, kwh: {...} } beim Plug-in-Hybrid
+          additionalProperties:
+            type: object
+            properties:
+              avgPrice:
+                type: number
+                nullable: true
+              trend:
+                $ref: "#/components/schemas/VehicleStatsTrend"
+                nullable: true
       required: [segments]
 
     EntryCategory:

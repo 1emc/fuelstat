@@ -9,8 +9,12 @@ $zeilen = [
     'Modell' => $fahrzeug['model'] ?? '',
     'Baujahr' => $fahrzeug['year'] ?? '',
     'Tachostand bei Anschaffung' => isset($fahrzeug['odometer_km']) ? number_format((int)$fahrzeug['odometer_km'], 0, ',', '.') . ' km' : '',
-    $begriffe['speicher'] . 'größe' => !empty($fahrzeug['tank_capacity']) ? number_format((float)$fahrzeug['tank_capacity'], 1, ',', '.') . ' ' . $einheitKurz : '',
+    ($fuelTypeWert === 'phev' ? 'Tank' : $begriffe['speicher']) . 'größe' => !empty($fahrzeug['tank_capacity']) ? number_format((float)$fahrzeug['tank_capacity'], 1, ',', '.') . ' ' . $einheitKurz : '',
 ];
+// Plug-in-Hybrid: Akku zusätzlich zum Tank
+if ($fuelTypeWert === 'phev') {
+    $zeilen['Akkugröße'] = !empty($fahrzeug['battery_capacity']) ? number_format((float)$fahrzeug['battery_capacity'], 1, ',', '.') . ' kWh' : '';
+}
 ?>
 <div class="mt-4">
     <h3>Einstellungen</h3>

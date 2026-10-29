@@ -42,7 +42,7 @@ $r = importWandleUm($daten['zeilen'], $zuordnung, 'Werkstatt');
 assert(count($r['fillups']) === 2);
 assert(count($r['entries']) === 1);
 assert($r['fehler'] === [5 => 'Datum fehlt oder ist ungültig']);
-assert($r['fillups'][0] === ['filledAt' => '2026-01-05T12:00:00.000Z', 'odometerKm' => 38337, 'amount' => 33.5, 'totalCostEur' => 61.2, 'station' => 'SB Tankstelle', 'isFull' => true, 'skipPrevious' => false]);
+assert($r['fillups'][0] === ['filledAt' => '2026-01-05T12:00:00.000Z', 'odometerKm' => 38337, 'amount' => 33.5, 'totalCostEur' => 61.2, 'station' => 'SB Tankstelle', 'isFull' => true, 'skipPrevious' => false, 'unit' => 'l']);
 assert($r['fillups'][1]['isFull'] === false);
 assert($r['entries'][0]['category'] === 'Versicherung' && $r['entries'][0]['odometerKm'] === null && $r['entries'][0]['vendor'] === 'HUK');
 
@@ -50,5 +50,20 @@ assert($r['entries'][0]['category'] === 'Versicherung' && $r['entries'][0]['odom
 $daten = importLeseCsv("date,odometer,liters,price per liter\n2025-03-01,1000,40,1.75\n");
 $r = importWandleUm($daten['zeilen'], importErkenneZuordnung($daten['kopf']), 'Werkstatt');
 assert($r['fillups'][0]['totalCostEur'] === 70.0);
+assert(!isset($r['fillups'][0]['unit']), 'ohne Art und Einheit entscheidet die API');
+
+// Plug-in-Hybrid: Einheit aus der Spalte "Einheit", sonst aus der Art (Laden = kWh, Tanken = Liter)
+$daten = importLeseCsv("Datum;Kategorie;Tachostand (km);Menge;Einheit;Kosten (EUR);Voll\n"
+    . "05.01.2026;Laden;38302;14,80;kWh;4,14;ja\n"
+    . "05.01.2026;Tanken;38337;41,20;l;72,10;ja\n"
+    . "06.01.2026;Laden;38390;9,60;;2,69;ja\n"
+    . "07.01.2026;Tankfüllung;38420;12,00;kWh;3,36;nein\n");
+$zuordnung = importErkenneZuordnung($daten['kopf']);
+assert(($zuordnung['einheit'] ?? null) === 4, 'Spalte Einheit erkannt');
+$r = importWandleUm($daten['zeilen'], $zuordnung, 'Werkstatt');
+assert(array_column($r['fillups'], 'unit') === ['kwh', 'l', 'kwh', 'kwh'], 'Spalte Einheit vor der Art');
+assert(array_column($r['vorschau'], 'einheit') === ['kwh', 'l', 'kwh', 'kwh']);
+assert(importEinheit('Liter') === 'l' && importEinheit('KWH') === 'kwh' && importEinheit('egal') === null);
+assert(importArt('Ladevorgang', null, 'Werkstatt') === ['typ' => 'fillup', 'kategorie' => 'Tankfuellung', 'einheit' => 'kwh']);
 
 echo "All tests passed\n";

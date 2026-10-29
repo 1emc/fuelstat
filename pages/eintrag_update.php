@@ -45,11 +45,14 @@ $skipPrevious = isset($_POST['skip_previous']);
 $filledAt = $datum ? $datum . 'T12:00:00.000Z' : null;
 
 try {
-    // Einheit aus dem Kraftstoff des Fahrzeugs (korrigiert auch früher falsch als Liter gespeicherte Einträge)
+    // Einheit aus dem Kraftstoff des Fahrzeugs (korrigiert auch früher falsch als Liter gespeicherte Einträge);
+    // Plug-in-Hybride wählen sie im Formular (getankt oder geladen)
     $vehicle = $api->getVehicle($fahrzeug_id);
+    $einheiten = einheitenFuerKraftstoff($vehicle['fuel_type'] ?? null);
+    $einheit = in_array($_POST['einheit'] ?? '', $einheiten, true) ? $_POST['einheit'] : $einheiten[0];
     $api->patchFillup($eintrag_id, [
         'odometerKm' => $tachostand,
-        'unit' => getEinheitFuerKraftstoff($vehicle['fuel_type'] ?? null),
+        'unit' => $einheit,
         'amount' => $menge,
         'totalCostEur' => $kosten,
         'station' => $standort !== '' ? $standort : null,
@@ -57,7 +60,7 @@ try {
         'isFull' => $vollgetankt,
         'skipPrevious' => $skipPrevious,
     ]);
-    $_SESSION['success_message'] = verbrauchsBegriffe($vehicle['fuel_type'] ?? 'other')['vorgang'] . ' aktualisiert.';
+    $_SESSION['success_message'] = begriffeFuerEinheit($vehicle['fuel_type'] ?? 'other', $einheit)['vorgang'] . ' aktualisiert.';
 } catch (Throwable $e) {
     $_SESSION['error_message'] = $e->getMessage() === 'fillup_edit_window_expired'
         ? 'Tank- und Ladevorgänge können nur innerhalb von 14 Tagen bearbeitet werden. Ältere Einträge kannst du löschen und neu anlegen.'

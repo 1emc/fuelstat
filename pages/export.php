@@ -41,20 +41,25 @@ header('Content-Type: text/csv; charset=utf-8');
 header('Content-Disposition: attachment; filename="' . $dateiname . '"');
 $out = fopen('php://output', 'w');
 fwrite($out, "\xEF\xBB\xBF");
-fputcsv($out, ['Datum', 'Kategorie', 'Tachostand (km)', 'Menge (' . $einheit . ')', 'Kosten (EUR)', $begriffe['voll'], 'Lücke davor', 'Verbrauch (' . $einheit . '/100km)', 'Ort/Anbieter', 'Beschreibung'], ';');
+// Plug-in-Hybrid: Liter und kWh in einer Datei, deshalb eigene Spalte "Einheit" (wird beim Import wieder erkannt)
+$phev = $fuelType === 'phev';
+fputcsv($out, $phev
+    ? ['Datum', 'Kategorie', 'Tachostand (km)', 'Menge', 'Einheit', 'Kosten (EUR)', 'Voll', 'Lücke davor', 'Verbrauch (pro 100km)', 'Ort/Anbieter', 'Beschreibung']
+    : ['Datum', 'Kategorie', 'Tachostand (km)', 'Menge (' . $einheit . ')', 'Kosten (EUR)', $begriffe['voll'], 'Lücke davor', 'Verbrauch (' . $einheit . '/100km)', 'Ort/Anbieter', 'Beschreibung'], ';');
 foreach ($zeilen as $e) {
     $istTank = $e['kategorie'] === 'Tankfuellung';
-    fputcsv($out, [
+    fputcsv($out, array_merge([
         date('d.m.Y', strtotime($e['datum'])),
-        $text(getKategorieName($e['kategorie'], $fuelType)),
+        $text(getKategorieName($e['kategorie'], $fuelType, $e['einheit'] ?? null)),
         $e['tachostand'] ?? '',
         $istTank ? $zahl($e['menge'], 2) : '',
+    ], $phev ? [$istTank ? einheitKurz($e['einheit'] ?? 'l') : ''] : [], [
         $zahl($e['kosten'], 2),
         $istTank ? (!empty($e['vollgetankt']) ? 'ja' : 'nein') : '',
         $istTank ? (!empty($e['skip_previous']) ? 'ja' : 'nein') : '',
         $istTank ? $zahl($e['l_per_100km'] ?? null, 2) : '',
         $text($e['standort'] ?? ''),
         $text($e['beschreibung'] ?? ''),
-    ], ';');
+    ]), ';');
 }
 fclose($out);

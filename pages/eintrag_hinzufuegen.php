@@ -29,11 +29,15 @@ try {
         if ($ort === '' || isset($letztePreise[$ort])) {
             continue;
         }
-        $preis = (float)($f['price_per_unit'] ?? 0) ?: ((float)($f['amount'] ?? 0) > 0 ? (float)($f['total_cost_eur'] ?? 0) / (float)$f['amount'] : 0);
-        $letztePreise[$ort] = $preis > 0 ? round($preis, 3) : null;
         if (count($standortOptionen) < 15) {
             $standortOptionen[] = htmlspecialchars($ort);
         }
+        // Plug-in-Hybrid: nur Strompreise merken, Spritpreise ändern sich täglich
+        if ($fahrzeugKraftstoff === 'phev' && ($f['unit'] ?? 'l') !== 'kwh') {
+            continue;
+        }
+        $preis = (float)($f['price_per_unit'] ?? 0) ?: ((float)($f['amount'] ?? 0) > 0 ? (float)($f['total_cost_eur'] ?? 0) / (float)$f['amount'] : 0);
+        $letztePreise[$ort] = $preis > 0 ? round($preis, 3) : null;
     }
 } catch (Throwable $e) {
 }
@@ -42,6 +46,32 @@ $begriffe = verbrauchsBegriffe($vehicle['fuel_type'] ?? 'other');
 // Stationssuche: Tankerkönig für Kraftstoff und Gas, Open Charge Map für E-Autos
 $stationsSuche = true;
 $stationsArt = $begriffe['art'] === 'strom' ? 'lade' : 'tank';
+// Plug-in-Hybrid: vor dem Erfassen wählen, ob getankt oder geladen wurde; Texte wechseln mit
+$istPhev = $fahrzeugKraftstoff === 'phev';
+$texteJeEinheit = [];
+foreach (einheitenFuerKraftstoff($fahrzeugKraftstoff) as $u) {
+    $b = begriffeFuerEinheit($fahrzeugKraftstoff, $u);
+    $texteJeEinheit[$u] = [
+        'menge' => 'Menge (' . einheitLang($u) . ')',
+        'preis' => 'Preis pro ' . einheitLang($u) . ' (€)',
+        'preisHinweis' => 'Preis pro ' . einheitLang($u) . ' automatisch berechnet.',
+        'voll' => $b['voll'],
+        'luecke' => $b['luecke'],
+        'beispiel' => $b['beispiel_ort'],
+        'stationen' => $b['stationen'] . ' in der Nähe suchen',
+        'stationsArt' => $u === 'kwh' ? 'lade' : 'tank',
+    ];
+}
+$startEinheit = $istPhev && ($_GET['einheit'] ?? '') === 'kwh' ? 'kwh' : $einheit;
+if ($istPhev) {
+    $stationsArt = $texteJeEinheit[$startEinheit]['stationsArt'];
+    $begriffeStart = begriffeFuerEinheit($fahrzeugKraftstoff, $startEinheit);
+    $begriffe['voll'] = $begriffeStart['voll'];
+    $begriffe['luecke'] = $begriffeStart['luecke'];
+    $begriffe['beispiel_ort'] = $begriffeStart['beispiel_ort'];
+    $begriffe['stationen'] = $begriffeStart['stationen'];
+    $einheit = $startEinheit;
+}
 
 $vorgegebeneKategorie = isset($_GET['kategorie']) ? $_GET['kategorie'] : null;
 $allCategories = [
@@ -98,7 +128,24 @@ $allCategories = [
 
         <!-- Tankfuellung -->
         <div id="fields_tank" style="display:none;">
-            <?php if ($begriffe['art'] !== 'fluessig'): ?>
+            <?php if ($istPhev): ?>
+            <!-- Plug-in-Hybrid: getankt oder geladen? -->
+            <div class="mb-3">
+                <div class="btn-group w-100" role="group" aria-label="Getankt oder geladen">
+                    <input type="radio" class="btn-check" name="einheit" id="einheit_l" value="l" <?= $startEinheit === 'l' ? 'checked' : '' ?>>
+                    <label class="btn btn-outline-primary" for="einheit_l"><i class="fas fa-gas-pump me-1"></i> Tanken</label>
+                    <input type="radio" class="btn-check" name="einheit" id="einheit_kwh" value="kwh" <?= $startEinheit === 'kwh' ? 'checked' : '' ?>>
+                    <label class="btn btn-outline-success" for="einheit_kwh"><i class="fas fa-charging-station me-1"></i> Laden</label>
+                </div>
+            </div>
+            <div class="mb-3" id="kraftstoffSorte" <?= $startEinheit === 'kwh' ? 'hidden' : '' ?>>
+                <label class="form-label" for="kraftstoffAuswahl">Kraftstoff</label>
+                <select name="kraftstoff" id="kraftstoffAuswahl" class="form-select">
+                    <option value="e5">Benzin (E5)</option>
+                    <option value="e10">Benzin (E10)</option>
+                </select>
+            </div>
+            <?php elseif ($begriffe['art'] !== 'fluessig'): ?>
             <!-- Strom bzw. Gas: keine Sortenauswahl nötig -->
             <input type="hidden" name="kraftstoff" value="<?= htmlspecialchars($fahrzeugKraftstoff) ?>">
             <?php else: ?>
@@ -122,7 +169,7 @@ $allCategories = [
                 <div class="input-group">
                     <input type="text" list="stationen" placeholder="<?= htmlspecialchars($begriffe['beispiel_ort']) ?>" autocomplete="address-level2" autocapitalize="words" enterkeyhint="done" id="standort" name="standort" class="form-control">
                     <?php if ($stationsSuche): ?>
-                    <button type="button" class="btn btn-outline-primary" id="btnTankstellenSuche" title="<?= $begriffe['stationen'] ?> in der Nähe suchen">
+                    <button type="button" class="btn btn-outline-primary" id="btnTankstellenSuche" title="<?= $begriffe['stationen'] ?> in der Nähe suchen" aria-label="<?= $begriffe['stationen'] ?> in der Nähe suchen">
                         <i class="fas fa-map-marker-alt"></i>
                     </button>
                     <?php endif; ?>
@@ -136,7 +183,7 @@ $allCategories = [
             </div>
 			<!-- Menge (Liter/kWh/kg) -->
 			<div class="mb-3">
-			  <label for="menge" class="form-label">Menge (<?= einheitLang($einheit) ?>)</label>
+			  <label for="menge" class="form-label" id="mengeLabel">Menge (<?= einheitLang($einheit) ?>)</label>
 			  <div class="input-group">
 				  <input type="number"
 						 inputmode="decimal"
@@ -155,7 +202,7 @@ $allCategories = [
 
 			<!-- Preis pro Einheit (€) -->
 			<div class="mb-3">
-			  <label for="preis_pro_einheit" class="form-label">Preis pro <?= einheitLang($einheit) ?> (€)</label>
+			  <label for="preis_pro_einheit" class="form-label" id="preisLabel">Preis pro <?= einheitLang($einheit) ?> (€)</label>
 			  <div class="input-group">
 				  <input type="number"
 						 inputmode="decimal"
@@ -193,11 +240,11 @@ $allCategories = [
 			</div>
             <div class="mb-3 form-check">
                 <input type="checkbox" id="vollgetankt" name="vollgetankt" class="form-check-input" value="1">
-                <label for="vollgetankt" class="form-check-label"><?= $begriffe['voll'] ?></label>
+                <label for="vollgetankt" class="form-check-label" id="vollLabel"><?= $begriffe['voll'] ?></label>
             </div>
             <div class="mb-3 form-check">
                 <input type="checkbox" id="skip_previous" name="skip_previous" class="form-check-input" value="1">
-                <label for="skip_previous" class="form-check-label"><?= $begriffe['luecke'] ?></label>
+                <label for="skip_previous" class="form-check-label" id="lueckeLabel"><?= $begriffe['luecke'] ?></label>
             </div>
         </div>
 
@@ -258,9 +305,10 @@ const sections = {
 
 // PHP-Variable für JS bereitstellen
 const fahrzeugKraftstoff = <?php echo json_encode($fahrzeugKraftstoff); ?>;
-const stationsArt = <?= json_encode($stationsArt) ?>;
-// Zuletzt bezahlter Preis je Ort (nur E-Auto: Strompreise ändern sich selten, an der Wallbox praktisch nie)
-const letztePreise = <?= json_encode($stationsArt === 'lade' ? $letztePreise : new stdClass(), JSON_UNESCAPED_UNICODE) ?>;
+let stationsArt = <?= json_encode($stationsArt) ?>;
+// Zuletzt bezahlter Strompreis je Ort (E-Auto und Plug-in-Hybrid: ändert sich selten, an der Wallbox praktisch nie)
+const letztePreise = <?= json_encode($stationsArt === 'lade' || $istPhev ? $letztePreise : new stdClass(), JSON_UNESCAPED_UNICODE) ?>;
+const texteJeEinheit = <?= json_encode($texteJeEinheit, JSON_UNESCAPED_UNICODE) ?>;
 
 // Wenn eine Kategorie vorgegeben ist, zeige direkt die "Andere Ausgabe" Felder
 <?php if ($vorgegebeneKategorie): ?>
@@ -318,7 +366,7 @@ const val = id => {
 // Zugriffskarte auf Felder + Buttons
 const F = {
     menge  : {input:'menge',  btn:'btnUseMenge',  step:0.01,  hint:'Menge automatisch berechnet.'},
-    preis  : {input:'preis_pro_einheit', btn:'btnUsePreis', step:0.001, hint:'Preis pro <?= einheitLang($einheit) ?> automatisch berechnet.'},
+    preis  : {input:'preis_pro_einheit', btn:'btnUsePreis', step:0.001, hint:<?= json_encode('Preis pro ' . einheitLang($einheit) . ' automatisch berechnet.', JSON_UNESCAPED_UNICODE) ?>},
     kosten : {input:'kosten', btn:'btnUseKosten', step:0.01,  hint:'Gesamtpreis automatisch berechnet.'}
 };
 
@@ -484,8 +532,25 @@ function sucheTankstellen(lat, lng, radius, ortHinweis) {
         .finally(sucheBeenden);
 }
 
+// Plug-in-Hybrid: Beschriftungen, Stationssuche und Kraftstoffauswahl je nach Tanken oder Laden
+document.querySelectorAll('input[name="einheit"]').forEach(radio => radio.addEventListener('change', () => {
+    const t = texteJeEinheit[radio.value];
+    if (!radio.checked || !t) return;
+    document.getElementById('mengeLabel').textContent = t.menge;
+    document.getElementById('preisLabel').textContent = t.preis;
+    document.getElementById('vollLabel').textContent = t.voll;
+    document.getElementById('lueckeLabel').textContent = t.luecke;
+    document.getElementById('standort').placeholder = t.beispiel;
+    F.preis.hint = t.preisHinweis;
+    stationsArt = t.stationsArt;
+    if (btnSuche) { btnSuche.title = t.stationen; btnSuche.setAttribute('aria-label', t.stationen); }
+    document.getElementById('kraftstoffSorte').hidden = radio.value === 'kwh';
+    vorschlaege.replaceChildren();
+}));
+
 // Preis vom letzten Ladevorgang an diesem Ort übernehmen, wenn noch keiner eingetragen ist
 function preisAusHistorie(ort) {
+    if (stationsArt !== 'lade') return;
     const preis = letztePreise[String(ort || '').trim()];
     const feld = document.getElementById('preis_pro_einheit');
     if (!preis || !feld || feld.value !== '') return;

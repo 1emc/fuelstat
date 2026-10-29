@@ -8,7 +8,7 @@ const { randomUUID, randomBytes, createHmac, timingSafeEqual } = require('crypto
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { getVehicleStats } = require('./services/stats');
+const { getVehicleStats, FUEL_TYPES, unitForFuelType, unitsForFuelType } = require('./services/stats');
 const { getVehicleReminders } = require('./services/reminders');
 const { encryptSecret, sendUserMail, resolveSmtpHost, ALLOWED_PORTS, loadDefaultSmtp, withDefaultSmtp } = require('./services/mail');
 const notifier = require('./services/notifier');
@@ -895,9 +895,8 @@ app.post('/api/v1/vehicles', auth, async (req, res) => {
   const name = String(req.body?.name || '').trim();
   const fuelType = String(req.body?.fuelType || '').trim().toLowerCase();
 
-  const allowed = new Set(['diesel', 'e5', 'e10', 'lpg', 'cng', 'electric', 'hybrid', 'hydrogen', 'other']);
   if (!name) return res.status(400).json({ error: 'missing_name' });
-  if (!allowed.has(fuelType)) return res.status(400).json({ error: 'invalid_fuelType' });
+  if (!FUEL_TYPES.has(fuelType)) return res.status(400).json({ error: 'invalid_fuelType' });
 
   const brand = req.body?.brand ? String(req.body.brand).trim() : null;
   const model = req.body?.model ? String(req.body.model).trim() : null;
@@ -906,6 +905,7 @@ app.post('/api/v1/vehicles', auth, async (req, res) => {
   const odometerKm = optionalNumber(req.body?.odometerKm) ?? null;
   const mileageKm = optionalNumber(req.body?.mileageKm) ?? null;
   const tankCapacity = optionalNumber(req.body?.tankCapacity) ?? null;
+  const batteryCapacity = optionalNumber(req.body?.batteryCapacity) ?? null;
   const sortOrder = req.body?.sortOrder !== undefined ? Number(req.body.sortOrder) : 0;
 
   if (year !== null && (!Number.isFinite(year) || year < 1886 || year > 2100)) {
@@ -920,6 +920,9 @@ app.post('/api/v1/vehicles', auth, async (req, res) => {
   if (tankCapacity !== null && (!Number.isFinite(tankCapacity) || tankCapacity <= 0)) {
     return res.status(400).json({ error: 'invalid_tankCapacity' });
   }
+  if (batteryCapacity !== null && (!Number.isFinite(batteryCapacity) || batteryCapacity <= 0)) {
+    return res.status(400).json({ error: 'invalid_batteryCapacity' });
+  }
   if (!Number.isFinite(sortOrder)) {
     return res.status(400).json({ error: 'invalid_sortOrder' });
   }
@@ -928,13 +931,13 @@ app.post('/api/v1/vehicles', auth, async (req, res) => {
     const r = await pool.query(
       `INSERT INTO vehicles (
          user_id, name, fuel_type, brand, model, year, image_url,
-         odometer_km, mileage_km, tank_capacity, sort_order
+         odometer_km, mileage_km, tank_capacity, battery_capacity, sort_order
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING id, name, fuel_type, brand, model, year, image_url,
-                 odometer_km, mileage_km, tank_capacity, sort_order,
+                 odometer_km, mileage_km, tank_capacity, battery_capacity, sort_order,
                  created_at, updated_at`,
-      [req.user.sub, name, fuelType, brand, model, year, imageUrl, odometerKm, mileageKm, tankCapacity, sortOrder]
+      [req.user.sub, name, fuelType, brand, model, year, imageUrl, odometerKm, mileageKm, tankCapacity, batteryCapacity, sortOrder]
     );
     res.status(201).json(r.rows[0]);
   } catch (e) {
@@ -947,7 +950,7 @@ app.get('/api/v1/vehicles', auth, async (req, res) => {
   try {
     const r = await pool.query(
       `SELECT id, name, fuel_type, brand, model, year, image_url,
-              odometer_km, mileage_km, tank_capacity, sort_order,
+              odometer_km, mileage_km, tank_capacity, battery_capacity, sort_order,
               created_at, updated_at
        FROM vehicles
        WHERE user_id = $1
@@ -979,6 +982,7 @@ app.get('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
          odometer_km,
          mileage_km,
          tank_capacity,
+         battery_capacity,
          sort_order,
          created_at,
          updated_at
@@ -1015,25 +1019,14 @@ app.patch('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
   const odometerKm = optionalNumber(req.body?.odometerKm);
   const mileageKm = optionalNumber(req.body?.mileageKm);
   const tankCapacity = optionalNumber(req.body?.tankCapacity);
+  const batteryCapacity = optionalNumber(req.body?.batteryCapacity);
   const sortOrder =
     req.body?.sortOrder !== undefined ? Number(req.body.sortOrder) : undefined;
-
-  const allowedFuelTypes = new Set([
-    'diesel',
-    'e5',
-    'e10',
-    'lpg',
-    'cng',
-    'electric',
-    'hybrid',
-    'hydrogen',
-    'other'
-  ]);
 
   if (name !== undefined && !name) {
     return res.status(400).json({ error: 'invalid_name' });
   }
-  if (fuelType !== undefined && !allowedFuelTypes.has(fuelType)) {
+  if (fuelType !== undefined && !FUEL_TYPES.has(fuelType)) {
     return res.status(400).json({ error: 'invalid_fuelType' });
   }
   if (year !== undefined && year !== null && (!Number.isFinite(year) || year < 1886 || year > 2100)) {
@@ -1047,6 +1040,9 @@ app.patch('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
   }
   if (tankCapacity !== undefined && tankCapacity !== null && (!Number.isFinite(tankCapacity) || tankCapacity <= 0)) {
     return res.status(400).json({ error: 'invalid_tankCapacity' });
+  }
+  if (batteryCapacity !== undefined && batteryCapacity !== null && (!Number.isFinite(batteryCapacity) || batteryCapacity <= 0)) {
+    return res.status(400).json({ error: 'invalid_batteryCapacity' });
   }
   if (sortOrder !== undefined && !Number.isFinite(sortOrder)) {
     return res.status(400).json({ error: 'invalid_sortOrder' });
@@ -1062,6 +1058,7 @@ app.patch('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
     odometerKm === undefined &&
     mileageKm === undefined &&
     tankCapacity === undefined &&
+    batteryCapacity === undefined &&
     sortOrder === undefined
   ) {
     return res.status(400).json({ error: 'nothing_to_update' });
@@ -1118,6 +1115,10 @@ app.patch('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
       fields.push(`tank_capacity = $${idx++}`);
       values.push(tankCapacity);
     }
+    if (batteryCapacity !== undefined) {
+      fields.push(`battery_capacity = $${idx++}`);
+      values.push(batteryCapacity);
+    }
     if (sortOrder !== undefined) {
       fields.push(`sort_order = $${idx++}`);
       values.push(sortOrder);
@@ -1132,7 +1133,7 @@ app.patch('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
        SET ${fields.join(', ')}
        WHERE id = $${idx++} AND user_id = $${idx}
        RETURNING id, name, fuel_type, brand, model, year, image_url,
-                 odometer_km, mileage_km, tank_capacity, sort_order,
+                 odometer_km, mileage_km, tank_capacity, battery_capacity, sort_order,
                  created_at, updated_at`,
       values
     );
@@ -1200,13 +1201,10 @@ app.post('/api/v1/fillups', auth, async (req, res) => {
 
     const fuelType = String(v.rows[0].fuel_type || '').toLowerCase();
 
-    if (!unit) {
-      if (fuelType === 'electric') unit = 'kwh';
-      else if (fuelType === 'cng') unit = 'kg';
-      else if (fuelType === 'hydrogen') unit = 'kg';
-      else unit = 'l'; // diesel, e5, e10, hybrid, other
-    }
+    if (!unit) unit = unitForFuelType(fuelType);
     if (!allowedUnits.has(unit)) return res.status(400).json({ error: 'invalid_unit' });
+    // Plug-in-Hybrid: Liter (getankt) oder kWh (geladen), nichts anderes
+    if (fuelType === 'phev' && !unitsForFuelType(fuelType).includes(unit)) return res.status(400).json({ error: 'invalid_unit' });
 
     const r = await pool.query(
       `INSERT INTO fillups (
@@ -1835,15 +1833,6 @@ app.get('/api/v1/vehicles/:vehicleId/entries', auth, async (req, res) => {
   }
 });
 
-// Statistics of Vehicle
-// Mengeneinheit aus dem Kraftstoff des Fahrzeugs
-function unitForFuelType(fuelType) {
-  const f = String(fuelType || '').toLowerCase();
-  if (f === 'electric') return 'kwh';
-  if (f === 'cng' || f === 'hydrogen') return 'kg';
-  return 'l';
-}
-
 // Massen-Import (z. B. aus CSV): alle Zeilen in einer Transaktion, Duplikate werden übersprungen
 app.post('/api/v1/vehicles/:vehicleId/import', auth, async (req, res) => {
   const vehicleId = String(req.params.vehicleId || '').trim();
@@ -1877,17 +1866,24 @@ app.post('/api/v1/vehicles/:vehicleId/import', auth, async (req, res) => {
   try {
     const v = await client.query('SELECT fuel_type FROM vehicles WHERE id = $1 AND user_id = $2', [vehicleId, req.user.sub]);
     if (v.rowCount === 0) return res.status(404).json({ error: 'vehicle_not_found' });
-    const unit = unitForFuelType(v.rows[0].fuel_type);
+    // Einheit je Zeile nur, wo das Fahrzeug mehrere kennt (Plug-in-Hybrid: l und kWh), sonst immer die des Fahrzeugs
+    const units = unitsForFuelType(v.rows[0].fuel_type);
+    const unitOf = (f) => {
+      const u = f.unit ? String(f.unit).trim().toLowerCase() : '';
+      return units.includes(u) ? u : units[0];
+    };
 
     await client.query('BEGIN');
     const result = { imported: { fillups: 0, entries: 0 }, skipped: { fillups: 0, entries: 0 } };
 
     for (const f of fillups) {
       const filledAt = new Date(f.filledAt);
+      const unit = unitOf(f);
+      // Duplikat: gleicher Tag, gleicher Tachostand und gleiche Einheit (Tanken und Laden am selben Abend sind zwei Einträge)
       const dup = await client.query(
         `SELECT 1 FROM fillups
-         WHERE vehicle_id = $1 AND user_id = $2 AND odometer_km = $3 AND filled_at::date = $4::date`,
-        [vehicleId, req.user.sub, Math.round(Number(f.odometerKm)), filledAt]
+         WHERE vehicle_id = $1 AND user_id = $2 AND odometer_km = $3 AND filled_at::date = $4::date AND unit = $5`,
+        [vehicleId, req.user.sub, Math.round(Number(f.odometerKm)), filledAt, unit]
       );
       if (dup.rowCount > 0) { result.skipped.fillups++; continue; }
       await client.query(

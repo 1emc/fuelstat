@@ -1,6 +1,6 @@
 # Fuelstat
 
-Fuelstat ist eine Web-App, mit der du Tankfüllungen, Ladevorgänge und alle anderen Kosten deiner Fahrzeuge erfasst und auswertest: Verbrauch, Kosten pro Kilometer, CO₂-Ausstoß und Erinnerungen an TÜV, Wartung, Versicherung und Steuer. Sie funktioniert für Benzin, Diesel, Autogas, Erdgas, Elektro, Hybrid und Wasserstoff.
+Fuelstat ist eine Web-App, mit der du Tankfüllungen, Ladevorgänge und alle anderen Kosten deiner Fahrzeuge erfasst und auswertest: Verbrauch, Kosten pro Kilometer, CO₂-Ausstoß und Erinnerungen an TÜV, Wartung, Versicherung und Steuer. Sie funktioniert für Benzin, Diesel, Autogas, Erdgas, Elektro, Hybrid, Plug-in-Hybrid und Wasserstoff.
 
 ## Funktionen
 
@@ -11,6 +11,7 @@ Fuelstat ist eine Web-App, mit der du Tankfüllungen, Ladevorgänge und alle and
 
 **Einträge**
 - Tankfüllungen bzw. Ladevorgänge mit Menge (l, kWh oder kg je nach Kraftstoff), Preis, Tankstelle, voll/teilweise getankt
+- Plug-in-Hybride: Tanken und Laden im selben Fahrzeug, Verbrauch getrennt in l/100 km und kWh/100 km, gemeinsame Energiekosten und Stromanteil; Tank und Akku als eigene Angaben
 - Tankstellen in der Nähe samt aktuellem Preis (Tankerkönig), beim E-Auto Ladestationen mit Leistung und Steckertypen (Open Charge Map); der zuletzt bezahlte kWh-Preis an einer Station wird vorgeschlagen
 - Andere Ausgaben (Versicherung, Werkstatt, Inspektion, Steuer, Reparatur, Reifen, TÜV, Wartung, Dekor) und Fahrten
 - Alle Einträge bearbeiten und löschen (Tankfüllungen innerhalb von 14 Tagen)
@@ -91,12 +92,12 @@ Die API läuft danach auf `127.0.0.1:3000` (nur lokal erreichbar).
 
 ### 2. Datenbankschema
 
-Neue Installation: `backend/database/postgres_init.sql` einspielen, danach `postgres_006_fix_fillup_units.sql`, `postgres_007_mail_settings.sql`, `postgres_008_beta_feedback.sql` und `postgres_009_user_activity.sql`.
+Neue Installation: `backend/database/postgres_init.sql` einspielen, danach `postgres_006_fix_fillup_units.sql`, `postgres_007_mail_settings.sql`, `postgres_008_beta_feedback.sql`, `postgres_009_user_activity.sql` und `postgres_010_plugin_hybrid.sql`.
 
-Bestehende Installation: alle noch nicht eingespielten `postgres_00X_*.sql` der Reihe nach ausführen, z. B. über Adminer oder:
+Bestehende Installation: alle noch nicht eingespielten `postgres_0XX_*.sql` der Reihe nach ausführen, z. B. über Adminer oder (Benutzer und Datenbank kommen aus der `.env` des Containers):
 
 ```bash
-docker compose exec -T db psql -U fuelstat -d fuelstat < ../backend/database/postgres_006_fix_fillup_units.sql
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ../backend/database/postgres_010_plugin_hybrid.sql
 ```
 
 ### 3. Frontend

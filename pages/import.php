@@ -25,6 +25,16 @@ $begriffe = verbrauchsBegriffe($fuelType);
 if (isset($_GET['vorlage'])) {
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="fuelstat_import_vorlage.csv"');
+    if ($fuelType === 'phev') {
+        // Plug-in-Hybrid: Tanken und Laden in einer Datei, die Spalte "Einheit" unterscheidet sie
+        echo "\xEF\xBB\xBF" . "Datum;Kategorie;Tachostand (km);Menge;Einheit;Kosten (EUR);Voll;Ort/Anbieter;Beschreibung\r\n"
+            . "05.01.2026;Laden;38302;14,80;kWh;4,14;ja;Zuhause (Wallbox);\r\n"
+            . "05.01.2026;Tanken;38337;41,20;l;72,10;ja;Aral Musterstadt;\r\n"
+            . "06.01.2026;Laden;38390;9,60;kWh;2,69;ja;Zuhause (Wallbox);\r\n"
+            . "02.01.2026;Versicherung;;;;420,00;;HUK;Jahresbeitrag\r\n"
+            . "15.03.2026;Werkstatt;39100;;;189,00;;ATU;Bremsbeläge vorne\r\n";
+        exit;
+    }
     $beispiele = $begriffe['art'] === 'strom'
         ? ["05.01.2026;Laden;38337;24,50;6,13;ja;Zuhause (Wallbox);", "20.01.2026;Laden;38700;18,00;12,42;ja;EnBW Schnelllader;"]
         : ["05.01.2026;Tankfüllung;38337;33,50;61,20;ja;Aral Musterstadt;", "20.01.2026;Tankfüllung;38700;15,00;27,90;nein;Shell;"];
@@ -129,8 +139,13 @@ $f2 = fn($v) => $v === null ? '' : number_format((float)$v, 2, ',', '.');
         <p>Übernimm <?= $begriffe['vorgaenge'] ?> und Ausgaben aus einer CSV-Datei, z. B. aus einer Excel-Liste, einer anderen App oder einem Fuelstat-Export.</p>
         <ul>
             <li>Erste Zeile: Spaltenüberschriften. Trennzeichen Semikolon, Komma oder Tab.</li>
+            <?php if ($fuelType === 'phev'): ?>
+            <li>Pflicht ist ein Datum; Tank- und Ladevorgänge brauchen außerdem Tachostand und Menge.</li>
+            <li>Zeilen mit Menge gelten als Tank- oder Ladevorgang, sonst als Ausgabe. Ob getankt (Liter) oder geladen (kWh) wurde, steht in einer Spalte „Einheit“ (l oder kWh) oder in der Kategorie („Tanken“ bzw. „Laden“). Ohne beides gilt die Zeile als Tankfüllung.</li>
+            <?php else: ?>
             <li>Pflicht ist ein Datum; <?= $begriffe['vorgaenge'] ?> brauchen außerdem Tachostand und Menge (<?= $einheit ?>).</li>
             <li>Zeilen mit Menge gelten als <?= $begriffe['vorgang'] ?>, sonst als Ausgabe. Eine Spalte „Kategorie“ (z. B. <?= $begriffe['art'] === 'strom' ? 'Laden' : 'Tankfüllung' ?>, Versicherung, TÜV) legt die Art fest.</li>
+            <?php endif; ?>
             <li>Bereits vorhandene Einträge (gleiches Datum und gleicher Tachostand bzw. gleiche Kategorie und Betrag) werden übersprungen.</li>
         </ul>
         <p><a href="import.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?>&vorlage=1"><i class="fas fa-download me-1"></i>Vorlage herunterladen</a></p>
@@ -182,7 +197,7 @@ $f2 = fn($v) => $v === null ? '' : number_format((float)$v, 2, ',', '.');
             </p>
             <div class="table-responsive mb-3" style="max-height: 420px;">
                 <table class="table table-sm table-striped align-middle">
-                    <thead class="sticky-top"><tr><th>Zeile</th><th>Datum</th><th>Art</th><th>km</th><th>Menge (<?= $einheit ?>)</th><th>Kosten</th><th>Voll</th><th>Ort</th><th>Beschreibung</th></tr></thead>
+                    <thead class="sticky-top"><tr><th>Zeile</th><th>Datum</th><th>Art</th><th>km</th><th>Menge<?= $fuelType === 'phev' ? '' : ' (' . $einheit . ')' ?></th><th>Kosten</th><th>Voll</th><th>Ort</th><th>Beschreibung</th></tr></thead>
                     <tbody>
                     <?php
                     // Fehler zuerst, dann die ersten Zeilen
@@ -192,9 +207,9 @@ $f2 = fn($v) => $v === null ? '' : number_format((float)$v, 2, ',', '.');
                         <tr class="<?= $z['fehler'] ? 'table-danger' : '' ?>">
                             <td><?= $z['nr'] ?></td>
                             <td><?= $z['datum'] ? date('d.m.Y', strtotime($z['datum'])) : '' ?></td>
-                            <td><?= $z['fehler'] ? '<strong>' . htmlspecialchars($z['fehler']) . '</strong>' : htmlspecialchars(getKategorieName($z['kategorie'], $fuelType)) ?></td>
+                            <td><?= $z['fehler'] ? '<strong>' . htmlspecialchars($z['fehler']) . '</strong>' : htmlspecialchars(getKategorieName($z['kategorie'], $fuelType, $fuelType === 'phev' ? ($z['einheit'] ?? 'l') : null)) ?></td>
                             <td><?= $z['tachostand'] !== null ? number_format($z['tachostand'], 0, ',', '.') : '' ?></td>
-                            <td><?= $f2($z['menge']) ?></td>
+                            <td><?= $f2($z['menge']) ?><?= $fuelType === 'phev' && $z['menge'] !== null ? ' ' . einheitKurz($z['einheit'] ?? 'l') : '' ?></td>
                             <td><?= $z['kosten'] !== null ? $f2($z['kosten']) . ' €' : '' ?></td>
                             <td><?= $z['vollgetankt'] === null ? '' : ($z['vollgetankt'] ? 'ja' : 'nein') ?></td>
                             <td><?= htmlspecialchars($z['ort']) ?></td>

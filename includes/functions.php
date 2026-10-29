@@ -12,10 +12,10 @@ function isGdExtensionAvailable(): bool
 // --------------------------------------------------
 // 1. Icons
 // --------------------------------------------------
-function getCategoryIcon(string $kategorie, ?string $fuelType = null): string
+function getCategoryIcon(string $kategorie, ?string $fuelType = null, ?string $einheit = null): string
 {
     if ($kategorie === 'Tankfuellung' && $fuelType !== null) {
-        return verbrauchsBegriffe($fuelType)['icon'];
+        return begriffeFuerEinheit($fuelType, $einheit)['icon'];
     }
     $icons = [
         'Tankfuellung' => 'fa-gas-pump',
@@ -620,7 +620,8 @@ function getKraftstoffOptionen(): array
         'lpg' => 'Autogas (LPG)',
         'cng' => 'Erdgas (CNG)',
         'electric' => 'Elektro',
-        'hybrid' => 'Hybrid',
+        'hybrid' => 'Hybrid (ohne Stecker)',
+        'phev' => 'Plug-in-Hybrid',
         'hydrogen' => 'Wasserstoff',
         'other' => 'Andere',
     ];
@@ -644,10 +645,14 @@ function fahrzeugBildUrl(array $fahrzeug, string $baseUrl): string
 /**
  * CO₂-Emissionsfaktor in kg pro Mengeneinheit (l, kWh bzw. kg).
  * Verbrenner: direkte Emission bei der Verbrennung; Elektro: deutscher Strommix.
+ * Plug-in-Hybrid: je nach Einheit des Eintrags Benzin oder Strom.
  * @return float|null null, wenn kein sinnvoller Faktor bekannt ist
  */
-function getCo2Faktor(?string $fuelType): ?float
+function getCo2Faktor(?string $fuelType, ?string $einheit = null): ?float
 {
+    if (strtolower((string)$fuelType) === 'phev') {
+        $fuelType = strtolower((string)$einheit) === 'kwh' ? 'electric' : 'e5';
+    }
     $faktoren = [
         'e5' => 2.37, 'e10' => 2.37, 'petrol' => 2.37, 'hybrid' => 2.37,
         'diesel' => 2.65,
@@ -672,6 +677,12 @@ function getEinheitFuerKraftstoff(?string $fuelType): string
         return 'kg';
     }
     return 'l';
+}
+
+/** Alle Einheiten eines Fahrzeugs, Standard zuerst: Plug-in-Hybride tanken (l) und laden (kWh). */
+function einheitenFuerKraftstoff(?string $fuelType): array
+{
+    return strtolower((string)$fuelType) === 'phev' ? ['l', 'kwh'] : [getEinheitFuerKraftstoff($fuelType)];
 }
 
 /** Kurzform für Anzeigen wie "41,2 l" oder "kWh/100km". */
@@ -708,16 +719,16 @@ function verbrauchsBegriffe(?string $fuelType): array
             'beispiel_ort' => 'z. B. Zuhause (Wallbox)',
         ];
     }
-    if ($fuelType === '') {
+    if ($fuelType === '' || $fuelType === 'phev') {
         return [
-            'art' => 'neutral',
+            'art' => $fuelType === 'phev' ? 'phev' : 'neutral',
             'vorgang' => 'Tank-/Ladevorgang', 'vorgaenge' => 'Tank- und Ladevorgänge', 'vorgaengen' => 'Tank- und Ladevorgängen',
             'stopps' => 'Tank-/Ladestopps', 'verb' => 'tanken/laden', 'Verb' => 'Tanken/Laden',
             'menge' => 'Getankt/geladen', 'menge_gesamt' => 'Getankt/geladen gesamt',
             'voll' => 'Voll getankt/geladen', 'teil' => 'Teilweise',
             'luecke' => 'Vorherige Einträge ignorieren',
             'station' => 'Tankstelle/Ladestation', 'stationen' => 'Tankstellen/Ladestationen',
-            'energie' => 'Kraftstoff/Strom', 'kosten' => 'Kraftstoff-/Stromkosten', 'preis' => 'Preis',
+            'energie' => 'Kraftstoff/Strom', 'kosten' => 'Energiekosten', 'preis' => 'Preis',
             'speicher' => 'Tank/Akku', 'icon' => 'fa-gas-pump',
             'beispiel_ort' => 'z. B. Aral München Nord',
         ];
@@ -739,11 +750,24 @@ function verbrauchsBegriffe(?string $fuelType): array
 }
 
 /**
- * Anzeigename einer Kategorie. Mit Kraftstoff des Fahrzeugs heißt "Tankfuellung" beim E-Auto "Ladevorgang".
+ * Begriffe für einen einzelnen Eintrag: beim Plug-in-Hybrid entscheidet dessen Einheit
+ * (kWh = Ladevorgang, sonst Tankfüllung), bei allen anderen die Antriebsart.
  */
-function getKategorieName($kategorie, ?string $fuelType = null) {
+function begriffeFuerEinheit(?string $fuelType, ?string $einheit): array
+{
+    if (strtolower((string)$fuelType) === 'phev' && $einheit !== null) {
+        return verbrauchsBegriffe(strtolower($einheit) === 'kwh' ? 'electric' : 'e5');
+    }
+    return verbrauchsBegriffe($fuelType);
+}
+
+/**
+ * Anzeigename einer Kategorie. Mit Kraftstoff des Fahrzeugs heißt "Tankfuellung" beim E-Auto "Ladevorgang",
+ * beim Plug-in-Hybrid je nach Einheit des Eintrags.
+ */
+function getKategorieName($kategorie, ?string $fuelType = null, ?string $einheit = null) {
     if ($kategorie === 'Tankfuellung') {
-        return $fuelType === null ? 'Tankfüllung' : verbrauchsBegriffe($fuelType)['vorgang'];
+        return $fuelType === null ? 'Tankfüllung' : begriffeFuerEinheit($fuelType, $einheit)['vorgang'];
     }
     return ['TUV' => 'TÜV'][$kategorie] ?? $kategorie;
 }
