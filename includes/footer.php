@@ -1,4 +1,4 @@
-</div> <!-- Ende des .container -->
+</div> <!-- Ende von .hauptinhalt -->
 
 <!-- Footer -->
 <footer class="bg-body-tertiary text-center text-muted py-3 mt-4">
@@ -31,7 +31,8 @@
 <script>
   (function () {
     var root = document.documentElement;
-    var toggle = document.getElementById('themeToggle');
+    var toggles = document.querySelectorAll('.theme-umschalter');
+    var themeMeta = document.querySelector('meta[name="theme-color"]');
 
     function applyChartTheme() {
       if (!window.Chart) return;
@@ -53,13 +54,19 @@
     }
 
     function updateIcon() {
-      if (!toggle) return;
       var dark = root.getAttribute('data-bs-theme') === 'dark';
-      toggle.querySelector('i').className = dark ? 'fas fa-sun' : 'fas fa-moon';
-      toggle.title = dark ? 'Hell darstellen' : 'Dunkel darstellen';
+      if (themeMeta) themeMeta.setAttribute('content', dark ? '#2b3035' : '#f8f9fa');
+      toggles.forEach(function (toggle) {
+        var icon = toggle.querySelector('i');
+        icon.classList.toggle('fa-sun', dark);
+        icon.classList.toggle('fa-moon', !dark);
+        toggle.title = dark ? 'Hell darstellen' : 'Dunkel darstellen';
+        var text = toggle.querySelector('.theme-text');
+        if (text) text.textContent = dark ? 'Helle Darstellung' : 'Dunkle Darstellung';
+      });
     }
 
-    if (toggle) {
+    toggles.forEach(function (toggle) {
       toggle.addEventListener('click', function () {
         var next = root.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';
         root.setAttribute('data-bs-theme', next);
@@ -67,10 +74,32 @@
         updateIcon();
         applyChartTheme();
       });
-    }
+    });
 
     updateIcon();
     applyChartTheme();
+  })();
+</script>
+
+<!-- Mobil: Fahrzeug-Blatt öffnet je nach Knopf Details, neuen Eintrag oder Statistik -->
+<script>
+  (function () {
+    var blatt = document.getElementById('blattFahrzeuge');
+    if (!blatt) return;
+    var titel = {details: 'Meine Fahrzeuge', eintrag: 'Eintrag für welches Fahrzeug?', statistik: 'Statistik für welches Fahrzeug?'};
+    blatt.addEventListener('show.bs.offcanvas', function (event) {
+      var aktion = (event.relatedTarget && event.relatedTarget.dataset.aktion) || 'details';
+      document.getElementById('blattFahrzeugeTitel').textContent = titel[aktion] || titel.details;
+      blatt.querySelectorAll('.blatt-fahrzeug').forEach(function (link) {
+        link.href = link.dataset[aktion] || link.dataset.details;
+      });
+      var neu = blatt.querySelector('.blatt-neu');
+      if (neu) neu.classList.toggle('d-none', aktion !== 'details');
+    });
+    // Link auf dieselbe Seite mit anderem #Reiter: Blatt trotzdem schließen
+    blatt.addEventListener('click', function (event) {
+      if (event.target.closest('a')) bootstrap.Offcanvas.getOrCreateInstance(blatt).hide();
+    });
   })();
 </script>
 

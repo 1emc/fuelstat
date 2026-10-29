@@ -1,29 +1,34 @@
 /* css/style.css */
 
-/* Body Background Color */
+/* Höhen für Kopfleiste und untere Leiste (Safe Areas von iPhone/Android eingerechnet) */
+:root {
+    --kopf-hoehe: calc(56px + env(safe-area-inset-top));
+    --tabbar-hoehe: 60px;
+}
+
+/* Seite mindestens bildschirmhoch, Footer unten. Wichtig: keine feste Höhe (height: 100%),
+   sonst endet der Body nach einer Bildschirmhöhe und die sticky Kopfleiste scrollt mit weg. */
+html {
+    min-height: 100%;
+}
+
 body {
-    min-height: calc(100% + env(safe-area-inset-top));
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    margin: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     background-color: var(--bs-body-bg);
     display: flex;
     flex-direction: column;
 }
 
-/* Footer Styling */
-html, body {
-    height: 100%;
-    margin: 0;
-}
-
-.container {
+.hauptinhalt {
     flex: 1 0 auto;
 }
 
 footer {
     flex-shrink: 0;
     width: 100%;
-    position: relative;
-    bottom: 0;
 }
 
 #offcanvas {
@@ -45,8 +50,9 @@ footer {
     color: var(--bs-primary); /* Primärfarbe für Icons */
 }
 
-/* Icons in Buttons übernehmen die Button-Schriftfarbe */
-.card-body .btn .fas {
+/* Icons in Buttons und Badges übernehmen deren Schriftfarbe */
+.card-body .btn .fas,
+.card-body .badge .fas {
     color: inherit;
 }
 
@@ -56,49 +62,261 @@ footer {
     object-fit: cover;
 }
 
-/* Füge oberhalb der Navbar-Padding für die Dynamic Island hinzu */
-.navbar.sticky-top,
-.navbar.fixed-top {
-    /* Fallback für ältere iOS */
-    padding-top: constant(safe-area-inset-top);
-    /* Standard für moderne Browser */
+/* Kopfleiste: Abstand für Notch/Dynamic Island nur hier (nicht zusätzlich am Body) */
+.navbar.sticky-top {
     padding-top: env(safe-area-inset-top);
-    /* Gesamthöhe anpassen: 56px (Standard-Navbar-Höhe) + Safe-Area */
-    height: calc(56px + env(safe-area-inset-top));
-    /* Sicherstellen, dass der Content nicht darunter verschwindet */
-    z-index: 1020;
+    min-height: var(--kopf-hoehe);
+    z-index: 1030;
 }
 
-/* Weitere Anpassungen nach Bedarf */
+.kopf-titel {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
 
+.kopf-zurueck {
+    font-size: 1.1rem;
+    line-height: 1;
+}
+
+.min-w-0 {
+    min-width: 0;
+}
+
+/* --- Mobil: untere Leiste wie in einer App ------------------------------- */
+body.mit-tabbar {
+    padding-bottom: calc(var(--tabbar-hoehe) + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 992px) {
+    body.mit-tabbar {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+}
+
+.tabbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1030;
+    display: flex;
+    height: calc(var(--tabbar-hoehe) + env(safe-area-inset-bottom));
+    padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    background: rgba(var(--bs-tertiary-bg-rgb), .94);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--bs-border-color-translucent);
+}
+
+.tabbar-link {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--bs-secondary-color);
+    font-size: .7rem;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.tabbar-link i {
+    font-size: 1.2rem;
+}
+
+.tabbar-link.active,
+.tabbar-link:active {
+    color: var(--bs-primary);
+}
+
+.tabbar-link:disabled {
+    opacity: .4;
+}
+
+.tabbar-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.tabbar-link.active .tabbar-avatar {
+    box-shadow: 0 0 0 2px var(--bs-primary);
+}
+
+.tabbar-kreis {
+    width: 50px;
+    height: 50px;
+    margin-top: -16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bs-primary);
+    color: #fff;
+    box-shadow: 0 .35rem 1rem rgba(var(--bs-primary-rgb), .45);
+}
+
+.tabbar-kreis i {
+    font-size: 1.35rem;
+}
+
+/* Blätter, die von unten hereinfahren (Fahrzeuge, Profil) */
+.offcanvas-bottom.blatt {
+    height: auto;
+    max-height: 85vh;
+    max-height: 85dvh;
+    border-radius: 1.25rem 1.25rem 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+}
+
+.blatt-griff {
+    width: 40px;
+    height: 5px;
+    margin: .5rem auto 0;
+    border-radius: 3px;
+    background: var(--bs-border-color);
+}
+
+.blatt .list-group-item {
+    padding-top: .85rem;
+    padding-bottom: .85rem;
+    background: transparent;
+}
+
+.blatt .list-group-item.active {
+    color: var(--bs-primary);
+    background: rgba(var(--bs-primary-rgb), .1);
+    border-color: var(--bs-list-group-border-color);
+}
+
+.blatt .list-group-item .fa-car-side,
+.blatt .list-group-item .fa-fw {
+    color: var(--bs-secondary-color);
+}
+
+/* --- Fahrzeugseite: Reiter (PC: Tabs, mobil: wischbare Pillen unter der Kopfleiste) --- */
 @media (max-width: 991.98px) {
-  .navbar-collapse {
-    background: var(--bs-body-bg) !important;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.18);
-    border-radius: 0 0 18px 18px;
-    margin-top: 8px;
-    padding: 12px 0 12px 0;
-    z-index: 2000;
-  }
-  .navbar-nav {
-    margin-bottom: 8px;
-  }
-  .dropdown-menu {
-    background: var(--bs-tertiary-bg) !important;
-    border-radius: 12px;
-    margin-bottom: 8px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.10);
-  }
-  .navbar-nav .nav-item {
-    margin-bottom: 6px;
-  }
-  .navbar-nav .nav-link {
-    padding: 10px 18px;
-    border-radius: 8px;
-  }
+    .fahrzeug-reiter {
+        position: sticky;
+        top: var(--kopf-hoehe);
+        z-index: 1020;
+        flex-wrap: nowrap;
+        gap: .5rem;
+        overflow-x: auto;
+        scrollbar-width: none;
+        margin: 0 calc(var(--bs-gutter-x) * -.5);
+        padding: .6rem calc(var(--bs-gutter-x) * .5);
+        border-bottom: 1px solid var(--bs-border-color-translucent);
+        background: var(--bs-body-bg);
+    }
+
+    .fahrzeug-reiter::-webkit-scrollbar {
+        display: none;
+    }
+
+    .fahrzeug-reiter .nav-link {
+        white-space: nowrap;
+        margin: 0;
+        padding: .4rem .95rem;
+        border: 1px solid var(--bs-border-color);
+        border-radius: 50rem;
+        color: var(--bs-body-color);
+    }
+
+    .fahrzeug-reiter .nav-link.active {
+        color: #fff;
+        background: var(--bs-primary);
+        border-color: var(--bs-primary);
+    }
 }
 
-.navbar-toggler {
-  border: 2px solid var(--bs-primary);
-  border-radius: 8px;
+/* --- Fahrzeugübersicht: Karten (mobil als kompakte Liste) ---------------- */
+.fahrzeug-bild {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: var(--bs-card-inner-border-radius) var(--bs-card-inner-border-radius) 0 0;
+}
+
+.fahrzeug-bild img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.fahrzeug-aktionen {
+    position: relative;
+    z-index: 2;
+    padding: 0 1rem 1rem;
+}
+
+@media (max-width: 575.98px) {
+    .fahrzeug-karte {
+        flex-direction: row;
+        align-items: center;
+    }
+
+    .fahrzeug-karte .fahrzeug-bild {
+        width: 76px;
+        flex-shrink: 0;
+        aspect-ratio: 1;
+        margin: .75rem 0 .75rem .75rem;
+        border-radius: .75rem;
+    }
+
+    .fahrzeug-karte .card-body {
+        padding: .75rem;
+    }
+
+    .fahrzeug-aktionen {
+        padding: 0 .75rem 0 0;
+    }
+
+    .fahrzeug-aktionen .btn-eintrag {
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+}
+
+/* Kennzahlen-Kacheln auf der Fahrzeugseite */
+.kennzahl {
+    background: var(--bs-tertiary-bg);
+    border-radius: .75rem;
+    padding: .75rem 1rem;
+    height: 100%;
+}
+
+.kennzahl-wert {
+    font-size: 1.15rem;
+    font-weight: 600;
+}
+
+/* --- Mobil allgemein: weniger Abstand oben, größere Tippflächen ---------- */
+@media (max-width: 991.98px) {
+    .hauptinhalt .container.mt-5 {
+        margin-top: 1rem !important;
+    }
+}
+
+@media (pointer: coarse) {
+    .btn-sm {
+        padding: .4rem .7rem;
+    }
+
+    .dropdown-item {
+        padding-top: .6rem;
+        padding-bottom: .6rem;
+    }
 }

@@ -43,32 +43,31 @@ body.dark .badge { background-color: #444; color: #fff; }
 .card { border-radius: 1rem; box-shadow: 0 0.5rem 1rem rgba(0,0,0,.15); }
 </style>
 
-<div class="mt-4">
-  <div class="d-flex flex-column flex-sm-row align-items-stretch gap-2 mb-3">
-    <a href="../pages/eintrag_hinzufuegen.php?fahrzeug_id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?>" class="btn btn-success flex-shrink-0">
+<div class="mt-3 mt-lg-4">
+  <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+    <!-- Mobil steckt "Neuer Eintrag" im Plus der unteren Leiste -->
+    <a href="../pages/eintrag_hinzufuegen.php?fahrzeug_id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?>" class="btn btn-success flex-shrink-0 d-none d-lg-inline-block">
       <i class="fas fa-plus me-1"></i> Neuer&nbsp;Eintrag
     </a>
-    <form id="jahrFilterForm" method="get" class="d-flex flex-sm-row flex-column gap-2 flex-grow-1">
+    <form id="jahrFilterForm" method="get" action="fahrzeug_detail.php#eintraege" class="d-flex gap-2 flex-grow-1">
       <input type="hidden" name="id" value="<?= htmlspecialchars($fahrzeug_id) ?>">
-      <select name="jahr" class="form-select w-auto">
+      <select name="jahr" class="form-select flex-grow-1 flex-lg-grow-0 w-auto" aria-label="Jahr" onchange="this.form.submit()">
         <option value="">Alle Jahre</option>
         <?php foreach ($jahrListe as $y): ?>
         <option value="<?= $y ?>" <?= $jahr === $y ? 'selected' : '' ?>><?= $y ?></option>
         <?php endforeach; ?>
       </select>
-      <button class="btn btn-outline-secondary flex-shrink-0">
-        <i class="fas fa-eye me-1"></i> Anzeigen
-      </button>
+      <noscript><button class="btn btn-outline-secondary flex-shrink-0">Anzeigen</button></noscript>
     </form>
     <div class="btn-group flex-shrink-0">
       <a href="../pages/export.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?><?= $jahr !== null ? '&jahr=' . $jahr : '' ?>" class="btn btn-outline-primary" title="Als CSV für Excel herunterladen">
-        <i class="fas fa-file-csv me-1"></i> CSV
+        <i class="fas fa-file-csv"></i><span class="d-none d-sm-inline ms-1">CSV</span>
       </a>
       <a href="../pages/bericht.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?><?= $jahr !== null ? '&jahr=' . $jahr : '' ?>" class="btn btn-outline-primary" title="Druckansicht, auch zum Speichern als PDF" target="_blank">
-        <i class="fas fa-file-pdf me-1"></i> Bericht
+        <i class="fas fa-file-pdf"></i><span class="d-none d-sm-inline ms-1">Bericht</span>
       </a>
       <a href="../pages/import.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?>" class="btn btn-outline-primary" title="Einträge aus einer CSV-Datei übernehmen">
-        <i class="fas fa-file-import me-1"></i> Import
+        <i class="fas fa-file-import"></i><span class="d-none d-sm-inline ms-1">Import</span>
       </a>
     </div>
   </div>

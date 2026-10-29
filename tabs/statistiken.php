@@ -143,7 +143,7 @@ $teuersterMonatWert = !empty($kostenProMonatFormatted) ? max($kostenProMonatForm
     </div>
     <div class="col-lg-6">
         <h5>Jahresübersicht</h5>
-        <div style="max-height:250px; overflow:auto;">
+        <div class="table-responsive" style="max-height:250px;">
             <table class="table table-sm table-bordered mb-0">
                 <thead>
                     <tr><th>Jahr</th><th># Stops</th><th><?= $einheitKurz ?> gekauft</th><th>€ gekauft</th><th><?= $einheitKurz ?> verbraucht</th><th><?= $einheitKurz ?>/100km</th><?php if ($co2Faktor !== null): ?><th>CO₂</th><?php endif; ?></tr>
