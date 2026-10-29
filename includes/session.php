@@ -25,6 +25,8 @@ if (!function_exists('getSessionCookieOptions')) {
 }
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
+    // Session-Daten so lange behalten wie das Cookie (PHP-Standard: 24 Minuten ohne Aktivität)
+    ini_set('session.gc_maxlifetime', (string)getSessionCookieOptions()['lifetime']);
     session_set_cookie_params(getSessionCookieOptions());
     session_start();
 }

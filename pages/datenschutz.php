@@ -27,7 +27,7 @@ $email = ($b['email'] ?? '') !== ''
   <ul>
     <li><strong>Passwort:</strong> wird nie im Klartext gespeichert, sondern nur als bcrypt-Hash. Auch ich als Betreiber kann es nicht auslesen.</li>
     <li><strong>Zwei-Faktor-Authentifizierung (optional):</strong> der geheime Schlüssel für deine Authenticator-App wird in der Datenbank gespeichert, um die Codes zu prüfen.</li>
-    <li><strong>Anmeldung:</strong> nach dem Login erhält dein Browser ein Sitzungs-Cookie; die zugehörige Anmeldung (Token) läuft nach 7 Tagen ab. Beim Abmelden wird das Token in einer Sperrliste vermerkt, die mit deinem Konto gelöscht wird. Fehlgeschlagene Anmeldeversuche werden zum Schutz vor Angriffen kurzzeitig gezählt (nur im Arbeitsspeicher, höchstens 15 Minuten).</li>
+    <li><strong>Anmeldung:</strong> nach dem Login erhält dein Browser ein Sitzungs-Cookie und ein Anmelde-Cookie; die Anmeldung (Token) läuft nach 7 Tagen ab. Beim Abmelden wird das Token in einer Sperrliste vermerkt, die mit deinem Konto gelöscht wird. Fehlgeschlagene Anmeldeversuche werden zum Schutz vor Angriffen kurzzeitig gezählt (nur im Arbeitsspeicher, höchstens 15 Minuten).</li>
     <li><strong>Beta-Phase:</strong> während der Beta wird dein Konto als „Beta-Tester“ gekennzeichnet.</li>
   </ul>
 
@@ -46,6 +46,7 @@ $email = ($b['email'] ?? '') !== ''
   <h2 class="h5 mt-4">8. Cookies und Speicher im Browser</h2>
   <ul>
     <li><strong>Sitzungs-Cookie (PHPSESSID):</strong> technisch notwendig für die Anmeldung und den Schutz der Formulare; es gilt höchstens 28 Tage und wird beim Abmelden gelöscht.</li>
+    <li><strong>Anmelde-Cookie (fuelstat_auth):</strong> hält dich angemeldet, auch wenn der Server die Sitzung zwischendurch aufräumt. Es ist für Skripte nicht lesbar, läuft nach 7 Tagen ab und wird beim Abmelden gelöscht.</li>
     <li><strong>Lokaler Speicher (fuelstat-theme):</strong> merkt sich, ob du die helle oder dunkle Darstellung gewählt hast.</li>
     <li><strong>Service Worker:</strong> speichert Programmdateien und Bilder der App (z. B. Stylesheets, Symbole) im Browser, damit sie schneller laden. Persönliche Daten werden dort nicht abgelegt.</li>
   </ul>
