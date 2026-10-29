@@ -9,7 +9,7 @@ return [
     'telefon' => '+49 172 / 30 76 371',
 
     // Hosting (Datenschutzerklärung)
-    'hoster' => '',               // optional, z. B. "Hetzner Online GmbH, Industriestr. 25, 91710 Gunzenhausen"
+    'hoster' => 'Hetzner Online GmbH, Industriestr. 25, 91710 Gunzenhausen',
     'log_tage' => 14,             // nach wie vielen Tagen die Server-Logfiles gelöscht werden
     'backup_tage' => null,        // nach wie vielen Tagen Datensicherungen überschrieben werden (null = keine Angabe)
 
