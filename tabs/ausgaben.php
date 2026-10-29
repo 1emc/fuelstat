@@ -22,9 +22,21 @@ rsort($jahre);
 $imZeitraum = fn($e) => $selectedYear === null || (int)substr($e['datum'], 0, 4) === $selectedYear;
 $eintraege = array_values(array_filter($alle, $imZeitraum));
 
+// Plug-in-Hybrid: Tanken und Laden als eigene Kategorien ("Tankfuellung:l" bzw. "Tankfuellung:kwh")
+$istPhev = $fuelType === 'phev';
+$katSchluessel = fn(array $e) => $istPhev && $e['kategorie'] === 'Tankfuellung'
+    ? 'Tankfuellung:' . (($e['einheit'] ?? 'l') === 'kwh' ? 'kwh' : 'l')
+    : $e['kategorie'];
+$katTeile = fn(string $k) => str_starts_with($k, 'Tankfuellung:') ? ['Tankfuellung', substr($k, 13)] : [$k, null];
+
 // Kategorien zu Gruppen zusammenfassen (Kostenstruktur und Jahresvergleich)
-$gruppen = [
+$gruppen = $istPhev ? [
+    'kraftstoff' => [begriffeFuerEinheit($fuelType, 'l')['Verb'], 'fa-gas-pump', '#0d6efd', ['Tankfuellung:l']],
+    'strom' => [begriffeFuerEinheit($fuelType, 'kwh')['Verb'], 'fa-charging-station', '#198754', ['Tankfuellung:kwh']],
+] : [
     'kraftstoff' => [$begriffe['Verb'], $begriffe['icon'], '#0d6efd', ['Tankfuellung']],
+];
+$gruppen += [
     'fix' => ['Versicherung & Steuer', 'fa-shield-alt', '#6f42c1', ['Versicherung', 'Steuer']],
     'wartung' => ['Werkstatt & Wartung', 'fa-tools', '#fd7e14', ['Werkstatt', 'Inspektion', 'Reparatur', 'Wartung', 'Reifen', 'TUV']],
     'sonstiges' => ['Sonstiges', 'fa-ellipsis', '#20c997', []],
@@ -37,11 +49,12 @@ $gruppeVon = function (string $kategorie) use ($gruppen): string {
     }
     return 'sonstiges';
 };
-$kategorieName = fn(string $k) => getKategorieName($k, $fuelType);
+$kategorieName = fn(string $k) => getKategorieName($katTeile($k)[0], $fuelType, $katTeile($k)[1]);
+$kategorieIcon = fn(string $k) => getCategoryIcon($katTeile($k)[0], $fuelType, $katTeile($k)[1]);
 
 // Farben je Kategorie (Diagramm und Liste)
 $kategorieFarben = [
-    'Tankfuellung' => '#0d6efd', 'Versicherung' => '#6f42c1', 'Steuer' => '#a370f7', 'Werkstatt' => '#fd7e14',
+    'Tankfuellung' => '#0d6efd', 'Tankfuellung:l' => '#0d6efd', 'Tankfuellung:kwh' => '#198754', 'Versicherung' => '#6f42c1', 'Steuer' => '#a370f7', 'Werkstatt' => '#fd7e14',
     'Inspektion' => '#ffc107', 'Reparatur' => '#dc3545', 'Wartung' => '#e8590c', 'Reifen' => '#6c757d',
     'TUV' => '#d63384', 'Dekor' => '#20c997',
 ];
@@ -50,7 +63,7 @@ $kategorieFarben = [
 $kategorien = [];
 $gruppenSummen = array_fill_keys(array_keys($gruppen), 0.0);
 foreach ($eintraege as $e) {
-    $k = $e['kategorie'];
+    $k = $katSchluessel($e);
     $kategorien[$k] ??= ['summe' => 0.0, 'anzahl' => 0];
     $kategorien[$k]['summe'] += (float)$e['kosten'];
     $kategorien[$k]['anzahl']++;
@@ -104,7 +117,7 @@ $monatsReihen = [];
 foreach ($eintraege as $e) {
     $m = substr($e['datum'], 0, 7);
     $monatsReihen[$m] ??= array_fill_keys(array_keys($gruppen), 0.0);
-    $monatsReihen[$m][$gruppeVon($e['kategorie'])] += (float)$e['kosten'];
+    $monatsReihen[$m][$gruppeVon($katSchluessel($e))] += (float)$e['kosten'];
 }
 ksort($monatsReihen);
 if ($selectedYear !== null) {
@@ -123,7 +136,7 @@ if ($selectedYear === null) {
         $zeile = array_fill_keys(array_keys($gruppen), 0.0);
         foreach ($alle as $e) {
             if ((int)substr($e['datum'], 0, 4) === $j) {
-                $zeile[$gruppeVon($e['kategorie'])] += (float)$e['kosten'];
+                $zeile[$gruppeVon($katSchluessel($e))] += (float)$e['kosten'];
             }
         }
         $summe = array_sum($zeile);
@@ -238,7 +251,7 @@ $zeitraumText = $selectedYear !== null ? 'im Jahr ' . $selectedYear : 'gesamt';
                         <?php foreach ($kategorien as $k => $d): $anteil = $gesamt > 0 ? $d['summe'] / $gesamt * 100 : 0; $farbe = $kategorieFarben[$k] ?? '#adb5bd'; ?>
                         <li class="mb-2">
                             <div class="d-flex justify-content-between align-items-baseline gap-2 small">
-                                <span class="text-truncate"><i class="fas <?= getCategoryIcon($k, $fuelType) ?> fa-fw me-1" style="color: <?= $farbe ?>"></i><?= htmlspecialchars($kategorieName($k)) ?> <span class="text-body-secondary">(<?= $d['anzahl'] ?>)</span></span>
+                                <span class="text-truncate"><i class="fas <?= $kategorieIcon($k) ?> fa-fw me-1" style="color: <?= $farbe ?>"></i><?= htmlspecialchars($kategorieName($k)) ?> <span class="text-body-secondary">(<?= $d['anzahl'] ?>)</span></span>
                                 <span class="text-nowrap fw-semibold"><?= $zahl($d['summe']) ?> €</span>
                             </div>
                             <div class="progress mt-1" style="height: 4px;" role="presentation">

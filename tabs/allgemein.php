@@ -64,13 +64,18 @@ $eintragUrl = '../pages/eintrag_hinzufuegen.php?fahrzeug_id=' . urlencode($fahrz
                     </div>
                 </div>
                 <?php foreach ($verbrauchJeEinheit as $u => $w):
+                    // Durchschnitt statt letztem Abschnitt: beim Plug-in-Hybrid schwankt der Wert je nach elektrischem Anteil stark
+                    $wSchnitt = $w['avgConsumption'] ?? null;
                     $wAktuell = $w['trend']['current'] ?? null;
-                    $wDiff = $w['trend']['diff'] ?? null; ?>
+                    $wZusatz = array_filter([
+                        $wAktuell !== null ? 'zuletzt ' . number_format($wAktuell, 2, ',', '.') : '',
+                        $w['avgPrice'] !== null ? 'Ø ' . number_format((float)$w['avgPrice'], 3, ',', '.') . ' €/' . einheitKurz($u) : '',
+                    ]); ?>
                 <div class="col-6 col-lg-3">
                     <div class="kennzahl">
-                        <div class="small text-body-secondary">Verbrauch <?= begriffeFuerEinheit($fuel_type, $u)['energie'] ?></div>
-                        <div class="kennzahl-wert"><?= $wAktuell !== null ? number_format($wAktuell, 2, ',', '.') . ' <small class="fw-normal">' . einheitKurz($u) . '/100 km</small>' : '—' ?></div>
-                        <?php if ($w['avgPrice'] !== null): ?><div class="small text-body-secondary">Ø <?= number_format((float)$w['avgPrice'], 3, ',', '.') ?> €/<?= einheitKurz($u) ?></div><?php endif; ?>
+                        <div class="small text-body-secondary">Ø Verbrauch <?= begriffeFuerEinheit($fuel_type, $u)['energie'] ?></div>
+                        <div class="kennzahl-wert"><?= $wSchnitt !== null ? number_format($wSchnitt, 2, ',', '.') . ' <small class="fw-normal">' . einheitKurz($u) . '/100 km</small>' : '—' ?></div>
+                        <?php if ($wZusatz): ?><div class="small text-body-secondary"><?= implode(' · ', $wZusatz) ?></div><?php endif; ?>
                     </div>
                 </div>
                 <?php endforeach; ?>
