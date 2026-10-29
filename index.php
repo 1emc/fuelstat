@@ -4,15 +4,21 @@ include 'includes/db_connect.php';
 include 'includes/functions.php';
 include 'includes/header.php';
 
-$benutzer_id = isApiAuthenticated() ? ($_SESSION['user_id'] ?? 'api-user') : null;
+// Nicht angemeldet: Willkommensseite mit Registrierung/Login
+if (!isApiAuthenticated()) {
+    echo '<div class="container mt-4">';
+    include 'includes/willkommen.php';
+    echo '</div>';
+    include 'includes/footer.php';
+    exit;
+}
 
 $vehicles = [];
-if ($benutzer_id !== null) {
-    try {
-        $vehicles = $api->getVehicles();
-    } catch (Throwable $e) {
-        $vehicles = [];
-    }
+$ladeFehler = false;
+try {
+    $vehicles = $api->getVehicles();
+} catch (Throwable $e) {
+    $ladeFehler = true;
 }
 ?>
 
@@ -24,10 +30,11 @@ if ($benutzer_id !== null) {
     .km-badge { font-size: .75rem; font-weight: 500; padding: .25em .5em; border-radius: .25rem; }
 </style>
 
-<h1>Fahrzeugübersicht</h1>
-
 <div class="container mt-4">
-    <?php if (count($vehicles) > 0): ?>
+    <h1 class="mb-4">Fahrzeugübersicht</h1>
+    <?php if ($ladeFehler): ?>
+        <div class="alert alert-danger">Die Fahrzeuge konnten gerade nicht geladen werden. Bitte versuche es gleich noch einmal.</div>
+    <?php elseif (count($vehicles) > 0): ?>
         <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-4">
             <?php foreach (array_values($vehicles) as $index => $row):
                 $vehicleId = $row['id'];
@@ -100,7 +107,19 @@ if ($benutzer_id !== null) {
             <?php endforeach; ?>
         </div>
     <?php else: ?>
-        <div class="alert alert-warning">Keine Fahrzeuge gefunden.</div>
+        <div class="card border-0 shadow-sm text-center mx-auto" style="max-width: 36rem;">
+            <div class="card-body p-5">
+                <i class="fas fa-car-side fa-3x mb-3"></i>
+                <h2 class="h4">Noch kein Fahrzeug angelegt</h2>
+                <p class="text-body-secondary mb-4">Lege dein erstes Fahrzeug an, danach kannst du Tankfüllungen, Ladevorgänge und Ausgaben erfassen.</p>
+                <a href="pages/fahrzeug_hinzufuegen.php" class="btn btn-primary btn-lg px-4">
+                    <i class="fas fa-plus me-2"></i>Fahrzeug hinzufügen
+                </a>
+                <p class="small text-body-secondary mt-4 mb-0">
+                    <i class="fas fa-file-import me-1"></i>Daten aus einer anderen App oder Excel? Nach dem Anlegen unter „Einträge“ → „Import“ übernehmen.
+                </p>
+            </div>
+        </div>
     <?php endif; ?>
 </div>
 

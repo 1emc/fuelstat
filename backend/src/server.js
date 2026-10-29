@@ -303,7 +303,8 @@ app.get('/api/v1/health', (req, res) => {
   res.status(200).json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    service: 'fuelstat-api-v2'
+    service: 'fuelstat-api-v2',
+    registration_enabled: process.env.REGISTRATION_ENABLED !== 'false'
   });
 });
 
