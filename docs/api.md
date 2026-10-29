@@ -338,6 +338,17 @@ Bei aktivem 2FA antwortet `POST /auth/login` ohne `code` mit 401 `{ "error": "mf
 * `POST /auth/mail-settings/test` – Test-Mail
 * `POST /auth/mail-settings/send-now` `{ "type": "reminders" | "report" }` – sofort senden (Bericht für den Vormonat)
 
+Ohne eigenen `smtpHost` wird der Standard-Mailserver verwendet (SMTP-Zugang von `MAIL_DEFAULT_USER_ID` bzw. des ersten Admins). Die Mails gehen dann immer an die Konto-Adresse; `to_address` wird ignoriert. `GET` liefert dazu `default_available`, `default_from` und `uses_default`. Test-Mail und Sofortversand über den Standard-Server: höchstens 5 in 15 Minuten (`429 too_many_attempts`).
+
+### Beta und Feedback
+
+* `GET /health` enthält `beta_phase` (aus `BETA_PHASE`, Standard `true`)
+* `GET /whoami` und `GET /auth/users` enthalten `beta_tester`; neue Konten werden während der Beta-Phase als Beta-Tester angelegt
+* `PUT /auth/users/:userId/beta` `{ "betaTester": true|false }` – nur Admin
+* `POST /feedback` `{ "category": "fehler"|"idee"|"lob"|"sonstiges", "message": "…" (3–5000 Zeichen), "page": "/pfad" }` → `201 { id, saved, mailed }`. Wird gespeichert und über den Standard-Mailserver an `FEEDBACK_EMAIL` bzw. den Empfänger des Standard-Servers geschickt (Reply-To = Absender). Höchstens 10 je 15 Minuten.
+* `GET /feedback` – Liste (nur Admin), offene zuerst
+* `PATCH /feedback/:id` `{ "done": true|false }` – nur Admin
+
 Fehler: 400 `mail_not_configured`, 400 `smtp_host_not_allowed` (interne Adresse), 400 `smtp_host_not_found`, 502 `smtp_failed` mit `detail` (Meldung des Mailservers).
 
 Ein Job im Backend prüft stündlich: Erinnerungs-Mails, sobald ein Termin bald fällig ist und noch einmal, wenn er überfällig ist; der Monatsbericht des Vormonats geht am Monatsanfang raus. Jede Mail wird nur einmal verschickt (`mail_log`).

@@ -11,7 +11,11 @@ $menue = [
     ['pages/benachrichtigungen.php', 'fa-envelope', 'E-Mail-Benachrichtigungen'],
 ];
 if (!empty($currentUser['is_admin'])) {
-    $menue[] = ['pages/admin.php', 'fa-users-cog', 'Benutzerverwaltung'];
+    $menue[] = ['pages/admin.php', 'fa-users-cog', 'Benutzerverwaltung & Feedback'];
+}
+// Am PC steht "Feedback" direkt in der Kopfleiste, mobil gehört es ins Profil-Blatt
+if ($alsListe) {
+    $menue[] = [substr($feedbackUrl, strlen($baseUrl)), 'fa-comment-dots', 'Feedback senden'];
 }
 foreach ($menue as [$ziel, $symbol, $text]): ?>
     <?= $liAuf ?><a class="<?= $eintragKlasse ?>" href="<?= htmlspecialchars($baseUrl . $ziel) ?>"><?= $icon($symbol) ?><?= htmlspecialchars($text) ?></a><?= $liZu ?>

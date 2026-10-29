@@ -9,6 +9,8 @@ try {
     // API nicht erreichbar: Links trotzdem anzeigen, die Seiten melden den Fehler selbst
 }
 
+$beta = istBetaPhase();
+
 $funktionen = [
     ['fa-gas-pump', 'Tanken & Laden', 'Tankfüllungen und Ladevorgänge in Sekunden erfassen – mit Tankstellen in der Nähe und aktuellen Spritpreisen.'],
     ['fa-chart-line', 'Verbrauch & Statistiken', 'Verbrauch pro Tankfüllung, Monat und Jahr, Trends und Diagramme für jedes Fahrzeug.'],
@@ -29,6 +31,9 @@ $funktionen = [
 
 <section class="willkommen-hero rounded-4 px-4 py-5 mb-5 text-center">
     <img src="<?= htmlspecialchars($baseUrl) ?>images/new-icon-512x512.png" alt="" class="willkommen-logo mb-4">
+    <?php if ($beta): ?>
+        <div class="mb-3"><span class="badge rounded-pill text-bg-warning px-3 py-2"><i class="fas fa-flask me-1"></i>Offene Beta · kostenlos</span></div>
+    <?php endif; ?>
     <h1 class="display-5 fw-bold mb-3">Willkommen bei Fuelstat</h1>
     <p class="lead text-body-secondary mx-auto mb-4" style="max-width: 40rem;">
         Behalte Verbrauch, Kosten und Termine deiner Fahrzeuge im Blick – für Benzin, Diesel, Gas und Elektro.
@@ -36,7 +41,7 @@ $funktionen = [
     <div class="d-flex flex-column flex-sm-row justify-content-center gap-2">
         <?php if ($registrierungOffen): ?>
             <a href="<?= htmlspecialchars($baseUrl) ?>pages/register.php" class="btn btn-primary btn-lg px-4">
-                <i class="fas fa-user-plus me-2"></i>Kostenlos registrieren
+                <i class="fas fa-user-plus me-2"></i><?= $beta ? 'Beta-Tester werden' : 'Kostenlos registrieren' ?>
             </a>
         <?php endif; ?>
         <a href="<?= htmlspecialchars($baseUrl) ?>pages/login.php" class="btn btn-<?= $registrierungOffen ? 'outline-primary' : 'primary' ?> btn-lg px-4">
@@ -89,6 +94,30 @@ $funktionen = [
         <?php endforeach; ?>
     </div>
 </section>
+
+<?php if ($beta): ?>
+<section class="mb-5">
+    <div class="card border-0 shadow-sm willkommen-karte">
+        <div class="card-body p-4 p-md-5">
+            <div class="d-flex flex-column flex-md-row gap-4 align-items-md-center">
+                <div class="willkommen-icon d-flex align-items-center justify-content-center flex-shrink-0">
+                    <i class="fas fa-flask fa-lg"></i>
+                </div>
+                <div>
+                    <h2 class="h4 mb-2">Fuelstat ist in der Beta-Phase</h2>
+                    <p class="text-body-secondary mb-3">Alle Funktionen sind schon nutzbar, und du kannst mitbestimmen, wie es weitergeht. Als Beta-Tester hilfst du, Fuelstat besser zu machen.</p>
+                    <ul class="list-unstyled mb-0 small">
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Kostenlos während der gesamten Beta</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Feedback direkt aus der App senden – Fehler, Ideen, Lob</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Deine Daten kannst du jederzeit als CSV exportieren</li>
+                        <li><i class="fas fa-info-circle text-body-secondary me-2"></i>Einzelne Funktionen können sich noch ändern</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+<?php endif; ?>
 
 <section class="text-center bg-body-tertiary rounded-4 px-4 py-5 mb-4">
     <h2 class="h4 mb-3">Bereit für den ersten Tankstopp?</h2>

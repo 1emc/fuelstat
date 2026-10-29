@@ -15,6 +15,26 @@ if (!function_exists('getApiClient')) {
 }
 
 /**
+ * Läuft die Beta-Phase? (aus /health der API, 10 Minuten in der Session zwischengespeichert)
+ */
+function istBetaPhase(): bool
+{
+    $cache = $_SESSION['beta_phase_cache'] ?? null;
+    if (is_array($cache) && $cache['bis'] > time()) {
+        return $cache['wert'];
+    }
+    try {
+        $wert = (getApiClient(null)->getHealth()['beta_phase'] ?? false) === true;
+    } catch (Throwable $e) {
+        return false;
+    }
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        $_SESSION['beta_phase_cache'] = ['wert' => $wert, 'bis' => time() + 600];
+    }
+    return $wert;
+}
+
+/**
  * Fillups und Entries einer Fahrzeug-ID holen und zu einer einheitlichen Liste
  * mit Keys (id, datum, kategorie, menge, kosten, tachostand, vollgetankt, …) zusammenführen.
  * @return array [ 'eintraege' => [ 'Y-m' => [ ... ] ], 'jahrListe' => [ Jahre ] ]
