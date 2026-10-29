@@ -16,7 +16,9 @@ function unitsForFuelType(fuelType) {
   return String(fuelType || '').toLowerCase() === 'phev' ? ['l', 'kwh'] : [unitForFuelType(fuelType)];
 }
 
-function trendOf(segRows) {
+function trendOf(allRows) {
+  // Abschnitte ohne Strecke (zwei volle Einträge beim selben Tachostand) haben keinen Verbrauch
+  const segRows = allRows.filter(x => x.l_per_100km !== null);
   if (segRows.length < 2) return null;
   const current = Number(segRows[0].l_per_100km);
   const prev = segRows.slice(1, 4).map(x => Number(x.l_per_100km)).filter(Number.isFinite);
@@ -101,8 +103,15 @@ async function getVehicleStats(pool, userId, vehicleId) {
   const segRows = segments.rows;
   const units = {};
   for (const row of ppl.rows) {
-    const segs = segRows.filter(s => s.unit === row.unit);
-    units[row.unit] = { avgPrice: row.avg_price, trend: trendOf(segs) };
+    const segs = segRows.filter(s => s.unit === row.unit && Number(s.km) > 0);
+    // Ø Verbrauch über alle Abschnitte (gewichtet nach km); beim Plug-in-Hybrid aussagekräftiger als der letzte Abschnitt
+    const km = segs.reduce((a, x) => a + Number(x.km), 0);
+    const amount = segs.reduce((a, x) => a + Number(x.liters_segment), 0);
+    units[row.unit] = {
+      avgPrice: row.avg_price,
+      avgConsumption: km > 0 ? Number((amount / km * 100).toFixed(2)) : null,
+      trend: trendOf(segs)
+    };
   }
 
   // Passt die Einheit der Einträge nicht zur Antriebsart (z. B. später geändert), zählt die einzige vorhandene

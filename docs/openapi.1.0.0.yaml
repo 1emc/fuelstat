@@ -1721,6 +1721,10 @@ components:
               avgPrice:
                 type: number
                 nullable: true
+              avgConsumption:
+                type: number
+                nullable: true
+                description: Ø Verbrauch pro 100 km über alle Abschnitte (nach km gewichtet)
               trend:
                 $ref: "#/components/schemas/VehicleStatsTrend"
                 nullable: true

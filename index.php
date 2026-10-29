@@ -53,8 +53,10 @@ try {
                     if (count($stats['units'] ?? []) > 1) {
                         $teile = [];
                         foreach (['l', 'kwh'] as $u) {
-                            if (isset($stats['units'][$u]['trend']['current'])) {
-                                $teile[] = number_format($stats['units'][$u]['trend']['current'], 1, ',', '.') . ' ' . einheitKurz($u);
+                            // Durchschnitt über alle Abschnitte, der letzte schwankt beim Plug-in-Hybrid zu stark
+                            $wert = $stats['units'][$u]['avgConsumption'] ?? $stats['units'][$u]['trend']['current'] ?? null;
+                            if ($wert !== null) {
+                                $teile[] = number_format($wert, 1, ',', '.') . ' ' . einheitKurz($u);
                             }
                         }
                         $verbrauch = null;
