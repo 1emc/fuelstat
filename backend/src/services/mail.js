@@ -80,17 +80,67 @@ async function createTransport(settings) {
 
 /**
  * Mail mit den Einstellungen des Benutzers senden.
- * @param settings Zeile aus user_mail_settings (+ account_email)
+ * @param settings Zeile aus user_mail_settings (+ account_email), ggf. mit Standard-Mailserver ergänzt (withDefaultSmtp)
+ * @param to/replyTo optional: abweichender Empfänger (z. B. Feedback an den Betreiber) bzw. Antwortadresse
  */
-async function sendUserMail(settings, { subject, text, html }) {
+async function sendUserMail(settings, { subject, text, html, to, replyTo }) {
   const transport = await createTransport(settings);
   try {
     const from = settings.from_address || settings.smtp_user || settings.account_email;
-    const to = settings.to_address || settings.account_email;
-    return await transport.sendMail({ from: `Fuelstat <${from}>`, to, subject, text, html });
+    return await transport.sendMail({
+      from: `Fuelstat <${from}>`,
+      to: to || settings.to_address || settings.account_email,
+      replyTo,
+      subject,
+      text,
+      html
+    });
   } finally {
     transport.close();
   }
 }
 
-module.exports = { encryptSecret, decryptSecret, sendUserMail, resolveSmtpHost, isPrivateAddress, ALLOWED_PORTS };
+// --- Standard-Mailserver: der SMTP-Zugang des Betreibers für alle, die keinen eigenen eingetragen haben ---
+
+/** MAIL_DEFAULT_USER_ID, sonst die Admins aus ADMIN_USER_IDS in dieser Reihenfolge */
+function defaultMailUserIds() {
+  const source = process.env.MAIL_DEFAULT_USER_ID || process.env.ADMIN_USER_IDS || '';
+  return source.split(',').map((id) => id.trim()).filter(Boolean);
+}
+
+/** SMTP-Einstellungen des Betreibers (erster Kandidat mit eingetragenem Server) oder null */
+async function loadDefaultSmtp(pool) {
+  const ids = defaultMailUserIds();
+  if (process.env.MAIL_DEFAULT_ENABLED === 'false' || ids.length === 0) return null;
+  const r = await pool.query(
+    `SELECT s.*, u.email AS account_email
+     FROM user_mail_settings s JOIN users u ON u.id = s.user_id
+     WHERE s.user_id::text = ANY($1) AND s.smtp_host IS NOT NULL`,
+    [ids]
+  );
+  return ids.map((id) => r.rows.find((row) => String(row.user_id) === id)).find(Boolean) || null;
+}
+
+/**
+ * Benutzer ohne eigenen Mailserver bekommen den Standard-Server. Empfänger ist dann immer die
+ * Konto-Adresse, damit niemand über den Server des Betreibers an beliebige Adressen schicken kann.
+ */
+function withDefaultSmtp(settings, defaults) {
+  if (settings.smtp_host || !defaults) return { ...settings, uses_default: false };
+  return {
+    ...settings,
+    smtp_host: defaults.smtp_host,
+    smtp_port: defaults.smtp_port,
+    smtp_security: defaults.smtp_security,
+    smtp_user: defaults.smtp_user,
+    smtp_password_enc: defaults.smtp_password_enc,
+    from_address: defaults.from_address || defaults.smtp_user || defaults.account_email,
+    to_address: settings.account_email,
+    uses_default: true
+  };
+}
+
+module.exports = {
+  encryptSecret, decryptSecret, sendUserMail, resolveSmtpHost, isPrivateAddress, ALLOWED_PORTS,
+  loadDefaultSmtp, withDefaultSmtp
+};

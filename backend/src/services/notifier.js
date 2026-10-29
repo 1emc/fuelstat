@@ -2,7 +2,7 @@
 // Erinnerungs-Mails und Monatsberichte. Läuft stündlich (startNotifier) und lässt sich manuell auslösen.
 const { getVehicleReminders } = require('./reminders');
 const { getVehicleStats } = require('./stats');
-const { sendUserMail } = require('./mail');
+const { sendUserMail, loadDefaultSmtp, withDefaultSmtp } = require('./mail');
 
 const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
 const CATEGORY_NAMES = { Tankfuellung: 'Tankfüllung', TUV: 'TÜV' };
@@ -12,14 +12,15 @@ const fmt = (n, digits = 2) => Number(n).toLocaleString('de-DE', { minimumFracti
 const fmtDate = (iso) => iso.split('-').reverse().join('.');
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-async function loadUserSettings(pool, userId) {
-  const r = await pool.query(
-    `SELECT s.*, u.email AS account_email
-     FROM user_mail_settings s JOIN users u ON u.id = s.user_id
-     WHERE s.user_id = $1`,
-    [userId]
-  );
-  return r.rows[0] || null;
+// Einstellungen eines Benutzers (auch ohne gespeicherte Zeile), ohne eigenen Server mit dem Standard-Mailserver
+const SETTINGS_SQL = `
+  SELECT s.*, u.id AS user_id, u.email AS account_email, COALESCE(s.reminder_days, 30) AS reminder_days
+  FROM users u LEFT JOIN user_mail_settings s ON s.user_id = u.id`;
+
+async function loadUserSettings(pool, userId, defaults) {
+  const r = await pool.query(`${SETTINGS_SQL} WHERE u.id = $1`, [userId]);
+  if (!r.rows[0]) return null;
+  return withDefaultSmtp(r.rows[0], defaults === undefined ? await loadDefaultSmtp(pool) : defaults);
 }
 
 async function loadVehicles(pool, userId) {
@@ -207,12 +208,11 @@ async function notifyUser(pool, settings, now = new Date()) {
 }
 
 async function runNotifications(pool, now = new Date()) {
-  const r = await pool.query(
-    `SELECT s.*, u.email AS account_email
-     FROM user_mail_settings s JOIN users u ON u.id = s.user_id
-     WHERE s.smtp_host IS NOT NULL AND (s.reminders_enabled OR s.monthly_report)`
-  );
-  for (const settings of r.rows) {
+  const defaults = await loadDefaultSmtp(pool);
+  const r = await pool.query(`${SETTINGS_SQL} WHERE s.reminders_enabled OR s.monthly_report`);
+  for (const row of r.rows) {
+    const settings = withDefaultSmtp(row, defaults);
+    if (!settings.smtp_host) continue;
     try {
       await notifyUser(pool, settings, now);
     } catch (e) {

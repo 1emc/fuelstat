@@ -10,7 +10,7 @@ const path = require('path');
 const fs = require('fs');
 const { getVehicleStats } = require('./services/stats');
 const { getVehicleReminders } = require('./services/reminders');
-const { encryptSecret, sendUserMail, resolveSmtpHost, ALLOWED_PORTS } = require('./services/mail');
+const { encryptSecret, sendUserMail, resolveSmtpHost, ALLOWED_PORTS, loadDefaultSmtp, withDefaultSmtp } = require('./services/mail');
 const notifier = require('./services/notifier');
 
 // Media Upload Konfiguration
@@ -275,6 +275,11 @@ function optionalText(value) {
   return String(value).trim() || null;
 }
 
+// Beta-Phase: an, bis BETA_PHASE=false gesetzt wird. Neue Konten werden in der Beta als Beta-Tester markiert.
+function isBetaPhase() {
+  return process.env.BETA_PHASE !== 'false';
+}
+
 // Admins werden über ADMIN_USER_IDS (kommagetrennte User-IDs) in der .env festgelegt
 function isAdmin(req) {
   const adminIds = String(process.env.ADMIN_USER_IDS || '')
@@ -304,7 +309,8 @@ app.get('/api/v1/health', (req, res) => {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     service: 'fuelstat-api-v2',
-    registration_enabled: process.env.REGISTRATION_ENABLED !== 'false'
+    registration_enabled: process.env.REGISTRATION_ENABLED !== 'false',
+    beta_phase: isBetaPhase()
   });
 });
 
@@ -313,7 +319,7 @@ app.get('/api/v1/whoami', auth, async (req, res) => {
   try {
     // Zusätzlich User-Daten aus DB holen für vollständige Info
     const r = await pool.query(
-      `SELECT id, email, username, mfa_enabled, profile_image_url, created_at, updated_at
+      `SELECT id, email, username, mfa_enabled, profile_image_url, beta_tester, created_at, updated_at
        FROM users WHERE id = $1`,
       [req.user.sub]
     );
@@ -328,6 +334,7 @@ app.get('/api/v1/whoami', auth, async (req, res) => {
       username: r.rows[0].username,
       mfa_enabled: r.rows[0].mfa_enabled,
       profile_image_url: r.rows[0].profile_image_url,
+      beta_tester: r.rows[0].beta_tester,
       created_at: r.rows[0].created_at,
       updated_at: r.rows[0].updated_at,
       is_admin: isAdmin(req),
@@ -366,10 +373,10 @@ app.post('/api/v1/auth/register', async (req, res) => {
   try {
     const passwordHash = await bcrypt.hash(password, 12);
     const r = await pool.query(
-      `INSERT INTO users (email, password_hash)
-       VALUES ($1, $2)
-       RETURNING id, email, username, mfa_enabled, profile_image_url, created_at, updated_at`,
-      [email, passwordHash]
+      `INSERT INTO users (email, password_hash, beta_tester)
+       VALUES ($1, $2, $3)
+       RETURNING id, email, username, mfa_enabled, profile_image_url, beta_tester, created_at, updated_at`,
+      [email, passwordHash, isBetaPhase()]
     );
     const user = r.rows[0];
     res.status(201).json({ token: signToken(user), user });
@@ -570,6 +577,7 @@ app.get('/api/v1/auth/users', auth, requireAdmin, async (req, res) => {
          username,
          mfa_enabled,
          profile_image_url,
+         beta_tester,
          created_at,
          updated_at
        FROM users
@@ -577,6 +585,22 @@ app.get('/api/v1/auth/users', auth, requireAdmin, async (req, res) => {
     );
     res.json(r.rows);
   } catch (e) {
+    serverError(res, e);
+  }
+});
+
+// Beta-Tester-Status setzen (nur Admin)
+app.put('/api/v1/auth/users/:userId/beta', auth, requireAdmin, async (req, res) => {
+  if (typeof req.body?.betaTester !== 'boolean') return res.status(400).json({ error: 'invalid_betaTester' });
+  try {
+    const r = await pool.query(
+      'UPDATE users SET beta_tester = $2, updated_at = now() WHERE id = $1 RETURNING id, email, beta_tester',
+      [String(req.params.userId || '').trim(), req.body.betaTester]
+    );
+    if (r.rowCount === 0) return res.status(404).json({ error: 'user_not_found' });
+    res.json(r.rows[0]);
+  } catch (e) {
+    if (e.code === '22P02') return res.status(404).json({ error: 'user_not_found' });
     serverError(res, e);
   }
 });
@@ -1882,8 +1906,12 @@ app.get('/api/v1/vehicles/:vehicleId/reminders', auth, async (req, res) => {
 });
 
 // --- E-Mail-Benachrichtigungen (SMTP-Zugang je Benutzer) ---
-function mailSettingsResponse(row) {
+function mailSettingsResponse(row, defaults) {
   return {
+    // Ohne eigenen Server verschickt Fuelstat über den Standard-Mailserver an die Konto-Adresse
+    default_available: Boolean(defaults),
+    default_from: defaults ? (defaults.from_address || defaults.smtp_user || defaults.account_email) : null,
+    uses_default: Boolean(defaults) && !row?.smtp_host,
     smtp_host: row?.smtp_host ?? null,
     smtp_port: row?.smtp_port ?? null,
     smtp_security: row?.smtp_security ?? 'starttls',
@@ -1910,7 +1938,7 @@ function mailErrorResponse(res, e) {
 app.get('/api/v1/auth/mail-settings', auth, async (req, res) => {
   try {
     const r = await pool.query('SELECT * FROM user_mail_settings WHERE user_id = $1', [req.user.sub]);
-    res.json(mailSettingsResponse(r.rows[0]));
+    res.json(mailSettingsResponse(r.rows[0], await loadDefaultSmtp(pool)));
   } catch (e) {
     serverError(res, e);
   }
@@ -1932,9 +1960,10 @@ app.put('/api/v1/auth/mail-settings', auth, async (req, res) => {
   if (!emailOk(fromAddress)) return res.status(400).json({ error: 'invalid_fromAddress' });
   if (!emailOk(toAddress)) return res.status(400).json({ error: 'invalid_toAddress' });
   if (!Number.isInteger(reminderDays) || reminderDays < 1 || reminderDays > 180) return res.status(400).json({ error: 'invalid_reminderDays' });
-  if ((b.remindersEnabled || b.monthlyReport) && host === null) return res.status(400).json({ error: 'mail_not_configured' });
 
   try {
+    const defaults = await loadDefaultSmtp(pool);
+    if ((b.remindersEnabled || b.monthlyReport) && host === null && !defaults) return res.status(400).json({ error: 'mail_not_configured' });
     if (host !== null) await resolveSmtpHost(host);
 
     // Passwort: nur ändern, wenn ein neues gesendet wird; clearPassword löscht es
@@ -1962,17 +1991,28 @@ app.put('/api/v1/auth/mail-settings', auth, async (req, res) => {
        RETURNING *`,
       values
     );
-    res.json(mailSettingsResponse(r.rows[0]));
+    res.json(mailSettingsResponse(r.rows[0], defaults));
   } catch (e) {
     if (e.code === 'smtp_host_not_allowed' || e.code === 'ENOTFOUND' || e.code === 'EAI_AGAIN') return mailErrorResponse(res, e);
     serverError(res, e);
   }
 });
 
+// Manuelles Senden über den Standard-Mailserver begrenzen (schützt den Server des Betreibers vor Missbrauch)
+const MANUAL_DEFAULT_MAILS = 5;
+function manualMailLimited(settings, userId) {
+  if (!settings?.uses_default) return false;
+  const key = `default-mail:${userId}`;
+  if (isLockedOut(key, MANUAL_DEFAULT_MAILS)) return true;
+  recordFailure(key);
+  return false;
+}
+
 // Test-Mail mit den gespeicherten Einstellungen
 app.post('/api/v1/auth/mail-settings/test', auth, async (req, res) => {
   try {
     const settings = await notifier.loadUserSettings(pool, req.user.sub);
+    if (manualMailLimited(settings, req.user.sub)) return tooManyAttempts(res);
     await sendUserMail(settings, {
       subject: 'Fuelstat: Test-Mail',
       text: 'Hallo,\n\ndie E-Mail-Einstellungen in Fuelstat funktionieren.\n\nDeine Fuelstat-App',
@@ -1990,8 +2030,9 @@ app.post('/api/v1/auth/mail-settings/send-now', auth, async (req, res) => {
   if (!['reminders', 'report'].includes(type)) return res.status(400).json({ error: 'invalid_type' });
   try {
     const settings = await notifier.loadUserSettings(pool, req.user.sub);
+    if (manualMailLimited(settings, req.user.sub)) return tooManyAttempts(res);
     if (type === 'reminders') {
-      const due = await notifier.collectDueReminders(pool, settings || { user_id: req.user.sub, reminder_days: 30 });
+      const due = await notifier.collectDueReminders(pool, settings);
       if (due.length === 0) return res.json({ sent: false, reason: 'nothing_due' });
       await sendUserMail(settings, notifier.reminderMail(due));
       return res.json({ sent: true, count: due.length });
@@ -2001,6 +2042,92 @@ app.post('/api/v1/auth/mail-settings/send-now', auth, async (req, res) => {
     res.json({ sent: true });
   } catch (e) {
     mailErrorResponse(res, e);
+  }
+});
+
+// --- Feedback der Benutzer (Beta) ---
+const FEEDBACK_CATEGORIES = { fehler: 'Fehler', idee: 'Idee', lob: 'Lob', sonstiges: 'Sonstiges' };
+const FEEDBACK_MAX_PER_WINDOW = 10;
+
+/** Empfänger: FEEDBACK_EMAIL, sonst der Empfänger bzw. die Konto-Adresse des Standard-Mailservers */
+function feedbackRecipient(defaults) {
+  return process.env.FEEDBACK_EMAIL || defaults?.to_address || defaults?.account_email || null;
+}
+
+app.post('/api/v1/feedback', auth, async (req, res) => {
+  const category = String(req.body?.category || '');
+  const message = String(req.body?.message || '').trim();
+  const page = optionalText(req.body?.page) ?? null;
+  if (!FEEDBACK_CATEGORIES[category]) return res.status(400).json({ error: 'invalid_category' });
+  if (message.length < 3 || message.length > 5000) return res.status(400).json({ error: 'invalid_message' });
+  if (page !== null && page.length > 300) return res.status(400).json({ error: 'invalid_page' });
+
+  const key = `feedback:${req.user.sub}`;
+  if (isLockedOut(key, FEEDBACK_MAX_PER_WINDOW)) return tooManyAttempts(res);
+  recordFailure(key);
+
+  try {
+    const u = await pool.query('SELECT email, username FROM users WHERE id = $1', [req.user.sub]);
+    const user = u.rows[0] || {};
+    const userAgent = String(req.get('user-agent') || '').slice(0, 300) || null;
+    const r = await pool.query(
+      `INSERT INTO feedback (user_id, user_email, category, message, page, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at`,
+      [req.user.sub, user.email || null, category, message, page, userAgent]
+    );
+
+    // Gespeichert ist es auf jeden Fall; die Mail an den Betreiber ist ein Zusatz
+    let mailed = false;
+    const defaults = await loadDefaultSmtp(pool);
+    const to = feedbackRecipient(defaults);
+    if (defaults && to) {
+      const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const von = user.username ? `${user.username} <${user.email}>` : user.email;
+      const zeilen = [`Von: ${von}`, `Art: ${FEEDBACK_CATEGORIES[category]}`, page ? `Seite: ${page}` : null, userAgent ? `Gerät: ${userAgent}` : null].filter(Boolean);
+      try {
+        await sendUserMail(withDefaultSmtp({}, defaults), {
+          to,
+          replyTo: user.email,
+          subject: `Fuelstat-Feedback (${FEEDBACK_CATEGORIES[category]}) von ${user.username || user.email}`,
+          text: `${zeilen.join('\n')}\n\n${message}\n`,
+          html: `<p>${zeilen.map(esc).join('<br>')}</p><p style="white-space:pre-wrap">${esc(message)}</p>`
+        });
+        mailed = true;
+      } catch (e) {
+        console.error('[feedback] Mail fehlgeschlagen:', e.message);
+      }
+    }
+    res.status(201).json({ id: r.rows[0].id, saved: true, mailed });
+  } catch (e) {
+    serverError(res, e);
+  }
+});
+
+// Feedback-Liste für Admins (neueste zuerst)
+app.get('/api/v1/feedback', auth, requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT f.id, f.category, f.message, f.page, f.user_agent, f.done, f.created_at,
+              COALESCE(u.email, f.user_email) AS user_email, u.username, u.beta_tester
+       FROM feedback f LEFT JOIN users u ON u.id = f.user_id
+       ORDER BY f.done ASC, f.created_at DESC
+       LIMIT 200`
+    );
+    res.json(r.rows);
+  } catch (e) {
+    serverError(res, e);
+  }
+});
+
+app.patch('/api/v1/feedback/:id', auth, requireAdmin, async (req, res) => {
+  if (typeof req.body?.done !== 'boolean') return res.status(400).json({ error: 'invalid_done' });
+  try {
+    const r = await pool.query('UPDATE feedback SET done = $2 WHERE id = $1 RETURNING id, done', [String(req.params.id), req.body.done]);
+    if (r.rowCount === 0) return res.status(404).json({ error: 'feedback_not_found' });
+    res.json(r.rows[0]);
+  } catch (e) {
+    if (e.code === '22P02') return res.status(404).json({ error: 'feedback_not_found' });
+    serverError(res, e);
   }
 });
 

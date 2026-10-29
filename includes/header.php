@@ -101,6 +101,7 @@ $seitenInfo = [
     'benachrichtigungen.php'   => ['E-Mail-Benachrichtigungen', null],
     'admin.php'                => ['Benutzerverwaltung', null],
     'onboarding.php'           => ['Willkommen', null],
+    'feedback.php'             => ['Feedback', null],
 ];
 [$seitenTitel, $zurueckUrl] = $angemeldet && isset($seitenInfo[$skript]) ? $seitenInfo[$skript] : [null, null];
 
@@ -111,11 +112,14 @@ $tabbarAktiv = [
     'fahrzeug_hinzufuegen.php' => 'fahrzeuge', 'import.php' => 'fahrzeuge',
     'eintrag_hinzufuegen.php' => 'eintrag', 'eintrag_bearbeiten.php' => 'eintrag',
     'einstellungen.php' => 'profil', 'passwort_aendern.php' => 'profil', 'mfa_einrichten.php' => 'profil',
-    'benachrichtigungen.php' => 'profil', 'admin.php' => 'profil',
+    'benachrichtigungen.php' => 'profil', 'admin.php' => 'profil', 'feedback.php' => 'profil',
 ][$skript] ?? null;
 
 // Ziel von "+ Eintrag" und "Statistik": aktuelles Fahrzeug, das einzige Fahrzeug oder Auswahl im Blatt
 $zielFahrzeug = $kontextFahrzeug ?? (count($userVehicles) === 1 ? $userVehicles[0] : null);
+// Beta-Phase (Kennzeichen neben dem Logo) und Feedback-Link mit der aktuellen Seite als Kontext
+$betaPhase = istBetaPhase();
+$feedbackUrl = $baseUrl . 'pages/feedback.php' . ($skript !== 'feedback.php' ? '?von=' . rawurlencode($_SERVER['REQUEST_URI'] ?? '') : '');
 $profilBildUrl = !empty($currentUser['profile_image_url'])
     ? (preg_match('#^https?://#i', $currentUser['profile_image_url']) ? $currentUser['profile_image_url'] : $baseUrl . ltrim($currentUser['profile_image_url'], '/'))
     : null;
@@ -180,7 +184,7 @@ $profilBildUrl = !empty($currentUser['profile_image_url'])
         </div>
         <?php endif; ?>
         <a class="navbar-brand <?= $seitenTitel !== null ? 'd-none d-lg-inline' : '' ?>" href="<?= htmlspecialchars($baseUrl) ?>index.php">
-            <i class="fas fa-gas-pump"></i> Fuelstat
+            <i class="fas fa-gas-pump"></i> Fuelstat<?php if ($betaPhase): ?> <span class="badge rounded-pill text-bg-warning beta-badge">Beta</span><?php endif; ?>
         </a>
 
         <!-- Mobil: Aktionen rechts in der Kopfleiste -->
@@ -222,6 +226,9 @@ $profilBildUrl = !empty($currentUser['profile_image_url'])
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="<?= htmlspecialchars($baseUrl) ?>pages/fahrzeug_hinzufuegen.php">Fahrzeug hinzufügen</a></li>
                         </ul>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="<?= htmlspecialchars($feedbackUrl) ?>"><i class="fas fa-comment-dots me-1"></i>Feedback</a>
                     </li>
                     <!-- Benutzereinstellungen -->
                     <li class="nav-item dropdown">
@@ -335,6 +342,9 @@ $profilBildUrl = !empty($currentUser['profile_image_url'])
                 <h2 class="offcanvas-title h5 mb-0 text-truncate" id="blattProfilTitel"><?= htmlspecialchars(($currentUser['username'] ?? '') ?: 'Mein Konto') ?></h2>
                 <?php if (!empty($currentUser['email'])): ?>
                 <div class="small text-body-secondary text-truncate"><?= htmlspecialchars($currentUser['email']) ?></div>
+                <?php endif; ?>
+                <?php if (!empty($currentUser['beta_tester'])): ?>
+                <span class="badge rounded-pill text-bg-warning mt-1"><i class="fas fa-flask me-1"></i>Beta-Tester</span>
                 <?php endif; ?>
             </div>
         </div>

@@ -11,6 +11,7 @@ $api = getApiClient();
 $error = '';
 $meldungen = [
     'mail_not_configured' => 'Bitte zuerst einen Mailserver eintragen und speichern.',
+    'too_many_attempts' => 'Über den Fuelstat-Mailserver kannst du höchstens 5 Mails in 15 Minuten manuell auslösen. Bitte etwas warten.',
     'smtp_host_not_allowed' => 'Dieser Mailserver ist nicht erlaubt (interne Adresse).',
     'smtp_host_not_found' => 'Der Mailserver wurde nicht gefunden. Bitte die Adresse prüfen.',
     'invalid_smtpHost' => 'Die Server-Adresse ist ungültig.',
@@ -82,7 +83,16 @@ if ($error && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') 
     $s['monthly_report'] = !empty($_POST['monthly_report']);
 }
 $wert = fn($k) => htmlspecialchars((string)($s[$k] ?? ''));
-$konfiguriert = !empty($s['smtp_host']);
+$eigenerServer = !empty($s['smtp_host']);
+$standardServer = !empty($s['default_available']);
+$konfiguriert = $eigenerServer || $standardServer;
+try {
+    $ich = $api->getWhoAmI();
+} catch (Throwable $e) {
+    $ich = [];
+}
+// Der Admin-Mailserver dient allen anderen als Standard: das hier deutlich machen
+$istStandardGeber = !empty($ich['is_admin']) && $eigenerServer;
 
 include '../includes/header.php';
 ?>
@@ -117,7 +127,23 @@ include '../includes/header.php';
                     </div>
 
                     <h5 class="mt-4">Mailserver (SMTP)</h5>
+                    <?php if ($istStandardGeber): ?>
+                        <div class="alert alert-info small"><i class="fas fa-server me-2"></i>Dein Mailserver ist der <strong>Standard für alle Benutzer</strong> ohne eigenen Server. Er verschickt deren Erinnerungen an ihre Konto-Adresse und das Feedback an deinen Empfänger.</div>
+                    <?php elseif ($standardServer && !$eigenerServer): ?>
+                        <div class="alert alert-success small mb-3">
+                            <i class="fas fa-circle-check me-2"></i>Du musst nichts eintragen: Fuelstat verschickt deine Mails über den eigenen Mailserver
+                            (Absender <strong><?= htmlspecialchars($s['default_from'] ?? '') ?></strong>) an deine Konto-Adresse <strong><?= htmlspecialchars($ich['email'] ?? '') ?></strong>.
+                        </div>
+                        <button class="btn btn-link px-0 mb-2 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#eigenerServer" aria-expanded="false">
+                            <i class="fas fa-sliders me-1"></i>Eigenen Mailserver verwenden (optional)
+                        </button>
+                    <?php elseif ($standardServer): ?>
+                        <p class="text-muted small">Du verwendest deinen eigenen Mailserver. Lässt du „Server“ leer, verschickt Fuelstat die Mails über den Fuelstat-Mailserver an deine Konto-Adresse.</p>
+                    <?php endif; ?>
+                    <div class="<?= $standardServer && !$eigenerServer && !$istStandardGeber ? 'collapse' : '' ?>" id="eigenerServer">
+                    <?php if (!$standardServer || $eigenerServer): ?>
                     <p class="text-muted small">Die Mails werden über dein eigenes E-Mail-Konto verschickt. Die Zugangsdaten findest du bei deinem Anbieter, z. B. unter „SMTP“ oder „E-Mail-Programm einrichten“.</p>
+                    <?php endif; ?>
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label" for="smtp_host">Server</label>
@@ -164,6 +190,7 @@ include '../includes/header.php';
                         </div>
                     </div>
                     <p class="text-muted small mt-2 mb-3">Das Passwort wird verschlüsselt gespeichert. Viele Anbieter (z. B. Gmail, Outlook) verlangen dafür ein eigenes App-Passwort.</p>
+                    </div>
                     <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i>Speichern</button>
                 </div>
             </form>

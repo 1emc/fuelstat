@@ -25,7 +25,8 @@ Fuelstat ist eine Web-App, mit der du Tankfüllungen, Ladevorgänge und alle and
 - Import aus CSV (z. B. Excel-Listen, andere Apps oder ein Fuelstat-Export) mit Spaltenzuordnung, Vorschau und Duplikaterkennung
 
 **E-Mail-Benachrichtigungen**
-- Jeder Benutzer hinterlegt seinen eigenen Mailserver (SMTP) in den Einstellungen
+- Ohne eigene Angaben verschickt Fuelstat über den Mailserver des Betreibers (SMTP-Zugang des Admins) an die Konto-Adresse
+- Optional hinterlegt jeder Benutzer seinen eigenen Mailserver (SMTP) in den Einstellungen
 - Erinnerung, wenn TÜV, Wartung, Versicherung oder Steuer bald fällig sind (Vorlaufzeit einstellbar) und noch einmal, wenn sie überfällig sind
 - Monatsbericht mit Kosten, Strecke, Verbrauch und anstehenden Terminen je Fahrzeug
 
@@ -33,7 +34,8 @@ Fuelstat ist eine Web-App, mit der du Tankfüllungen, Ladevorgänge und alle and
 - Registrierung und Login, optional mit Zwei-Faktor-Authentifizierung (Authenticator-App)
 - Profil mit Benutzername und Profilbild, Passwort ändern
 - Abmelden auf allen Geräten, Konto löschen
-- Benutzerverwaltung für Admins
+- Benutzerverwaltung für Admins, mit Beta-Tester-Kennzeichen und Feedback-Eingang
+- „Feedback senden“ für angemeldete Benutzer (Fehler, Idee, Lob, Sonstiges): wird gespeichert und per Mail an den Betreiber geschickt
 - Hell- und Dunkelmodus, als App installierbar (PWA), auf dem Handy mit App-Navigation (untere Leiste, Profil- und Fahrzeugauswahl von unten)
 
 ## Aufbau
@@ -69,6 +71,12 @@ ADMIN_USER_IDS=
 # NOTIFICATIONS_ENABLED=false  automatischen Versand abschalten
 # Optional: öffentliche Registrierung abschalten
 # REGISTRATION_ENABLED=false
+# Beta-Phase (Standard: an): Hinweis auf der Startseite, neue Konten werden Beta-Tester. Nach der Beta abschalten:
+# BETA_PHASE=false
+# Standard-Mailserver für alle ohne eigenen SMTP-Zugang: Standard ist der Zugang des ersten Admins (ADMIN_USER_IDS)
+# MAIL_DEFAULT_USER_ID=uuid-des-kontos   anderes Konto als Quelle verwenden
+# MAIL_DEFAULT_ENABLED=false             Standard-Mailserver abschalten
+# FEEDBACK_EMAIL=feedback@example.com    Empfänger für Feedback (Standard: Empfänger des Standard-Mailservers)
 ```
 
 Wird `JWT_SECRET` ohne eigenen `MAIL_ENCRYPTION_KEY` geändert, müssen die Benutzer ihr SMTP-Passwort neu eingeben.
@@ -83,7 +91,7 @@ Die API läuft danach auf `127.0.0.1:3000` (nur lokal erreichbar).
 
 ### 2. Datenbankschema
 
-Neue Installation: `backend/database/postgres_init.sql` einspielen, danach `postgres_006_fix_fillup_units.sql` und `postgres_007_mail_settings.sql`.
+Neue Installation: `backend/database/postgres_init.sql` einspielen, danach `postgres_006_fix_fillup_units.sql`, `postgres_007_mail_settings.sql` und `postgres_008_beta_feedback.sql`.
 
 Bestehende Installation: alle noch nicht eingespielten `postgres_00X_*.sql` der Reihe nach ausführen, z. B. über Adminer oder:
 

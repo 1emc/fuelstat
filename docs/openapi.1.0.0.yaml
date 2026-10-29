@@ -16,6 +16,7 @@ tags:
   - name: Fillups
   - name: Stats
   - name: Entries
+  - name: Feedback
 
 security:
   - BearerAuth: []
@@ -1058,6 +1059,117 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "502":
           description: smtp_failed
+
+  /api/v1/auth/users/{userId}/beta:
+    put:
+      tags: [Users]
+      summary: Set beta tester flag (admin only)
+      operationId: putUserBeta
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                betaTester:
+                  type: boolean
+              required: [betaTester]
+      responses:
+        "200":
+          description: "OK ({ id, email, beta_tester })"
+        "400":
+          description: invalid_betaTester
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: forbidden
+        "404":
+          description: user_not_found
+
+  /api/v1/feedback:
+    post:
+      tags: [Feedback]
+      summary: Send feedback (stored and mailed to the operator)
+      operationId: postFeedback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                category:
+                  type: string
+                  enum: [fehler, idee, lob, sonstiges]
+                message:
+                  type: string
+                  minLength: 3
+                  maxLength: 5000
+                page:
+                  type: string
+                  maxLength: 300
+                  description: Seite, von der das Feedback kommt
+              required: [category, message]
+      responses:
+        "201":
+          description: "Gespeichert ({ id, saved: true, mailed })"
+        "400":
+          description: invalid_category | invalid_message | invalid_page
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          description: too_many_attempts (höchstens 10 je 15 Minuten)
+    get:
+      tags: [Feedback]
+      summary: List feedback (admin only, open first)
+      operationId: getFeedback
+      responses:
+        "200":
+          description: "Liste mit id, category, message, page, user_agent, done, created_at, user_email, username, beta_tester"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: forbidden
+
+  /api/v1/feedback/{id}:
+    patch:
+      tags: [Feedback]
+      summary: Mark feedback as done or open (admin only)
+      operationId: patchFeedback
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                done:
+                  type: boolean
+              required: [done]
+      responses:
+        "200":
+          description: "OK ({ id, done })"
+        "400":
+          description: invalid_done
+        "403":
+          description: forbidden
+        "404":
+          description: feedback_not_found
 
   /api/v1/auth/login/mfa:
     post:
