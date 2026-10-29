@@ -84,6 +84,11 @@ try {
 }
 
 $datum = isset($eintrag['filled_at']) ? date('Y-m-d', strtotime($eintrag['filled_at'])) : '';
+try {
+    $begriffe = verbrauchsBegriffe($api->getVehicle($fahrzeug_id)['fuel_type'] ?? 'other');
+} catch (Throwable $e) {
+    $begriffe = verbrauchsBegriffe(null);
+}
 $tachostand = $eintrag['odometer_km'] ?? 0;
 $menge = $eintrag['amount'] ?? 0;
 $kosten = $eintrag['total_cost_eur'] ?? 0;
@@ -96,10 +101,10 @@ $bearbeitbar = isset($eintrag['filled_at']) && strtotime($eintrag['filled_at']) 
 ?>
 
 <div class="container mt-5">
-    <h2>Tankvorgang bearbeiten</h2>
+    <h2><?= $begriffe['vorgang'] ?> bearbeiten</h2>
     <?php if (!$bearbeitbar): ?>
         <div class="alert alert-info mt-3">
-            Dieser Tankvorgang ist älter als 14 Tage und kann nicht mehr geändert werden.
+            Dieser Eintrag ist älter als 14 Tage und kann nicht mehr geändert werden.
             Bei Bedarf kannst du ihn löschen und neu anlegen.
         </div>
     <?php endif; ?>
@@ -116,7 +121,7 @@ $bearbeitbar = isset($eintrag['filled_at']) && strtotime($eintrag['filled_at']) 
             <input type="number" class="form-control" name="tachostand" value="<?= (int)$tachostand ?>" required>
         </div>
         <div class="mb-3">
-            <label class="form-label">Tankstelle</label>
+            <label class="form-label"><?= $begriffe['station'] ?></label>
             <input type="text" class="form-control" name="standort" value="<?= htmlspecialchars($standort) ?>">
         </div>
         <div class="mb-3">
@@ -133,22 +138,22 @@ $bearbeitbar = isset($eintrag['filled_at']) && strtotime($eintrag['filled_at']) 
         </div>
         <div class="form-check mb-3">
             <input type="checkbox" class="form-check-input" name="vollgetankt" value="1" <?= $vollgetankt ? 'checked' : '' ?>>
-            <label class="form-check-label">Vollgetankt</label>
+            <label class="form-check-label"><?= $begriffe['voll'] ?></label>
         </div>
         <div class="mb-3 form-check">
             <input type="checkbox" id="skip_previous" name="skip_previous" class="form-check-input" value="1" <?= $skip_previous ? 'checked' : '' ?>>
-            <label for="skip_previous" class="form-check-label">Vorherige Tankfüllung ignorieren</label>
+            <label for="skip_previous" class="form-check-label"><?= $begriffe['luecke'] ?></label>
         </div>
         <div class="d-flex mt-4">
             <button type="submit" class="btn btn-primary me-2" <?= $bearbeitbar ? '' : 'disabled' ?>>Speichern</button>
             <a href="fahrzeug_detail.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?>" class="btn btn-secondary me-auto">Abbrechen</a>
         </div>
     </form>
-    <form method="post" action="eintrag_loeschen.php" onsubmit="return confirm('Möchtest du diesen Tankvorgang wirklich löschen?');" class="mt-3">
+    <form method="post" action="eintrag_loeschen.php" onsubmit="return confirm('Möchtest du diesen Eintrag wirklich löschen?');" class="mt-3">
         <input type="hidden" name="id" value="<?= htmlspecialchars($eintrag_id) ?>">
         <input type="hidden" name="fahrzeug_id" value="<?= htmlspecialchars($fahrzeug_id) ?>">
         <input type="hidden" name="type" value="fillup">
-        <button type="submit" class="btn btn-danger">Tankvorgang löschen</button>
+        <button type="submit" class="btn btn-danger"><?= $begriffe['vorgang'] ?> löschen</button>
     </form>
 </div>
 

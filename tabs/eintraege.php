@@ -80,7 +80,7 @@ body.dark .badge { background-color: #444; color: #fff; }
       <?php foreach ($entries as $e):
         $v = ($e['kategorie'] === 'Tankfuellung' && isset($e['l_per_100km'])) ? $e['l_per_100km'] : null;
         $farbe = $farben[$e['kategorie']] ?? 'secondary';
-        $icon = getCategoryIcon($e['kategorie']);
+        $icon = getCategoryIcon($e['kategorie'], $fuelType);
         $type = $e['type'] ?? 'entry';
       ?>
         <div class="card mb-3 px-3 py-3">
@@ -89,7 +89,7 @@ body.dark .badge { background-color: #444; color: #fff; }
             <div class="flex-grow-1 min-w-0">
               <div class="fs-6 fw-semibold mb-1">
                 <i class="fas <?= $icon ?> me-2 text-<?= $farbe ?>"></i>
-                <?= htmlspecialchars(getKategorieName($e['kategorie'])) ?>
+                <?= htmlspecialchars(getKategorieName($e['kategorie'], $fuelType)) ?>
               </div>
               <div class="text-muted small text-break">
                 <?= implode(' · ', array_filter([
@@ -105,7 +105,7 @@ body.dark .badge { background-color: #444; color: #fff; }
                 <i class="fas fa-tint me-1"></i>
                 <span class="text-nowrap"><?= number_format((float)($e['menge'] ?? 0), 2, ',', '.') ?>&nbsp;<?= $einheitKurz ?></span>
                 <?php if ($v !== null): ?>· <span class="text-nowrap"><?= number_format($v, 2, ',', '.') ?>&nbsp;<?= $einheitKurz ?>/100km</span><?php endif; ?>
-                <?php if (empty($e['vollgetankt'])): ?><span class="badge text-bg-secondary ms-1">Teilbetankung</span><?php endif; ?>
+                <?php if (empty($e['vollgetankt'])): ?><span class="badge text-bg-secondary ms-1"><?= $begriffe['teil'] ?></span><?php endif; ?>
               </div>
               <?php endif; ?>
             </div>

@@ -28,6 +28,10 @@ try {
     }
 } catch (Throwable $e) {
 }
+// Begriffe passend zum Fahrzeug (Tankfüllung/Ladevorgang, Tankstelle/Ladestation …)
+$begriffe = verbrauchsBegriffe($vehicle['fuel_type'] ?? 'other');
+// Tankstellensuche über Tankerkönig nur für flüssige Kraftstoffe und Gas (keine Ladesäulen)
+$stationsSuche = $begriffe['art'] !== 'strom';
 
 $vorgegebeneKategorie = isset($_GET['kategorie']) ? $_GET['kategorie'] : null;
 $allCategories = [
@@ -53,7 +57,7 @@ $allCategories = [
             <label for="entryType" class="form-label">Eintragstyp</label>
             <select id="entryType" name="eintragstyp" class="form-select" required>
                 <option value="" disabled>Bitte auswählen</option>
-                <option value="Tankfuellung" <?php echo $vorgegebeneKategorie ? '' : 'selected'; ?>>Tankfuellung</option>
+                <option value="Tankfuellung" <?php echo $vorgegebeneKategorie ? '' : 'selected'; ?>><?= $begriffe['vorgang'] ?></option>
                 <option value="Andere Ausgabe" <?php echo $vorgegebeneKategorie ? 'selected' : ''; ?>>Andere Ausgabe</option>
                 <option value="Fahrt">Fahrt</option>
             </select>
@@ -84,8 +88,12 @@ $allCategories = [
 
         <!-- Tankfuellung -->
         <div id="fields_tank" style="display:none;">
+            <?php if ($begriffe['art'] !== 'fluessig'): ?>
+            <!-- Strom bzw. Gas: keine Sortenauswahl nötig -->
+            <input type="hidden" name="kraftstoff" value="<?= htmlspecialchars($fahrzeugKraftstoff) ?>">
+            <?php else: ?>
             <div class="mb-3">
-                <label class="form-label">Kraftstoff</label>
+                <label class="form-label"><?= $begriffe['energie'] ?></label>
                 <select name="kraftstoff" class="form-select" required>
                     <option value="diesel"   <?php if($fahrzeugKraftstoff==='diesel')   echo 'selected'; ?>>Diesel</option>
                     <option value="e5"      <?php if($fahrzeugKraftstoff==='e5')      echo 'selected'; ?>>Benzin (E5)</option>
@@ -98,13 +106,16 @@ $allCategories = [
                     <option value="other"   <?php if($fahrzeugKraftstoff==='other')   echo 'selected'; ?>>Andere</option>
                 </select>
             </div>
+            <?php endif; ?>
             <div class="mb-3">
                 <label for="standort" class="form-label">Standort</label>
                 <div class="input-group">
-                    <input type="text" list="stationen" placeholder="z. B. Aral München Nord" autocomplete="address-level2" autocapitalize="words" enterkeyhint="done" id="standort" name="standort" class="form-control">
-                    <button type="button" class="btn btn-outline-primary" id="btnTankstellenSuche" title="Tankstellen in der Nähe suchen">
+                    <input type="text" list="stationen" placeholder="<?= htmlspecialchars($begriffe['beispiel_ort']) ?>" autocomplete="address-level2" autocapitalize="words" enterkeyhint="done" id="standort" name="standort" class="form-control">
+                    <?php if ($stationsSuche): ?>
+                    <button type="button" class="btn btn-outline-primary" id="btnTankstellenSuche" title="<?= $begriffe['stationen'] ?> in der Nähe suchen">
                         <i class="fas fa-map-marker-alt"></i>
                     </button>
+                    <?php endif; ?>
                 </div>
                 <datalist id="stationen">
                 <?php foreach ($standortOptionen as $opt): ?>
@@ -172,11 +183,11 @@ $allCategories = [
 			</div>
             <div class="mb-3 form-check">
                 <input type="checkbox" id="vollgetankt" name="vollgetankt" class="form-check-input" value="1">
-                <label for="vollgetankt" class="form-check-label">Vollgetankt</label>
+                <label for="vollgetankt" class="form-check-label"><?= $begriffe['voll'] ?></label>
             </div>
             <div class="mb-3 form-check">
                 <input type="checkbox" id="skip_previous" name="skip_previous" class="form-check-input" value="1">
-                <label for="skip_previous" class="form-check-label">Vorherige Tankfüllungen ignorieren</label>
+                <label for="skip_previous" class="form-check-label"><?= $begriffe['luecke'] ?></label>
             </div>
         </div>
 
@@ -483,7 +494,8 @@ function sucheUeberOrt(frage) {
         });
 }
 
-btnSuche.addEventListener('click', function () {
+// Beim E-Auto gibt es keine Stationssuche (Tankerkönig kennt keine Ladesäulen)
+if (btnSuche) btnSuche.addEventListener('click', function () {
     this.disabled = true;
     this.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
     if (!navigator.geolocation) {

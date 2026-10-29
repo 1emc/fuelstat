@@ -12,8 +12,11 @@ function isGdExtensionAvailable(): bool
 // --------------------------------------------------
 // 1. Icons
 // --------------------------------------------------
-function getCategoryIcon(string $kategorie): string
+function getCategoryIcon(string $kategorie, ?string $fuelType = null): string
 {
+    if ($kategorie === 'Tankfuellung' && $fuelType !== null) {
+        return verbrauchsBegriffe($fuelType)['icon'];
+    }
     $icons = [
         'Tankfuellung' => 'fa-gas-pump',
         'Versicherung' => 'fa-shield-alt',
@@ -683,12 +686,66 @@ function einheitLang(?string $einheit): string
     return ['kwh' => 'kWh', 'kg' => 'kg'][strtolower((string)$einheit)] ?? 'Liter';
 }
 
-function getKategorieName($kategorie) {
-    $uebersetzung = [
-        'Tankfuellung' => 'Tankfüllung',
-        'TUV' => 'TÜV'
+/**
+ * Begriffe passend zur Antriebsart: Verbrenner tanken an der Tankstelle, E-Autos laden an der Ladestation.
+ * Alle sichtbaren Texte zu Tank-/Ladevorgängen sollen von hier kommen, nie fest "tanken" oder "laden".
+ * Ohne Fahrzeug (null) gibt es neutrale Begriffe, z. B. für Übersichten über mehrere Fahrzeuge.
+ */
+function verbrauchsBegriffe(?string $fuelType): array
+{
+    $fuelType = strtolower((string)$fuelType);
+    if ($fuelType === 'electric') {
+        return [
+            'art' => 'strom',
+            'vorgang' => 'Ladevorgang', 'vorgaenge' => 'Ladevorgänge', 'vorgaengen' => 'Ladevorgängen',
+            'stopps' => 'Ladestopps', 'verb' => 'laden', 'Verb' => 'Laden',
+            'menge' => 'Geladen', 'menge_gesamt' => 'Geladen gesamt',
+            'voll' => 'Vollgeladen', 'teil' => 'Teilladung',
+            'luecke' => 'Vorherige Ladevorgänge ignorieren',
+            'station' => 'Ladestation', 'stationen' => 'Ladestationen',
+            'energie' => 'Strom', 'kosten' => 'Stromkosten', 'preis' => 'Strompreis',
+            'speicher' => 'Akku', 'icon' => 'fa-charging-station',
+            'beispiel_ort' => 'z. B. Zuhause (Wallbox)',
+        ];
+    }
+    if ($fuelType === '') {
+        return [
+            'art' => 'neutral',
+            'vorgang' => 'Tank-/Ladevorgang', 'vorgaenge' => 'Tank- und Ladevorgänge', 'vorgaengen' => 'Tank- und Ladevorgängen',
+            'stopps' => 'Tank-/Ladestopps', 'verb' => 'tanken/laden', 'Verb' => 'Tanken/Laden',
+            'menge' => 'Getankt/geladen', 'menge_gesamt' => 'Getankt/geladen gesamt',
+            'voll' => 'Voll getankt/geladen', 'teil' => 'Teilweise',
+            'luecke' => 'Vorherige Einträge ignorieren',
+            'station' => 'Tankstelle/Ladestation', 'stationen' => 'Tankstellen/Ladestationen',
+            'energie' => 'Kraftstoff/Strom', 'kosten' => 'Kraftstoff-/Stromkosten', 'preis' => 'Preis',
+            'speicher' => 'Tank/Akku', 'icon' => 'fa-gas-pump',
+            'beispiel_ort' => 'z. B. Aral München Nord',
+        ];
+    }
+    return [
+        'art' => in_array($fuelType, ['cng', 'hydrogen'], true) ? 'gas' : 'fluessig',
+        'vorgang' => 'Tankfüllung', 'vorgaenge' => 'Tankfüllungen', 'vorgaengen' => 'Tankfüllungen',
+        'stopps' => 'Tankstopps', 'verb' => 'tanken', 'Verb' => 'Tanken',
+        'menge' => 'Getankt', 'menge_gesamt' => 'Getankt gesamt',
+        'voll' => 'Vollgetankt', 'teil' => 'Teilbetankung',
+        'luecke' => 'Vorherige Tankfüllungen ignorieren',
+        'station' => 'Tankstelle', 'stationen' => 'Tankstellen',
+        'energie' => ['hydrogen' => 'Wasserstoff', 'cng' => 'Erdgas', 'lpg' => 'Autogas'][$fuelType] ?? 'Kraftstoff',
+        'kosten' => ['hydrogen' => 'Wasserstoffkosten', 'cng' => 'Gaskosten', 'lpg' => 'Gaskosten'][$fuelType] ?? 'Kraftstoffkosten',
+        'preis' => ['hydrogen' => 'Wasserstoffpreis', 'cng' => 'Gaspreis', 'lpg' => 'Gaspreis'][$fuelType] ?? 'Spritpreis',
+        'speicher' => 'Tank', 'icon' => 'fa-gas-pump',
+        'beispiel_ort' => 'z. B. Aral München Nord',
     ];
-    return $uebersetzung[$kategorie] ?? $kategorie;
+}
+
+/**
+ * Anzeigename einer Kategorie. Mit Kraftstoff des Fahrzeugs heißt "Tankfuellung" beim E-Auto "Ladevorgang".
+ */
+function getKategorieName($kategorie, ?string $fuelType = null) {
+    if ($kategorie === 'Tankfuellung') {
+        return $fuelType === null ? 'Tankfüllung' : verbrauchsBegriffe($fuelType)['vorgang'];
+    }
+    return ['TUV' => 'TÜV'][$kategorie] ?? $kategorie;
 }
 
 /**

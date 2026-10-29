@@ -7,6 +7,8 @@ const { sendUserMail, loadDefaultSmtp, withDefaultSmtp } = require('./mail');
 const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
 const CATEGORY_NAMES = { Tankfuellung: 'Tankfüllung', TUV: 'TÜV' };
 const UNITS = { l: 'l', kwh: 'kWh', kg: 'kg' };
+// Bezeichnung der Tank- bzw. Ladevorgänge passend zur Antriebsart (wie verbrauchsBegriffe() im Frontend)
+const vorgaengeName = (fuelType) => (fuelType === 'electric' ? 'Ladevorgänge' : 'Tankfüllungen');
 
 const fmt = (n, digits = 2) => Number(n).toLocaleString('de-DE', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 const fmtDate = (iso) => iso.split('-').reverse().join('.');
@@ -101,6 +103,7 @@ async function buildMonthlyReport(pool, settings, year, month) {
     const { end_odo: endOdo, start_odo: startOdo } = odo.rows[0];
     sections.push({
       name: v.name,
+      fillupLabel: vorgaengeName(v.fuel_type),
       unit: UNITS[fuel.unit] || 'l',
       fillups: fuel.n,
       amount: Number(fuel.amount),
@@ -127,7 +130,7 @@ function reportMail(report) {
   for (const s of active) {
     const leer = s.fillups === 0 && s.expenses.length === 0;
     const rows = leer ? [['Einträge', 'keine in diesem Monat']] : [
-      ['Tankfüllungen', `${s.fillups} (${fmt(s.amount)} ${s.unit}, ${fmt(s.fuelCost)} €)`],
+      [s.fillupLabel, `${s.fillups} (${fmt(s.amount)} ${s.unit}, ${fmt(s.fuelCost)} €)`],
       ...s.expenses.map((x) => [x.category, `${fmt(x.cost)} €`]),
       ['Kosten gesamt', `${fmt(s.cost)} €`],
       ['Gefahrene Strecke', s.km !== null ? `${fmt(s.km, 0)} km` : '–'],

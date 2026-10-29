@@ -57,10 +57,10 @@ try {
         'isFull' => $vollgetankt,
         'skipPrevious' => $skipPrevious,
     ]);
-    $_SESSION['success_message'] = 'Tankvorgang aktualisiert.';
+    $_SESSION['success_message'] = verbrauchsBegriffe($vehicle['fuel_type'] ?? 'other')['vorgang'] . ' aktualisiert.';
 } catch (Throwable $e) {
     $_SESSION['error_message'] = $e->getMessage() === 'fillup_edit_window_expired'
-        ? 'Tankvorgänge können nur innerhalb von 14 Tagen nach dem Tankdatum bearbeitet werden. Ältere Einträge kannst du löschen und neu anlegen.'
+        ? 'Tank- und Ladevorgänge können nur innerhalb von 14 Tagen bearbeitet werden. Ältere Einträge kannst du löschen und neu anlegen.'
         : $e->getMessage();
 }
 header('Location: fahrzeug_detail.php?id=' . rawurlencode($fahrzeug_id));
