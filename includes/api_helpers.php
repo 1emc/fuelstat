@@ -15,6 +15,16 @@ if (!function_exists('getApiClient')) {
 }
 
 /**
+ * URL einer mitgelieferten Datei mit ?v=<Änderungszeit>, damit nach einem Deploy nie eine alte Version aus dem Cache kommt
+ * @param string $praefix $baseUrl oder ein relativer Pfad wie '../'
+ * @param string $pfad Pfad ab dem App-Verzeichnis, z. B. 'vendor/bootstrap/bootstrap.min.css'
+ */
+function assetUrl(string $praefix, string $pfad): string
+{
+    return $praefix . $pfad . '?v=' . (@filemtime(__DIR__ . '/../' . $pfad) ?: 1);
+}
+
+/**
  * Läuft die Beta-Phase? (aus /health der API, 10 Minuten in der Session zwischengespeichert)
  */
 function istBetaPhase(): bool

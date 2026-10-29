@@ -264,7 +264,7 @@ $tankJahre = array_filter($jahresdaten, fn($d) => $d['anzahl_tankstops'] > 0 || 
     <?php endif; ?>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="<?= htmlspecialchars(assetUrl($baseUrl, 'vendor/chartjs/chart.umd.min.js')) ?>"></script>
 <script>
 (function () {
     if (!window.Chart) return;

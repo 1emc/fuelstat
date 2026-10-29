@@ -1,49 +1,70 @@
 <?php
-// pages/datenschutz.php
-// Session-Handling
+// pages/datenschutz.php – Betreiberangaben kommen aus includes/betreiber.php
 include '../includes/session.php';
-// Header
 include '../includes/header.php';
+
+$b = require __DIR__ . '/../includes/betreiber.php';
+$angabe = fn(string $k) => ($b[$k] ?? '') !== ''
+    ? htmlspecialchars($b[$k])
+    : '<span class="text-danger">[' . $k . ' fehlt in includes/betreiber.php]</span>';
+$email = ($b['email'] ?? '') !== ''
+    ? '<a href="mailto:' . htmlspecialchars($b['email']) . '">' . htmlspecialchars($b['email']) . '</a>'
+    : $angabe('email');
 ?>
 
-<div class="container mt-5">
-  <h1>Datenschutzerklärung</h1>
-  <p>Verantwortlich gemäß Art. 4 Nr. 7 DSGVO:</p>
-  <p>Max Mustermann<br>
-     Musterstraße 1<br>
-     12345 Musterstadt<br>
-     E-Mail: <a href="mailto:datenschutz@example.com">datenschutz@example.com</a>
-  </p>
+<div class="container mt-5 mb-5 rechtstext">
+  <h1 class="mb-3">Datenschutzerklärung</h1>
+  <p class="lead">Kurz gesagt: Fuelstat speichert nur, was du selbst einträgst und was für den Betrieb nötig ist. Es gibt kein Tracking, keine Werbung, keine Analyse-Tools und keine Weitergabe oder Verkauf deiner Daten.</p>
 
-  <h2>Erhebung und Speicherung personenbezogener Daten</h2>
-  <p>Beim Aufrufen dieser Website werden durch den von Ihnen verwendeten Browser automatisch Informationen an den Server übertragen, die in Logfiles gespeichert werden. Diese sind:</p>
+  <h2 class="h5 mt-4">1. Verantwortlicher</h2>
+  <p><?= $angabe('name') ?><br><?= $angabe('strasse') ?><br><?= $angabe('plz_ort') ?><br>E-Mail: <?= $email ?></p>
+
+  <h2 class="h5 mt-4">2. Hosting und Server-Logfiles</h2>
+  <p>Fuelstat läuft auf einem eigenen Server<?= ($b['hoster'] ?? '') !== '' ? ' bei ' . htmlspecialchars($b['hoster']) : ' (' . $angabe('hoster') . ')' ?>. Bei jedem Aufruf speichert der Webserver automatisch: IP-Adresse, Datum und Uhrzeit, aufgerufene Adresse, Statuscode, übertragene Datenmenge, Referrer und Browserkennung. Das ist nötig, um den Dienst sicher zu betreiben und Angriffe oder Fehler zu erkennen (Art. 6 Abs. 1 lit. f DSGVO). Die Logfiles werden nach <?= (int)($b['log_tage'] ?? 14) ?> Tagen gelöscht.</p>
+
+  <h2 class="h5 mt-4">3. Benutzerkonto</h2>
+  <p>Für dein Konto speichere ich deine E-Mail-Adresse, optional einen Benutzernamen und ein Profilbild sowie den Zeitpunkt der Registrierung. Rechtsgrundlage ist die Nutzung der App (Art. 6 Abs. 1 lit. b DSGVO).</p>
   <ul>
-    <li>IP-Adresse</li>
-    <li>Datum und Uhrzeit der Anfrage</li>
-    <li>Browsertyp und Version</li>
-    <li>Betriebssystem</li>
-    <li>Referrer-URL</li>
+    <li><strong>Passwort:</strong> wird nie im Klartext gespeichert, sondern nur als bcrypt-Hash. Auch ich als Betreiber kann es nicht auslesen.</li>
+    <li><strong>Zwei-Faktor-Authentifizierung (optional):</strong> der geheime Schlüssel für deine Authenticator-App wird in der Datenbank gespeichert, um die Codes zu prüfen.</li>
+    <li><strong>Anmeldung:</strong> nach dem Login erhält dein Browser ein Sitzungs-Cookie; die zugehörige Anmeldung (Token) läuft nach 7 Tagen ab. Beim Abmelden wird das Token in einer Sperrliste vermerkt, die mit deinem Konto gelöscht wird. Fehlgeschlagene Anmeldeversuche werden zum Schutz vor Angriffen kurzzeitig gezählt (nur im Arbeitsspeicher, höchstens 15 Minuten).</li>
+    <li><strong>Beta-Phase:</strong> während der Beta wird dein Konto als „Beta-Tester“ gekennzeichnet.</li>
   </ul>
-  <p>Diese Daten sind nicht bestimmten Personen zuordenbar und werden auch nicht mit anderen Datenquellen zusammengeführt.</p>
 
-  <h2>Verwendung von Cookies</h2>
-  <p>Unsere Anwendung verwendet folgende Cookies:</p>
+  <h2 class="h5 mt-4">4. Fahrzeug- und Fahrtdaten</h2>
+  <p>Gespeichert wird, was du einträgst: Fahrzeuge (Name, Marke, Modell, Baujahr, Kraftstoff, Tank- bzw. Akkugröße, Fotos), Tankfüllungen und Ladevorgänge (Datum, Tachostand, Menge, Preis, Tankstelle bzw. Ort), Ausgaben und Fahrten. Daraus berechnet Fuelstat Verbrauch, Kosten, CO₂-Werte und Fälligkeiten. Die Daten sind nur in deinem Konto sichtbar. Als Betreiber habe ich technisch Zugriff auf die Datenbank, sehe mir deine Daten aber nur an, wenn du mich zur Fehlerbehebung darum bittest. Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO.</p>
+
+  <h2 class="h5 mt-4">5. Tankstellensuche</h2>
+  <p>Nur wenn du beim Erfassen einer Tankfüllung die Suche nach Tankstellen in der Nähe startest, fragt dein Browser nach deinem Standort. Gibst du ihn frei (Art. 6 Abs. 1 lit. a DSGVO), werden die Koordinaten an den Fuelstat-Server und von dort an die Tankerkönig-API (<a href="https://creativecommons.tankerkoenig.de" target="_blank" rel="noopener">creativecommons.tankerkoenig.de</a>) übermittelt, um Tankstellen und aktuelle Preise abzufragen. Tankerkönig erhält dabei nur die Koordinaten und die Adresse des Fuelstat-Servers, keine Konto- oder Fahrzeugdaten. Der Standort wird nicht gespeichert, nur die Tankstelle, die du auswählst.</p>
+
+  <h2 class="h5 mt-4">6. E-Mail-Benachrichtigungen</h2>
+  <p>Erinnerungen an Termine und den Monatsbericht schalten nur du selbst ein. Sie gehen an die E-Mail-Adresse deines Kontos und werden über den Mailserver des Betreibers verschickt oder, wenn du einen einträgst, über deinen eigenen Mailserver. Dessen Passwort wird verschlüsselt (AES-256) gespeichert. Damit keine Mail doppelt verschickt wird, merkt sich Fuelstat, welche Erinnerungen und Berichte bereits versandt wurden. Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO.</p>
+
+  <h2 class="h5 mt-4">7. Feedback</h2>
+  <p>Wenn du über „Feedback senden“ eine Nachricht schickst, werden die Nachricht, die gewählte Art (z. B. Fehler oder Idee), die Seite, von der du kommst, deine Browserkennung und deine E-Mail-Adresse gespeichert und per E-Mail an mich geschickt, damit ich antworten kann. Feedback bleibt auch nach dem Löschen deines Kontos erhalten, bis es bearbeitet ist; auf Wunsch lösche ich es sofort. Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO (Verbesserung der App und Beantwortung deiner Anfrage).</p>
+
+  <h2 class="h5 mt-4">8. Cookies und Speicher im Browser</h2>
   <ul>
-    <li><strong>PHPSESSID</strong> (Session-Cookie): Dient zur Verwaltung Ihrer Sitzung, z. B. für das Login und um Statusinformationen zu speichern.</li>
-    <li><strong>Cache-Management</strong> (über Service Worker): Wir nutzen die <code>Cache API</code> Ihres Browsers, um Ressourcen offline verfügbar zu machen. Hierfür werden keine zusätzlichen Tracking-Cookies gesetzt.</li>
+    <li><strong>Sitzungs-Cookie (PHPSESSID):</strong> technisch notwendig für die Anmeldung und den Schutz der Formulare; es gilt höchstens 28 Tage und wird beim Abmelden gelöscht.</li>
+    <li><strong>Lokaler Speicher (fuelstat-theme):</strong> merkt sich, ob du die helle oder dunkle Darstellung gewählt hast.</li>
+    <li><strong>Service Worker:</strong> speichert Programmdateien und Bilder der App (z. B. Stylesheets, Symbole) im Browser, damit sie schneller laden. Persönliche Daten werden dort nicht abgelegt.</li>
   </ul>
-  <p>Ein Deaktivieren von Cookies kann zu Funktionseinschränkungen führen.</p>
+  <p>Diese Speicherungen sind für die angebotenen Funktionen unbedingt erforderlich (§ 25 Abs. 2 Nr. 2 TDDDG); es gibt keine Tracking- oder Werbe-Cookies.</p>
 
-  <h2>Content Security</h2>
-  <p>Alle Seiteninhalte werden gemäß den Vorgaben der DSGVO verarbeitet. Wir erheben und verarbeiten keine weiteren personenbezogenen Daten, etwa für Analysen oder Marketingzwecke.</p>
+  <h2 class="h5 mt-4">9. Keine Drittanbieter</h2>
+  <p>Alle Bestandteile der App (Schriften, Symbole, Bibliotheken) werden vom Fuelstat-Server selbst ausgeliefert. Beim Aufruf werden keine Daten an Content-Delivery-Networks, Google oder andere Dritte übertragen. Einzige Ausnahme ist die Tankstellensuche (Abschnitt 5), und auch die nur auf deinen Wunsch.</p>
 
-  <h2>Auskunftsrecht und Kontakt</h2>
-  <p>Sie haben das Recht auf Auskunft über die bei uns gespeicherten personenbezogenen Daten sowie ein Recht auf Berichtigung, Sperrung oder Löschung dieser Daten. Bei Fragen wenden Sie sich bitte an:</p>
-  <p>Max Mustermann<br>
-     E-Mail: <a href="mailto:datenschutz@example.com">datenschutz@example.com</a>
-  </p>
+  <h2 class="h5 mt-4">10. Speicherdauer und Löschung</h2>
+  <p>Deine Daten bleiben gespeichert, solange du dein Konto hast. Unter „Profil bearbeiten“ kannst du dein Konto jederzeit selbst löschen; dabei werden alle Fahrzeuge, Einträge, Einstellungen und hochgeladenen Bilder sofort entfernt<?= !empty($b['backup_tage']) ? '. Aus Datensicherungen verschwinden sie spätestens nach ' . (int)$b['backup_tage'] . ' Tagen' : '' ?>. Vorher kannst du deine Einträge als CSV exportieren.</p>
 
-  <p>Stand: April 2025</p>
+  <h2 class="h5 mt-4">11. Sicherheit</h2>
+  <p>Die Verbindung ist durchgehend per HTTPS verschlüsselt. Passwörter werden nur als Hash gespeichert, Passwörter für eigene Mailserver verschlüsselt. Optional kannst du dein Konto mit einem zweiten Faktor (Authenticator-App) schützen.</p>
+
+  <h2 class="h5 mt-4">12. Deine Rechte</h2>
+  <p>Du hast das Recht auf Auskunft über deine gespeicherten Daten (Art. 15 DSGVO), auf Berichtigung (Art. 16), Löschung (Art. 17), Einschränkung der Verarbeitung (Art. 18), Datenübertragbarkeit (Art. 20) und Widerspruch gegen Verarbeitungen auf Grundlage berechtigter Interessen (Art. 21). Eine erteilte Einwilligung, etwa für den Standort, kannst du jederzeit in deinem Browser widerrufen. Schreib mir dazu einfach an <?= $email ?>.</p>
+  <p>Außerdem kannst du dich bei einer Datenschutz-Aufsichtsbehörde beschweren, zum Beispiel bei der für mich zuständigen Behörde: <?= htmlspecialchars($b['aufsicht'] ?? '') ?>.</p>
+
+  <p class="text-body-secondary mt-4">Stand: <?= htmlspecialchars($b['stand'] ?? '') ?></p>
 </div>
 
 <?php include '../includes/footer.php'; ?>

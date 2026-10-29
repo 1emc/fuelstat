@@ -205,7 +205,7 @@ $farben = array_map('getCategoryColor', $kategorien);
 </div>
 
 <!-- Chart.js einbinden -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="<?= htmlspecialchars(assetUrl($baseUrl, 'vendor/chartjs/chart.umd.min.js')) ?>"></script>
 <script>
 // Daten für das Diagramm vorbereiten
 var ctx = document.getElementById('ausgabenChart').getContext('2d');

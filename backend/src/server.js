@@ -703,6 +703,14 @@ app.delete('/api/v1/auth/users/:userId', auth, requireSelfOrAdmin, async (req, r
   if (!userId) return res.status(400).json({ error: 'missing_userId' });
 
   try {
+    // Hochgeladene Bilder (Profil und Fahrzeuge) merken, damit nach dem Löschen keine Dateien liegen bleiben
+    const media = await pool.query(
+      `SELECT url FROM user_media WHERE user_id = $1
+       UNION SELECT url FROM vehicle_media WHERE user_id = $1
+       UNION SELECT profile_image_url FROM users WHERE id = $1 AND profile_image_url IS NOT NULL`,
+      [userId]
+    );
+
     const r = await pool.query(
       'DELETE FROM users WHERE id = $1 RETURNING id',
       [userId]
@@ -711,6 +719,11 @@ app.delete('/api/v1/auth/users/:userId', auth, requireSelfOrAdmin, async (req, r
     if (r.rowCount === 0) {
       return res.status(404).json({ error: 'user_not_found' });
     }
+
+    await Promise.all(media.rows.map(({ url }) => {
+      const filename = path.basename(String(url || ''));
+      return /^[\w.-]+$/.test(filename) ? fs.promises.unlink(path.join(UPLOAD_DIR, filename)).catch(() => {}) : null;
+    }));
 
     return res.status(204).send();
   } catch (e) {
