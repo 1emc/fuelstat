@@ -9,6 +9,8 @@ $angabe = fn(string $k) => ($b[$k] ?? '') !== ''
     ? htmlspecialchars($b[$k])
     : '<span class="text-danger">[' . $k . ' fehlt in includes/betreiber.php]</span>';
 $anschrift = $angabe('name') . '<br>' . $angabe('strasse') . '<br>' . $angabe('plz_ort');
+// E-Mail wie auf caraggiu.com mit [at] statt @ (erschwert das Einsammeln durch Spam-Bots)
+$email = ($b['email'] ?? '') !== '' ? htmlspecialchars(str_replace('@', '[at]', $b['email'])) : $angabe('email');
 ?>
 
 <div class="container mt-5 mb-5 rechtstext">
@@ -19,8 +21,8 @@ $anschrift = $angabe('name') . '<br>' . $angabe('strasse') . '<br>' . $angabe('p
 
   <h2 class="h5">Kontakt</h2>
   <p>
-    E-Mail: <?php if (($b['email'] ?? '') !== ''): ?><a href="mailto:<?= htmlspecialchars($b['email']) ?>"><?= htmlspecialchars($b['email']) ?></a><?php else: ?><?= $angabe('email') ?><?php endif; ?>
-    <?php if (($b['telefon'] ?? '') !== ''): ?><br>Telefon: <?= htmlspecialchars($b['telefon']) ?><?php endif; ?>
+    <?php if (($b['telefon'] ?? '') !== ''): ?>Telefon: <?= htmlspecialchars($b['telefon']) ?><br><?php endif; ?>
+    E-Mail: <?= $email ?>
   </p>
   <p>Fragen, Fehler oder Ideen zur App kannst du nach dem Anmelden auch direkt über „Feedback senden“ schicken.</p>
 
@@ -34,13 +36,16 @@ $anschrift = $angabe('name') . '<br>' . $angabe('strasse') . '<br>' . $angabe('p
   <p>Ich bin nicht bereit und nicht verpflichtet, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen.</p>
 
   <h2 class="h5">Haftung für Inhalte</h2>
-  <p>Die Inhalte und Berechnungen dieser Anwendung (z. B. Verbrauch, Kosten, CO₂-Werte und Fälligkeiten von TÜV oder Wartung) werden mit Sorgfalt erstellt, beruhen aber auf deinen Eingaben und vereinfachten Annahmen. Für ihre Richtigkeit, Vollständigkeit und Aktualität kann ich keine Gewähr übernehmen. Verbindlich sind immer die Angaben deiner Werkstatt, Prüfstelle, Versicherung und Behörden. Als Diensteanbieter bin ich nach den allgemeinen Gesetzen für eigene Inhalte verantwortlich, aber nicht verpflichtet, übermittelte oder gespeicherte fremde Informationen zu überwachen. Sobald mir Rechtsverletzungen bekannt werden, entferne ich die betreffenden Inhalte umgehend.</p>
+  <p>Die Inhalte und Berechnungen dieser Anwendung (z. B. Verbrauch, Kosten, CO₂-Werte und Fälligkeiten von TÜV oder Wartung) werden mit Sorgfalt erstellt, beruhen aber auf deinen Eingaben und vereinfachten Annahmen. Für ihre Richtigkeit, Vollständigkeit und Aktualität kann ich keine Gewähr übernehmen. Verbindlich sind immer die Angaben deiner Werkstatt, Prüfstelle, Versicherung und Behörden. Als Diensteanbieter bin ich gemäß § 7 Abs. 1 DDG für eigene Inhalte nach den allgemeinen Gesetzen verantwortlich, nach §§ 8 bis 10 DDG aber nicht verpflichtet, übermittelte oder gespeicherte fremde Informationen zu überwachen. Sobald mir Rechtsverletzungen bekannt werden, entferne ich die betreffenden Inhalte umgehend.</p>
 
   <h2 class="h5">Haftung für Links</h2>
   <p>Für Inhalte verlinkter externer Seiten sind ausschließlich deren Betreiber verantwortlich. Zum Zeitpunkt der Verlinkung waren keine Rechtsverstöße erkennbar. Bei Bekanntwerden von Rechtsverletzungen entferne ich solche Links umgehend.</p>
 
   <h2 class="h5">Urheberrecht</h2>
   <p>Texte, Grafiken und Programmcode dieser Anwendung unterliegen dem deutschen Urheberrecht, soweit nicht anders angegeben. Von Benutzern hochgeladene Fotos bleiben deren Eigentum und sind nur im jeweiligen Konto sichtbar.</p>
+
+  <h2 class="h5">Widerspruch gegen Werbe-Mails</h2>
+  <p>Der Nutzung der im Rahmen der Impressumspflicht veröffentlichten Kontaktdaten zur Übersendung von nicht ausdrücklich angeforderter Werbung und Informationsmaterialien wird hiermit ausdrücklich widersprochen. Ich behalte mir rechtliche Schritte im Falle der unverlangten Zusendung von Werbeinformationen, etwa durch Spam-Mails, vor.</p>
 
   <h2 class="h5">Datenquellen und Lizenzen</h2>
   <ul>

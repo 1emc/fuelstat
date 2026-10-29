@@ -7,9 +7,8 @@ $b = require __DIR__ . '/../includes/betreiber.php';
 $angabe = fn(string $k) => ($b[$k] ?? '') !== ''
     ? htmlspecialchars($b[$k])
     : '<span class="text-danger">[' . $k . ' fehlt in includes/betreiber.php]</span>';
-$email = ($b['email'] ?? '') !== ''
-    ? '<a href="mailto:' . htmlspecialchars($b['email']) . '">' . htmlspecialchars($b['email']) . '</a>'
-    : $angabe('email');
+// E-Mail wie auf caraggiu.com mit [at] statt @
+$email = ($b['email'] ?? '') !== '' ? htmlspecialchars(str_replace('@', '[at]', $b['email'])) : $angabe('email');
 ?>
 
 <div class="container mt-5 mb-5 rechtstext">
@@ -17,10 +16,10 @@ $email = ($b['email'] ?? '') !== ''
   <p class="lead">Kurz gesagt: Fuelstat speichert nur, was du selbst einträgst und was für den Betrieb nötig ist. Es gibt kein Tracking, keine Werbung, keine Analyse-Tools und keine Weitergabe oder Verkauf deiner Daten.</p>
 
   <h2 class="h5 mt-4">1. Verantwortlicher</h2>
-  <p><?= $angabe('name') ?><br><?= $angabe('strasse') ?><br><?= $angabe('plz_ort') ?><br>E-Mail: <?= $email ?></p>
+  <p><?= $angabe('name') ?><br><?= $angabe('strasse') ?><br><?= $angabe('plz_ort') ?><?= ($b['telefon'] ?? '') !== '' ? '<br>Telefon: ' . htmlspecialchars($b['telefon']) : '' ?><br>E-Mail: <?= $email ?></p>
 
   <h2 class="h5 mt-4">2. Hosting und Server-Logfiles</h2>
-  <p>Fuelstat läuft auf einem eigenen Server<?= ($b['hoster'] ?? '') !== '' ? ' bei ' . htmlspecialchars($b['hoster']) : ' (' . $angabe('hoster') . ')' ?>. Bei jedem Aufruf speichert der Webserver automatisch: IP-Adresse, Datum und Uhrzeit, aufgerufene Adresse, Statuscode, übertragene Datenmenge, Referrer und Browserkennung. Das ist nötig, um den Dienst sicher zu betreiben und Angriffe oder Fehler zu erkennen (Art. 6 Abs. 1 lit. f DSGVO). Die Logfiles werden nach <?= (int)($b['log_tage'] ?? 14) ?> Tagen gelöscht.</p>
+  <p>Fuelstat läuft auf einem Server des Betreibers<?= ($b['hoster'] ?? '') !== '' ? ' bei ' . htmlspecialchars($b['hoster']) . ', der die Daten als Auftragsverarbeiter verarbeitet' : '' ?>. Bei jedem Aufruf speichert der Webserver automatisch: IP-Adresse, Datum und Uhrzeit, aufgerufene Adresse, Statuscode, übertragene Datenmenge, Referrer und Browserkennung. Das ist nötig, um den Dienst sicher zu betreiben und Angriffe oder Fehler zu erkennen (Art. 6 Abs. 1 lit. f DSGVO). Die Logfiles werden nach <?= (int)($b['log_tage'] ?? 14) ?> Tagen gelöscht.</p>
 
   <h2 class="h5 mt-4">3. Benutzerkonto</h2>
   <p>Für dein Konto speichere ich deine E-Mail-Adresse, optional einen Benutzernamen und ein Profilbild sowie den Zeitpunkt der Registrierung. Rechtsgrundlage ist die Nutzung der App (Art. 6 Abs. 1 lit. b DSGVO).</p>
