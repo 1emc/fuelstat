@@ -497,4 +497,7 @@ btnSuche.addEventListener('click', function () {
 });
 </script>
 
-<?php include '../includes/footer.php'; ?>
+<?php
+$tachoAnschaffung = $vehicle['odometer_km'] ?? null;
+include '../includes/tacho_pruefung.php';
+include '../includes/footer.php'; ?>
