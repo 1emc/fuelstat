@@ -17,7 +17,6 @@ $RECYCLE.BIN/
 .vscode/
 
 # --- Build/Deps (falls genutzt) ---
-/vendor/          # nur falls du vendor NICHT versionierst
 /node_modules/
 /dist/
 /build/
@@ -43,6 +42,9 @@ includes/db_connect.php
 .env
 .user.ini
 api/key.key
+# Open Charge Map: leere Datei ist versioniert, damit sie auf dem Server existiert. Den Schlüssel dort eintragen
+# und mit "git update-index --skip-worktree api/ocm.key" vor versehentlichem Commit schützen.
+api/ocm.key
 
 # --- Projekt-spezifische Demos ---
 target/

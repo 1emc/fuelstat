@@ -50,6 +50,8 @@ $email = ($b['email'] ?? '') !== '' ? htmlspecialchars(str_replace('@', '[at]', 
   <h2 class="h5">Datenquellen und Lizenzen</h2>
   <ul>
     <li>Tankstellen und Spritpreise: <a href="https://creativecommons.tankerkoenig.de" target="_blank" rel="noopener">Tankerkönig</a> mit Daten der Markttransparenzstelle für Kraftstoffe (MTS-K), Lizenz <a href="https://creativecommons.org/licenses/by/4.0/deed.de" target="_blank" rel="noopener">CC BY 4.0</a></li>
+    <li>Ladestationen: <a href="https://openchargemap.org" target="_blank" rel="noopener">Open Charge Map</a>, Lizenz <a href="https://creativecommons.org/licenses/by/4.0/deed.de" target="_blank" rel="noopener">CC BY 4.0</a> bzw. Lizenz des jeweiligen Datenanbieters</li>
+    <li>Ortssuche: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap-Mitwirkende</a> (Nominatim)</li>
     <li>Symbole: <a href="https://fontawesome.com" target="_blank" rel="noopener">Font Awesome Free</a> (Icons CC BY 4.0, Schriften SIL OFL 1.1)</li>
     <li>Oberfläche und Diagramme: <a href="https://getbootstrap.com" target="_blank" rel="noopener">Bootstrap</a> und <a href="https://www.chartjs.org" target="_blank" rel="noopener">Chart.js</a> (MIT-Lizenz)</li>
   </ul>

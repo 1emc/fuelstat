@@ -10,6 +10,7 @@ if (!isset($_GET['fahrzeug_id'])) {
 $fahrzeug_id = trim($_GET['fahrzeug_id']);
 
 $aktuellerTacho = null;
+$letztePreise = [];
 $fahrzeugKraftstoff = 'diesel';
 $einheit = 'l';
 $standortOptionen = [];
@@ -20,18 +21,27 @@ try {
     if ($fahrzeugKraftstoff === 'petrol') $fahrzeugKraftstoff = 'e10';
     $stats = $api->getVehicleStats($fahrzeug_id);
     $aktuellerTacho = $stats['currentOdo'] ?? null;
-    $fillups = $api->getVehicleFillups($fahrzeug_id, 10);
+    // Bisherige Orte (neueste zuerst) als Vorschläge, beim E-Auto mit dem zuletzt bezahlten kWh-Preis je Ort
+    $fillups = $api->getAllVehicleFillups($fahrzeug_id);
+    usort($fillups, fn($a, $b) => strcmp((string)($b['filled_at'] ?? ''), (string)($a['filled_at'] ?? '')));
     foreach ($fillups as $f) {
-        if (!empty($f['station']) && !in_array($f['station'], $standortOptionen, true)) {
-            $standortOptionen[] = htmlspecialchars($f['station']);
+        $ort = trim((string)($f['station'] ?? ''));
+        if ($ort === '' || isset($letztePreise[$ort])) {
+            continue;
+        }
+        $preis = (float)($f['price_per_unit'] ?? 0) ?: ((float)($f['amount'] ?? 0) > 0 ? (float)($f['total_cost_eur'] ?? 0) / (float)$f['amount'] : 0);
+        $letztePreise[$ort] = $preis > 0 ? round($preis, 3) : null;
+        if (count($standortOptionen) < 15) {
+            $standortOptionen[] = htmlspecialchars($ort);
         }
     }
 } catch (Throwable $e) {
 }
 // Begriffe passend zum Fahrzeug (Tankfüllung/Ladevorgang, Tankstelle/Ladestation …)
 $begriffe = verbrauchsBegriffe($vehicle['fuel_type'] ?? 'other');
-// Tankstellensuche über Tankerkönig nur für flüssige Kraftstoffe und Gas (keine Ladesäulen)
-$stationsSuche = $begriffe['art'] !== 'strom';
+// Stationssuche: Tankerkönig für Kraftstoff und Gas, Open Charge Map für E-Autos
+$stationsSuche = true;
+$stationsArt = $begriffe['art'] === 'strom' ? 'lade' : 'tank';
 
 $vorgegebeneKategorie = isset($_GET['kategorie']) ? $_GET['kategorie'] : null;
 $allCategories = [
@@ -248,6 +258,9 @@ const sections = {
 
 // PHP-Variable für JS bereitstellen
 const fahrzeugKraftstoff = <?php echo json_encode($fahrzeugKraftstoff); ?>;
+const stationsArt = <?= json_encode($stationsArt) ?>;
+// Zuletzt bezahlter Preis je Ort (nur E-Auto: Strompreise ändern sich selten, an der Wallbox praktisch nie)
+const letztePreise = <?= json_encode($stationsArt === 'lade' ? $letztePreise : new stdClass(), JSON_UNESCAPED_UNICODE) ?>;
 
 // Wenn eine Kategorie vorgegeben ist, zeige direkt die "Andere Ausgabe" Felder
 <?php if ($vorgegebeneKategorie): ?>
@@ -393,8 +406,8 @@ function isPreisTyp(type) {
     return ['e5', 'e10', 'diesel'].includes(type);
 }
 
-// Tankstellensuche: Standort per GPS, sonst PLZ/Ort über OpenStreetMap; Treffer als Liste zum Anklicken.
-// Alle Texte (auch die von Tankerkönig) werden mit textContent gesetzt, nie als HTML.
+// Stationssuche: Standort per GPS, sonst PLZ/Ort über OpenStreetMap; Treffer als Liste zum Anklicken.
+// Alle Texte (auch die von Tankerkönig und Open Charge Map) werden mit textContent gesetzt, nie als HTML.
 const btnSuche = document.getElementById('btnTankstellenSuche');
 const vorschlaege = document.getElementById('tankstellenVorschlaege');
 
@@ -471,6 +484,83 @@ function sucheTankstellen(lat, lng, radius, ortHinweis) {
         .finally(sucheBeenden);
 }
 
+// Preis vom letzten Ladevorgang an diesem Ort übernehmen, wenn noch keiner eingetragen ist
+function preisAusHistorie(ort) {
+    const preis = letztePreise[String(ort || '').trim()];
+    const feld = document.getElementById('preis_pro_einheit');
+    if (!preis || !feld || feld.value !== '') return;
+    feld.value = preis.toFixed(3);
+    feld.dispatchEvent(new Event('input', { bubbles: true }));
+    const hinweis = document.getElementById('calcHint');
+    hinweis.textContent = (hinweis.textContent ? hinweis.textContent + ' ' : '') + 'Preis vom letzten Laden hier übernommen.';
+}
+document.getElementById('standort').addEventListener('change', e => preisAusHistorie(e.target.value));
+
+function zeigeLadestationen(stations, ortHinweis) {
+    vorschlaege.replaceChildren();
+    if (!stations || stations.length === 0) {
+        zeigeHinweis('warning', 'Keine Ladestationen gefunden.', ortHinweis);
+        return;
+    }
+    const liste = document.createElement('ul');
+    liste.className = 'list-group';
+    stations.forEach(station => {
+        const li = document.createElement('li');
+        li.className = 'list-group-item list-group-item-action' + (station.in_betrieb ? '' : ' text-body-secondary');
+        li.style.cursor = 'pointer';
+        const titel = document.createElement('div');
+        titel.className = 'fw-semibold';
+        // Betreiber nur nennen, wenn er nicht schon im Namen steckt ("Aldi Süd Bopfingen")
+        const betreiber = station.betreiber && !station.name.toLowerCase().includes(station.betreiber.toLowerCase()) ? station.betreiber : '';
+        titel.textContent = station.name + (betreiber ? ' – ' + betreiber : '');
+        const details = document.createElement('div');
+        details.className = 'small text-body-secondary';
+        details.textContent = [
+            station.entfernung !== null ? String(station.entfernung).replace('.', ',') + ' km' : '',
+            station.max_kw ? 'bis ' + String(station.max_kw).replace('.', ',') + ' kW' : '',
+            (station.stecker || []).join(', '),
+            station.punkte ? station.punkte + ' Ladepunkte' : '',
+            station.in_betrieb ? '' : 'außer Betrieb',
+        ].filter(Boolean).join(' · ');
+        li.append(titel, details);
+        if (station.kosten) {
+            const kosten = document.createElement('div');
+            kosten.className = 'small';
+            kosten.textContent = 'Kosten laut Betreiber: ' + station.kosten;
+            li.append(kosten);
+        }
+        li.addEventListener('click', () => {
+            const ort = station.ort && !station.name.includes(station.ort) ? station.name + ' (' + station.ort + ')' : station.name;
+            document.getElementById('standort').value = ort;
+            preisAusHistorie(ort);
+            setTimeout(() => vorschlaege.replaceChildren(), 2000);
+        });
+        liste.append(li);
+    });
+    const quelle = document.createElement('div');
+    quelle.className = 'small text-body-secondary mt-1';
+    quelle.textContent = 'Daten: Open Charge Map (CC BY 4.0)';
+    vorschlaege.append(liste, quelle);
+}
+
+function sucheLadestationen(lat, lng, radius, ortHinweis) {
+    zeigeLaden('Ladestationen werden gesucht …');
+    const params = new URLSearchParams({ lat, lng, radius });
+    fetch('../api/ladestationen.php?' + params)
+        .then(response => response.json().catch(() => ({})).then(data => {
+            if (!response.ok) throw new Error(data.error || ('Status ' + response.status));
+            return data;
+        }))
+        .then(data => zeigeLadestationen(data.stations, ortHinweis))
+        .catch(err => zeigeHinweis('danger', 'Fehler bei der Ladestationssuche.', err.message))
+        .finally(sucheBeenden);
+}
+
+// Je nach Antriebsart Tankstellen (Tankerkönig) oder Ladestationen (Open Charge Map) suchen
+function sucheStationen(lat, lng, radius, ortHinweis) {
+    return stationsArt === 'lade' ? sucheLadestationen(lat, lng, radius, ortHinweis) : sucheTankstellen(lat, lng, radius, ortHinweis);
+}
+
 function sucheUeberOrt(frage) {
     const ort = prompt(frage);
     if (!ort) {
@@ -486,7 +576,7 @@ function sucheUeberOrt(frage) {
                 sucheBeenden();
                 return;
             }
-            sucheTankstellen(geo[0].lat, geo[0].lon, 15, 'PLZ/Ort: ' + ort);
+            sucheStationen(geo[0].lat, geo[0].lon, 15, 'PLZ/Ort: ' + ort);
         })
         .catch(() => {
             zeigeHinweis('danger', 'Ort konnte nicht gesucht werden.');
@@ -494,7 +584,6 @@ function sucheUeberOrt(frage) {
         });
 }
 
-// Beim E-Auto gibt es keine Stationssuche (Tankerkönig kennt keine Ladesäulen)
 if (btnSuche) btnSuche.addEventListener('click', function () {
     this.disabled = true;
     this.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
@@ -503,7 +592,7 @@ if (btnSuche) btnSuche.addEventListener('click', function () {
         return;
     }
     navigator.geolocation.getCurrentPosition(
-        position => sucheTankstellen(position.coords.latitude, position.coords.longitude, 5, null),
+        position => sucheStationen(position.coords.latitude, position.coords.longitude, 5, null),
         () => sucheUeberOrt('Standort konnte nicht ermittelt werden. Bitte Postleitzahl (PLZ) oder Ort eingeben:')
     );
 });

@@ -1,6 +1,6 @@
 # Sicherheitsregeln für den Fuelstat-Webroot (nginx), in den server { … }-Block der Seite übernehmen.
 # Hintergrund: Liegt das ganze Repository im Webroot, wären sonst .env-Dateien, das .git-Verzeichnis,
-# der Tankerkönig-Key und das Backend direkt abrufbar.
+# die API-Schlüssel (Tankerkönig, Open Charge Map) und das Backend direkt abrufbar.
 
 # Versteckte Dateien und Verzeichnisse (.git, .env, .htaccess …)
 location ~ /\.(?!well-known/) {
@@ -12,8 +12,8 @@ location ~ ^/(backend|infra|database|tests|docs)/ {
     deny all;
 }
 
-# Tankerkönig-API-Key
-location = /api/key.key {
+# API-Schlüssel (api/key.key für Tankerkönig, api/ocm.key für Open Charge Map und künftige *.key-Dateien)
+location ~* \.key$ {
     deny all;
 }
 
