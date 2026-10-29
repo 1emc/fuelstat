@@ -27,6 +27,7 @@ $email = ($b['email'] ?? '') !== '' ? htmlspecialchars(str_replace('@', '[at]', 
     <li><strong>Passwort:</strong> wird nie im Klartext gespeichert, sondern nur als bcrypt-Hash. Auch ich als Betreiber kann es nicht auslesen.</li>
     <li><strong>Zwei-Faktor-Authentifizierung (optional):</strong> der geheime Schlüssel für deine Authenticator-App wird in der Datenbank gespeichert, um die Codes zu prüfen.</li>
     <li><strong>Anmeldung:</strong> nach dem Login erhält dein Browser ein Sitzungs-Cookie und ein Anmelde-Cookie; die Anmeldung (Token) läuft nach 7 Tagen ab. Beim Abmelden wird das Token in einer Sperrliste vermerkt, die mit deinem Konto gelöscht wird. Fehlgeschlagene Anmeldeversuche werden zum Schutz vor Angriffen kurzzeitig gezählt (nur im Arbeitsspeicher, höchstens 15 Minuten).</li>
+    <li><strong>Aktivität:</strong> Zeitpunkt der letzten Anmeldung und der letzten Nutzung (höchstens stündlich aktualisiert), damit ich als Betreiber sehe, ob Konten noch genutzt werden.</li>
     <li><strong>Beta-Phase:</strong> während der Beta wird dein Konto als „Beta-Tester“ gekennzeichnet.</li>
   </ul>
 

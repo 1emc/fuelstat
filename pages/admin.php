@@ -62,6 +62,27 @@ try {
     $feedback = [];
 }
 $betaAnzahl = count(array_filter($benutzer, fn($u) => !empty($u['beta_tester'])));
+// Aktiv = in den letzten 7 Tagen angemeldet oder etwas eingetragen
+$zuletzt = fn($u) => max(strtotime($u['last_seen_at'] ?? '') ?: 0, strtotime($u['last_entry_at'] ?? '') ?: 0);
+$aktivAnzahl = count(array_filter($benutzer, fn($u) => $zuletzt($u) >= strtotime('-7 days')));
+
+/** Zeitpunkt kurz und lesbar: "heute 14:05", "gestern", "vor 5 Tagen", sonst Datum; Tooltip mit genauer Zeit */
+function zeitpunkt(?string $wert): string
+{
+    $ts = $wert ? strtotime($wert) : false;
+    if (!$ts) {
+        return '<span class="text-body-secondary">–</span>';
+    }
+    $tage = (int)floor((strtotime('today') - strtotime(date('Y-m-d', $ts))) / 86400);
+    $text = match (true) {
+        $tage <= 0 => 'heute ' . date('H:i', $ts),
+        $tage === 1 => 'gestern',
+        $tage < 30 => 'vor ' . $tage . ' Tagen',
+        default => date('d.m.Y', $ts),
+    };
+    $farbe = $tage < 7 ? '' : ($tage < 30 ? ' text-body-secondary' : ' text-danger-emphasis');
+    return '<span class="text-nowrap' . $farbe . '" title="' . date('d.m.Y H:i', $ts) . '">' . $text . '</span>';
+}
 $offenAnzahl = count(array_filter($feedback, fn($f) => empty($f['done'])));
 $artInfo = [
     'fehler' => ['fa-bug', 'danger', 'Fehler'],
@@ -74,20 +95,31 @@ include '../includes/header.php';
 ?>
 <div class="container mt-5">
     <h2><i class="fas fa-users-cog me-2"></i>Benutzerverwaltung</h2>
-    <p class="text-body-secondary"><?= count($benutzer) ?> Benutzer, davon <?= $betaAnzahl ?> Beta-Tester<?= $offenAnzahl ? ' · <a href="#feedback">' . $offenAnzahl . ' offene Feedbacks</a>' : '' ?></p>
+    <p class="text-body-secondary"><?= count($benutzer) ?> Benutzer, davon <?= $aktivAnzahl ?> in den letzten 7 Tagen aktiv und <?= $betaAnzahl ?> Beta-Tester<?= $offenAnzahl ? ' · <a href="#feedback">' . $offenAnzahl . ' offene Feedbacks</a>' : '' ?></p>
     <?php if ($error): ?>
         <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
     <?php endif; ?>
     <div class="table-responsive">
         <table class="table align-middle">
             <thead>
-                <tr><th>E-Mail</th><th>Benutzername</th><th>2FA</th><th>Beta-Tester</th><th>Registriert</th><th></th></tr>
+                <tr>
+                    <th>E-Mail</th><th>Benutzername</th>
+                    <th class="text-end">Fahrzeuge</th>
+                    <th title="Zuletzt die App benutzt (wird höchstens stündlich aktualisiert)">Zuletzt aktiv</th>
+                    <th>Letzter Login</th>
+                    <th title="Wann zuletzt eine Tankfüllung, Ladung oder Ausgabe erfasst wurde (auch per Import)">Letzter Eintrag</th>
+                    <th>2FA</th><th>Beta-Tester</th><th>Registriert</th><th></th>
+                </tr>
             </thead>
             <tbody>
             <?php foreach ($benutzer as $u): $istIch = ($u['id'] ?? '') === ($ich['id'] ?? ''); ?>
                 <tr>
                     <td><?= htmlspecialchars($u['email'] ?? '') ?><?= $istIch ? ' <span class="badge text-bg-primary">Du</span>' : '' ?></td>
                     <td><?= htmlspecialchars($u['username'] ?? '') ?></td>
+                    <td class="text-end"><?= (int)($u['vehicle_count'] ?? 0) ?></td>
+                    <td><?= zeitpunkt($u['last_seen_at'] ?? null) ?></td>
+                    <td><?= zeitpunkt($u['last_login_at'] ?? null) ?></td>
+                    <td><?= zeitpunkt($u['last_entry_at'] ?? null) ?></td>
                     <td><?= !empty($u['mfa_enabled']) ? '<i class="fas fa-check text-success"></i>' : '–' ?></td>
                     <td>
                         <form method="post" class="form-check form-switch mb-0">
