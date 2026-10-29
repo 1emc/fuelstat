@@ -1,4 +1,4 @@
-const cacheName = 'fahrzeugverwaltung-cache-v6';
+const cacheName = 'fahrzeugverwaltung-cache-v7';
 const assetsToCache = [
   './',
   './css/style.css',
@@ -17,6 +17,8 @@ self.addEventListener('install', event => {
       });
     })
   );
+  // Neue Version sofort übernehmen, statt zu warten, bis alle Tabs geschlossen sind
+  self.skipWaiting();
 });
 
 // Aktivieren: Alte Caches bereinigen
@@ -26,7 +28,7 @@ self.addEventListener('activate', event => {
       return Promise.all(
         cacheNames.filter(name => name !== cacheName).map(name => caches.delete(name))
       );
-    })
+    }).then(() => self.clients.claim())
   );
 });
 
@@ -37,13 +39,19 @@ function isDocumentRequest(request) {
     request.destination === 'document';
 }
 
-// Fetch: Dokumente = Network-First, Rest = Cache-First
+// CSS und JS der App: nach einem Deploy muss die neue Version kommen, Cache nur offline
+function isAppAsset(request) {
+  const url = new URL(request.url);
+  return url.origin === self.location.origin && /\.(css|js)$/.test(url.pathname);
+}
+
+// Fetch: Dokumente, CSS und JS = Network-First, Rest (Bilder) = Cache-First
 self.addEventListener('fetch', event => {
-  if (isDocumentRequest(event.request)) {
+  if (isDocumentRequest(event.request) || isAppAsset(event.request)) {
     event.respondWith(
       fetch(event.request)
         .then(response => response)
-        .catch(() => caches.match(event.request))
+        .catch(() => caches.match(event.request, { ignoreSearch: isAppAsset(event.request) }))
     );
     return;
   }

@@ -13,7 +13,7 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 <!-- Custom JS -->
-<script src="<?php echo htmlspecialchars($baseUrl); ?>js/script.js"></script>
+<script src="<?php echo htmlspecialchars($baseUrl); ?>js/script.js?v=<?= @filemtime(__DIR__ . '/../js/script.js') ?: 1 ?>"></script>
 
 <!-- CSRF-Token in alle POST-Formulare einfügen (wird in includes/session.php geprüft) -->
 <script>
