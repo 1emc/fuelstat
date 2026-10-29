@@ -34,7 +34,7 @@ Fuelstat ist eine Web-App, mit der du Tankfüllungen, Ladevorgänge und alle and
 - Registrierung und Login, optional mit Zwei-Faktor-Authentifizierung (Authenticator-App)
 - Profil mit Benutzername und Profilbild, Passwort ändern
 - Abmelden auf allen Geräten, Konto löschen
-- Benutzerverwaltung für Admins, mit Beta-Tester-Kennzeichen und Feedback-Eingang
+- Benutzerverwaltung für Admins: Fahrzeuge je Benutzer, zuletzt aktiv, letzter Login, letzter Eintrag, Beta-Tester-Kennzeichen und Feedback-Eingang
 - „Feedback senden“ für angemeldete Benutzer (Fehler, Idee, Lob, Sonstiges): wird gespeichert und per Mail an den Betreiber geschickt
 - Hell- und Dunkelmodus, als App installierbar (PWA), auf dem Handy mit App-Navigation (untere Leiste, Profil- und Fahrzeugauswahl von unten)
 
@@ -91,7 +91,7 @@ Die API läuft danach auf `127.0.0.1:3000` (nur lokal erreichbar).
 
 ### 2. Datenbankschema
 
-Neue Installation: `backend/database/postgres_init.sql` einspielen, danach `postgres_006_fix_fillup_units.sql`, `postgres_007_mail_settings.sql` und `postgres_008_beta_feedback.sql`.
+Neue Installation: `backend/database/postgres_init.sql` einspielen, danach `postgres_006_fix_fillup_units.sql`, `postgres_007_mail_settings.sql`, `postgres_008_beta_feedback.sql` und `postgres_009_user_activity.sql`.
 
 Bestehende Installation: alle noch nicht eingespielten `postgres_00X_*.sql` der Reihe nach ausführen, z. B. über Adminer oder:
 

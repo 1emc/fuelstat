@@ -343,6 +343,7 @@ Ohne eigenen `smtpHost` wird der Standard-Mailserver verwendet (SMTP-Zugang von 
 ### Beta und Feedback
 
 * `GET /health` enthält `beta_phase` (aus `BETA_PHASE`, Standard `true`)
+* `GET /auth/users` (Admin) enthält zusätzlich `vehicle_count`, `last_login_at`, `last_seen_at` (letzte Nutzung, höchstens stündlich aktualisiert) und `last_entry_at` (letzte Erfassung einer Tankfüllung oder Ausgabe)
 * `GET /whoami` und `GET /auth/users` enthalten `beta_tester`; neue Konten werden während der Beta-Phase als Beta-Tester angelegt
 * `PUT /auth/users/:userId/beta` `{ "betaTester": true|false }` – nur Admin
 * `POST /feedback` `{ "category": "fehler"|"idee"|"lob"|"sonstiges", "message": "…" (3–5000 Zeichen), "page": "/pfad" }` → `201 { id, saved, mailed }`. Wird gespeichert und über den Standard-Mailserver an `FEEDBACK_EMAIL` bzw. den Empfänger des Standard-Servers geschickt (Reply-To = Absender). Höchstens 10 je 15 Minuten.

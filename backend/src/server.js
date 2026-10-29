@@ -121,6 +121,27 @@ function signToken(user) {
   );
 }
 
+// "Zuletzt aktiv" für die Benutzerverwaltung: höchstens einmal pro Stunde und Benutzer in die Datenbank schreiben
+const lastSeenWritten = new Map();
+const LAST_SEEN_INTERVAL_MS = 60 * 60 * 1000;
+
+function touchLastSeen(userId) {
+  const now = Date.now();
+  if (!userId || now - (lastSeenWritten.get(userId) || 0) < LAST_SEEN_INTERVAL_MS) return;
+  lastSeenWritten.set(userId, now);
+  pool.query(
+    `UPDATE users SET last_seen_at = now()
+     WHERE id = $1 AND (last_seen_at IS NULL OR last_seen_at < now() - interval '1 hour')`,
+    [userId]
+  ).catch((e) => console.error('[last_seen]', e.message));
+}
+
+async function recordLogin(userId) {
+  lastSeenWritten.set(String(userId), Date.now());
+  await pool.query('UPDATE users SET last_login_at = now(), last_seen_at = now() WHERE id = $1', [userId])
+    .catch((e) => console.error('[last_login]', e.message));
+}
+
 async function auth(req, res, next) {
   const h = req.header('Authorization') || '';
   const m = h.match(/^Bearer\s+(.+)$/i);
@@ -156,6 +177,7 @@ async function auth(req, res, next) {
     }
 
     req.user = payload;
+    touchLastSeen(String(payload.sub || ''));
     return next();
   } catch {
     return res.status(401).json({ error: 'invalid_token' });
@@ -379,6 +401,7 @@ app.post('/api/v1/auth/register', async (req, res) => {
       [email, passwordHash, isBetaPhase()]
     );
     const user = r.rows[0];
+    await recordLogin(user.id);
     res.status(201).json({ token: signToken(user), user });
   } catch (e) {
     if (e.code === '23505') return res.status(409).json({ error: 'email_already_exists' });
@@ -433,6 +456,7 @@ app.post('/api/v1/auth/login', async (req, res) => {
 
     delete user.password_hash;
     delete user.mfa_secret;
+    await recordLogin(user.id);
     res.json({ token: signToken(user), user });
   } catch (e) {
     serverError(res, e);
@@ -463,6 +487,7 @@ app.post('/api/v1/auth/login/mfa', async (req, res) => {
     }
     clearFailures(mfaKey);
     delete user.mfa_secret;
+    await recordLogin(user.id);
     res.json({ token: signToken(user), user });
   } catch (e) {
     serverError(res, e);
@@ -579,7 +604,15 @@ app.get('/api/v1/auth/users', auth, requireAdmin, async (req, res) => {
          profile_image_url,
          beta_tester,
          created_at,
-         updated_at
+         updated_at,
+         last_login_at,
+         last_seen_at,
+         (SELECT COUNT(*)::int FROM vehicles v WHERE v.user_id = users.id) AS vehicle_count,
+         -- Wann zuletzt etwas eingetragen wurde (Erfassungszeit, nicht das Datum des Eintrags – Importe zählen also auch)
+         GREATEST(
+           (SELECT MAX(f.created_at) FROM fillups f WHERE f.user_id = users.id),
+           (SELECT MAX(e.created_at) FROM expenses e WHERE e.user_id = users.id)
+         ) AS last_entry_at
        FROM users
        ORDER BY created_at ASC`
     );
