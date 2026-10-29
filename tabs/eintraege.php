@@ -84,13 +84,14 @@ body.dark .badge { background-color: #444; color: #fff; }
         $type = $e['type'] ?? 'entry';
       ?>
         <div class="card mb-3 px-3 py-3">
-          <div class="d-flex justify-content-between align-items-start">
-            <div>
+          <div class="d-flex justify-content-between align-items-start gap-2">
+            <!-- Text darf umbrechen, die rechte Spalte (Betrag, Knöpfe) behält ihre Breite -->
+            <div class="flex-grow-1 min-w-0">
               <div class="fs-6 fw-semibold mb-1">
                 <i class="fas <?= $icon ?> me-2 text-<?= $farbe ?>"></i>
                 <?= htmlspecialchars(getKategorieName($e['kategorie'])) ?>
               </div>
-              <div class="text-muted small">
+              <div class="text-muted small text-break">
                 <?= implode(' · ', array_filter([
                     !empty($e['tachostand']) ? number_format((int)$e['tachostand'], 0, ',', '.') . ' km' : '',
                     !empty($e['standort']) ? htmlspecialchars($e['standort']) : '',
@@ -102,25 +103,25 @@ body.dark .badge { background-color: #444; color: #fff; }
               <?php if ($e['kategorie'] === 'Tankfuellung'): ?>
               <div class="text-info small mt-1">
                 <i class="fas fa-tint me-1"></i>
-                <?= number_format((float)($e['menge'] ?? 0), 2, ',', '.') ?> <?= $einheitKurz ?>
-                <?php if ($v !== null): ?>· <?= number_format($v, 2, ',', '.') ?> <?= $einheitKurz ?>/100km<?php endif; ?>
+                <span class="text-nowrap"><?= number_format((float)($e['menge'] ?? 0), 2, ',', '.') ?>&nbsp;<?= $einheitKurz ?></span>
+                <?php if ($v !== null): ?>· <span class="text-nowrap"><?= number_format($v, 2, ',', '.') ?>&nbsp;<?= $einheitKurz ?>/100km</span><?php endif; ?>
                 <?php if (empty($e['vollgetankt'])): ?><span class="badge text-bg-secondary ms-1">Teilbetankung</span><?php endif; ?>
               </div>
               <?php endif; ?>
             </div>
-            <div class="text-end">
+            <div class="text-end flex-shrink-0">
               <div class="badge rounded-pill bg-<?= $farbe ?> text-white px-3 py-2">
                 <?= number_format((float)($e['kosten'] ?? 0), 2, ',', '.') ?> €
               </div>
-              <div class="mt-2">
-                <a href="../pages/eintrag_bearbeiten.php?id=<?= htmlspecialchars(urlencode($e['id'])) ?>&fahrzeug_id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?>&type=<?= $type ?>" class="btn btn-sm btn-outline-success me-1">
+              <div class="d-flex justify-content-end gap-1 mt-2">
+                <a href="../pages/eintrag_bearbeiten.php?id=<?= htmlspecialchars(urlencode($e['id'])) ?>&fahrzeug_id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?>&type=<?= $type ?>" class="btn btn-sm btn-outline-success" title="Bearbeiten">
                   <i class="fas fa-pen"></i>
                 </a>
-                <form method="post" action="../pages/eintrag_loeschen.php" class="d-inline-block" onsubmit="return confirm('Eintrag vom <?= htmlspecialchars(date('d.m.Y', strtotime($e['datum']))) ?> löschen?');">
+                <form method="post" action="../pages/eintrag_loeschen.php" class="m-0" onsubmit="return confirm('Eintrag vom <?= htmlspecialchars(date('d.m.Y', strtotime($e['datum']))) ?> löschen?');">
                   <input type="hidden" name="id" value="<?= htmlspecialchars($e['id']) ?>">
                   <input type="hidden" name="fahrzeug_id" value="<?= htmlspecialchars($fahrzeug_id) ?>">
                   <input type="hidden" name="type" value="<?= $type ?>">
-                  <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                  <button class="btn btn-sm btn-outline-danger" title="Löschen"><i class="fas fa-trash"></i></button>
                 </form>
               </div>
             </div>
