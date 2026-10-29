@@ -114,7 +114,7 @@ Authorization: Bearer <jwt>
 ```
 
 **fuelType erlaubt**
-`diesel`, `petrol`, `electric`, `hybrid`, `cng`, `lpg`, `other`
+`diesel`, `e5`, `e10`, `lpg`, `cng`, `electric`, `hybrid` (Vollhybrid, tankt nur), `phev` (Plug-in-Hybrid, tankt und lädt), `hydrogen`, `other`
 
 **Response 201**
 

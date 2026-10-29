@@ -85,10 +85,13 @@ try {
 
 $datum = isset($eintrag['filled_at']) ? date('Y-m-d', strtotime($eintrag['filled_at'])) : '';
 try {
-    $begriffe = verbrauchsBegriffe($api->getVehicle($fahrzeug_id)['fuel_type'] ?? 'other');
+    $fuelType = $api->getVehicle($fahrzeug_id)['fuel_type'] ?? 'other';
 } catch (Throwable $e) {
-    $begriffe = verbrauchsBegriffe(null);
+    $fuelType = null;
 }
+// Plug-in-Hybrid: Begriffe nach der Einheit dieses Eintrags (Tankfüllung oder Ladevorgang)
+$begriffe = begriffeFuerEinheit($fuelType, $eintrag['unit'] ?? null);
+$istPhev = $fuelType === 'phev';
 $tachostand = $eintrag['odometer_km'] ?? 0;
 $menge = $eintrag['amount'] ?? 0;
 $kosten = $eintrag['total_cost_eur'] ?? 0;
@@ -112,6 +115,17 @@ $bearbeitbar = isset($eintrag['filled_at']) && strtotime($eintrag['filled_at']) 
         <input type="hidden" name="id" value="<?= htmlspecialchars($eintrag_id) ?>">
         <input type="hidden" name="fahrzeug_id" value="<?= htmlspecialchars($fahrzeug_id) ?>">
         <input type="hidden" name="type" value="fillup">
+        <?php if ($istPhev): ?>
+        <!-- Plug-in-Hybrid: falsch zugeordneten Eintrag (Tanken statt Laden) korrigieren -->
+        <div class="mb-3">
+            <div class="btn-group w-100" role="group" aria-label="Getankt oder geladen">
+                <input type="radio" class="btn-check" name="einheit" id="einheit_l" value="l" <?= $einheit !== 'kwh' ? 'checked' : '' ?>>
+                <label class="btn btn-outline-primary" for="einheit_l"><i class="fas fa-gas-pump me-1"></i> Getankt (Liter)</label>
+                <input type="radio" class="btn-check" name="einheit" id="einheit_kwh" value="kwh" <?= $einheit === 'kwh' ? 'checked' : '' ?>>
+                <label class="btn btn-outline-success" for="einheit_kwh"><i class="fas fa-charging-station me-1"></i> Geladen (kWh)</label>
+            </div>
+        </div>
+        <?php endif; ?>
         <div class="mb-3">
             <label class="form-label">Datum</label>
             <input type="date" class="form-control" name="datum" value="<?= htmlspecialchars($datum) ?>" required>

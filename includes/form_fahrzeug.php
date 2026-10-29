@@ -65,6 +65,21 @@ $hatBild = !empty($f['image_url']);
               })();
             </script>
         </div>
+        <!-- Plug-in-Hybrid: Akku zusätzlich zum Tank -->
+        <div class="col-md-6 mb-3" id="batteryCapacityFeld">
+            <label for="batteryCapacity" class="form-label">Akkugröße (kWh)</label>
+            <input type="number" id="batteryCapacity" name="batteryCapacity" class="form-control" min="0" step="0.1" value="<?= isset($f['battery_capacity']) ? htmlspecialchars((string)(float)$f['battery_capacity']) : '' ?>">
+            <div class="form-text">Kapazität laut Hersteller (brutto oder nutzbar).</div>
+            <script>
+              (function () {
+                var auswahl = document.getElementById('fuelType');
+                var feld = document.getElementById('batteryCapacityFeld');
+                function setze() { feld.hidden = !auswahl || auswahl.value !== 'phev'; }
+                if (auswahl) auswahl.addEventListener('change', setze);
+                setze();
+              })();
+            </script>
+        </div>
         <div class="col-12 mb-3">
             <label for="bild" class="form-label">Fahrzeugbild</label>
             <?php if ($hatBild): ?>

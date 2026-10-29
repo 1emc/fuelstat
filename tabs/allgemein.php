@@ -22,8 +22,13 @@ $fahrzeugDetails = array_filter([
     trim(($fahrzeug['brand'] ?? '') . ' ' . ($fahrzeug['model'] ?? '')),
     !empty($fahrzeug['year']) ? 'Baujahr ' . (int)$fahrzeug['year'] : '',
     $kraftstoffTexte[$fuel_type] ?? ucfirst((string)$fuel_type),
-    !empty($fahrzeug['tank_capacity']) ? $begriffe['speicher'] . ' ' . number_format((float)$fahrzeug['tank_capacity'], fmod((float)$fahrzeug['tank_capacity'], 1) ? 1 : 0, ',', '.') . ' ' . $einheitKurz : '',
+    !empty($fahrzeug['tank_capacity']) ? ($fuel_type === 'phev' ? 'Tank' : $begriffe['speicher']) . ' ' . number_format((float)$fahrzeug['tank_capacity'], fmod((float)$fahrzeug['tank_capacity'], 1) ? 1 : 0, ',', '.') . ' ' . $einheitKurz : '',
+    // Plug-in-Hybrid: Akku zusätzlich zum Tank
+    !empty($fahrzeug['battery_capacity']) && $fuel_type === 'phev' ? 'Akku ' . number_format((float)$fahrzeug['battery_capacity'], fmod((float)$fahrzeug['battery_capacity'], 1) ? 1 : 0, ',', '.') . ' kWh' : '',
 ]);
+// Plug-in-Hybrid mit Tank- und Ladevorgängen: Verbrauch je Einheit statt einer Kachel für Verbrauch und Preis
+$verbrauchJeEinheit = count($stats['units'] ?? []) > 1 ? $stats['units'] : [];
+uksort($verbrauchJeEinheit, fn($a, $b) => array_search($a, ['l', 'kwh', 'kg']) <=> array_search($b, ['l', 'kwh', 'kg']));
 
 // Termine: dringendste zuerst, danach Reifen (ohne Fälligkeit)
 $statusReihenfolge = ['ueberfaellig' => 0, 'bald' => 1, 'ok' => 2, 'unbekannt' => 3];
@@ -58,6 +63,18 @@ $eintragUrl = '../pages/eintrag_hinzufuegen.php?fahrzeug_id=' . urlencode($fahrz
                         <?php if ($fahrleistung !== null): ?><div class="small text-body-secondary"><?= htmlspecialchars($fahrleistung['basis']) ?></div><?php endif; ?>
                     </div>
                 </div>
+                <?php foreach ($verbrauchJeEinheit as $u => $w):
+                    $wAktuell = $w['trend']['current'] ?? null;
+                    $wDiff = $w['trend']['diff'] ?? null; ?>
+                <div class="col-6 col-lg-3">
+                    <div class="kennzahl">
+                        <div class="small text-body-secondary">Verbrauch <?= begriffeFuerEinheit($fuel_type, $u)['energie'] ?></div>
+                        <div class="kennzahl-wert"><?= $wAktuell !== null ? number_format($wAktuell, 2, ',', '.') . ' <small class="fw-normal">' . einheitKurz($u) . '/100 km</small>' : '—' ?></div>
+                        <?php if ($w['avgPrice'] !== null): ?><div class="small text-body-secondary">Ø <?= number_format((float)$w['avgPrice'], 3, ',', '.') ?> €/<?= einheitKurz($u) ?></div><?php endif; ?>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+                <?php if (!$verbrauchJeEinheit): ?>
                 <div class="col-6 col-lg-3">
                     <div class="kennzahl">
                         <div class="small text-body-secondary">Verbrauch</div>
@@ -73,6 +90,7 @@ $eintragUrl = '../pages/eintrag_hinzufuegen.php?fahrzeug_id=' . urlencode($fahrz
                         <div class="kennzahl-wert"><?= $avgPrice !== null ? number_format($avgPrice, 3, ',', '.') . ' €' : '—' ?></div>
                     </div>
                 </div>
+                <?php endif; ?>
             </div>
 
             <!-- Termine: Fälligkeiten und letzte Wartung, TÜV und Reifen in einer Karte -->

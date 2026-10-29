@@ -44,10 +44,22 @@ try {
 
                 $currentOdo = null;
                 $verbrauch = null;
+                $verbrauchText = null;
                 try {
                     $stats = $api->getVehicleStats($vehicleId);
                     $currentOdo = $stats['currentOdo'] ?? null;
                     $verbrauch = $stats['trend']['current'] ?? null;
+                    // Plug-in-Hybrid: Kraftstoff und Strom nebeneinander, z. B. "Ø 2,7 l + 20,0 kWh/100 km"
+                    if (count($stats['units'] ?? []) > 1) {
+                        $teile = [];
+                        foreach (['l', 'kwh'] as $u) {
+                            if (isset($stats['units'][$u]['trend']['current'])) {
+                                $teile[] = number_format($stats['units'][$u]['trend']['current'], 1, ',', '.') . ' ' . einheitKurz($u);
+                            }
+                        }
+                        $verbrauch = null;
+                        $verbrauchText = $teile ? 'Ø ' . implode(' + ', $teile) . '/100 km' : '';
+                    }
                 } catch (Throwable $e) {
                 }
                 // Termine zu einem Hinweis zusammenfassen
@@ -64,7 +76,7 @@ try {
                 }
                 $kennzahlen = array_filter([
                     $currentOdo !== null ? number_format($currentOdo, 0, ',', '.') . ' km' : '',
-                    $verbrauch !== null ? 'Ø ' . number_format($verbrauch, 1, ',', '.') . ' ' . $einheit . '/100 km' : '',
+                    $verbrauchText ?? ($verbrauch !== null ? 'Ø ' . number_format($verbrauch, 1, ',', '.') . ' ' . $einheit . '/100 km' : ''),
                 ]);
                 $detailLink = 'pages/fahrzeug_detail.php?id=' . urlencode($vehicleId);
             ?>

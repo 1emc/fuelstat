@@ -12,6 +12,7 @@ function importFelder(): array
         'art' => 'Art / Kategorie',
         'tachostand' => 'Tachostand (km)',
         'menge' => 'Menge (l/kWh/kg)',
+        'einheit' => 'Einheit (l oder kWh, für Plug-in-Hybride)',
         'kosten' => 'Kosten gesamt (€)',
         'preis' => 'Preis pro Einheit (€)',
         'vollgetankt' => 'Voll getankt bzw. geladen',
@@ -42,6 +43,7 @@ function importErkenneZuordnung(array $kopfzeile): array
         'tachostand' => ['tachostand', 'kilometerstand', 'kmstand', 'odometer', 'tacho', 'km', 'odometerkm'],
         'menge' => ['menge', 'liter', 'litre', 'liters', 'amount', 'quantity', 'tankmenge', 'kwh', 'getankt', 'geladen', 'energie', 'lademenge'],
         'kosten' => ['kosten', 'gesamtpreis', 'betrag', 'preisgesamt', 'gesamtkosten', 'total', 'cost', 'costs', 'summe', 'preis'],
+        'einheit' => ['einheit', 'unit', 'mengeneinheit', 'energieart'],
         'preis' => ['preisproeinheit', 'preisproliter', 'literpreis', 'preisl', 'priceperliter', 'priceperunit', 'einzelpreis', 'preisprokwh', 'kwhpreis', 'strompreis', 'preiskwh'],
         'vollgetankt' => ['vollgetankt', 'vollgeladen', 'voll', 'full', 'volltank', 'isfull', 'vollgetanktbzwgeladen'],
         'luecke' => ['lueckedavor', 'luecke', 'skipprevious', 'vorherigeignorieren', 'vorherigetankfuellungignorieren'],
@@ -158,16 +160,36 @@ function importJaNein(?string $wert, bool $standard = true): bool
     return !in_array($wert, ['nein', 'no', 'n', '0', 'false', 'falsch', 'teil', 'teilweise', 'partial'], true);
 }
 
+/** Mengeneinheit aus "l", "Liter", "kWh" usw.; unbekannt: null. */
+function importEinheit(?string $wert): ?string
+{
+    $norm = importNormalisiereKopf((string)$wert);
+    return match ($norm) {
+        'l', 'liter', 'litre', 'liters', 'ltr' => 'l',
+        'kwh', 'kilowattstunden' => 'kwh',
+        'kg', 'kilogramm' => 'kg',
+        default => null,
+    };
+}
+
 /**
  * Art/Kategorie einer Zeile bestimmen.
- * @return array ['typ' => 'fillup'|'entry', 'kategorie' => string]
+ * Für Plug-in-Hybride verrät die Art auch die Einheit: "Laden" heißt kWh, "Tanken" Liter.
+ * @return array ['typ' => 'fillup'|'entry', 'kategorie' => string, 'einheit' => 'l'|'kwh'|null]
  */
 function importArt(?string $wert, ?float $menge, string $standardKategorie): array
 {
     $norm = importNormalisiereKopf((string)$wert);
-    $tank = ['tankfuellung', 'tanken', 'tankstopp', 'laden', 'ladevorgang', 'fuel', 'refuel', 'refueling', 'fillup', 'kraftstoff'];
-    if (in_array($norm, $tank, true) || ($norm === '' && $menge !== null && $menge > 0)) {
-        return ['typ' => 'fillup', 'kategorie' => 'Tankfuellung'];
+    $tank = ['tankfuellung', 'tanken', 'tankstopp', 'fuel', 'refuel', 'refueling', 'fillup', 'kraftstoff', 'getankt'];
+    $lade = ['laden', 'ladevorgang', 'ladung', 'aufladen', 'geladen', 'charge', 'charging'];
+    if (in_array($norm, $lade, true)) {
+        return ['typ' => 'fillup', 'kategorie' => 'Tankfuellung', 'einheit' => 'kwh'];
+    }
+    if (in_array($norm, $tank, true)) {
+        return ['typ' => 'fillup', 'kategorie' => 'Tankfuellung', 'einheit' => 'l'];
+    }
+    if ($norm === '' && $menge !== null && $menge > 0) {
+        return ['typ' => 'fillup', 'kategorie' => 'Tankfuellung', 'einheit' => null];
     }
     $bekannt = [
         'versicherung' => 'Versicherung', 'werkstatt' => 'Werkstatt', 'inspektion' => 'Inspektion',
@@ -176,9 +198,9 @@ function importArt(?string $wert, ?float $menge, string $standardKategorie): arr
         'dekor' => 'Dekor', 'fahrt' => 'Fahrt',
     ];
     if ($norm === '') {
-        return ['typ' => 'entry', 'kategorie' => $standardKategorie];
+        return ['typ' => 'entry', 'kategorie' => $standardKategorie, 'einheit' => null];
     }
-    return ['typ' => 'entry', 'kategorie' => $bekannt[$norm] ?? trim((string)$wert)];
+    return ['typ' => 'entry', 'kategorie' => $bekannt[$norm] ?? trim((string)$wert), 'einheit' => null];
 }
 
 /**
@@ -200,6 +222,8 @@ function importWandleUm(array $zeilen, array $zuordnung, string $standardKategor
         $art = importArt($hole($zeile, 'art'), $menge, $standardKategorie);
         $ort = trim((string)$hole($zeile, 'ort'));
         $beschreibung = trim((string)$hole($zeile, 'beschreibung'));
+        // Spalte "Einheit" vor der Art; die API übernimmt sie nur bei Fahrzeugen mit mehreren Einheiten (Plug-in-Hybrid)
+        $einheit = importEinheit($hole($zeile, 'einheit')) ?? $art['einheit'];
 
         if ($kosten === null && $menge !== null && $preis !== null) {
             $kosten = round($menge * $preis, 2);
@@ -218,7 +242,7 @@ function importWandleUm(array $zeilen, array $zuordnung, string $standardKategor
 
         $vorschau = [
             'nr' => $nr, 'datum' => $datum, 'kategorie' => $art['kategorie'], 'tachostand' => $tacho,
-            'menge' => $art['typ'] === 'fillup' ? $menge : null, 'kosten' => $kosten,
+            'menge' => $art['typ'] === 'fillup' ? $menge : null, 'einheit' => $art['typ'] === 'fillup' ? $einheit : null, 'kosten' => $kosten,
             'vollgetankt' => $art['typ'] === 'fillup' ? importJaNein($hole($zeile, 'vollgetankt')) : null,
             'ort' => $ort, 'beschreibung' => $beschreibung, 'fehler' => $fehler,
         ];
@@ -238,7 +262,7 @@ function importWandleUm(array $zeilen, array $zuordnung, string $standardKategor
                 'station' => $ort !== '' ? $ort : null,
                 'isFull' => $vorschau['vollgetankt'],
                 'skipPrevious' => importJaNein($hole($zeile, 'luecke'), false),
-            ];
+            ] + ($einheit !== null ? ['unit' => $einheit] : []);
         } else {
             $ergebnis['entries'][] = [
                 'occurredAt' => $zeitpunkt,

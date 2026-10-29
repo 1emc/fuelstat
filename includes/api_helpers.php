@@ -90,6 +90,7 @@ function getMergedEintraegeFromApi($api, string $vehicleId): array
             'vollgetankt' => $f['is_full'] ?? true,
             'skip_previous' => $f['skip_previous'] ?? false,
             'standort' => $f['station'] ?? '',
+            'einheit' => $f['unit'] ?? 'l',
             'l_per_100km' => $lPer100ByFillupId[$f['id']] ?? null,
         ];
     }
@@ -224,35 +225,12 @@ function getStatistikDatenFromApi($api, string $vehicleId): array
     });
     // Bei mehreren Tankfüllungen/Ladungen am selben Tag entscheidet der Tachostand
     usort($fillupsOnly, fn($a, $b) => [$a['datum'], (float)($a['tachostand'] ?? 0)] <=> [$b['datum'], (float)($b['tachostand'] ?? 0)]);
-
-    $letzteVoll = null;
-    $mengeSeitVoll = 0.0;
+    // Je Einheit getrennt rechnen: beim Plug-in-Hybrid Liter von Tankfüllung zu Tankfüllung, kWh von Ladung zu Ladung
+    $nachEinheit = [];
     foreach ($fillupsOnly as $row) {
-        $mengeSeitVoll += (float)($row['menge'] ?? 0);
-        if (!empty($row['vollgetankt'])) {
-            // skip_previous: nur neuer Startpunkt, kein Verbrauch über die Lücke
-            if ($letzteVoll && empty($row['skip_previous']) && ($row['tachostand'] - $letzteVoll['tachostand']) > 0) {
-                $km = $row['tachostand'] - $letzteVoll['tachostand'];
-                $monat = substr($row['datum'], 0, 7);
-                if (!isset($verbrauchProMonat[$monat])) {
-                    $verbrauchProMonat[$monat] = ['liter' => 0.0, 'km' => 0];
-                }
-                $verbrauchProMonat[$monat]['liter'] += $mengeSeitVoll;
-                $verbrauchProMonat[$monat]['km'] += $km;
-                // Schlüssel = Datum; weitere Werte am selben Tag bekommen " #2", " #3" … angehängt
-                $schluessel = $row['datum'];
-                for ($n = 2; isset($verbrauchswerte[$schluessel]); $n++) {
-                    $schluessel = $row['datum'] . ' #' . $n;
-                }
-                $verbrauchswerte[$schluessel] = ($mengeSeitVoll / $km) * 100;
-            }
-            $letzteVoll = $row;
-            $mengeSeitVoll = 0.0;
-        }
+        $nachEinheit[$row['einheit'] ?? 'l'][] = $row;
     }
-    foreach ($verbrauchProMonat as $monat => $d) {
-        $verbrauchProMonat[$monat] = $d['km'] > 0 ? round(($d['liter'] / $d['km']) * 100, 2) : 0.0;
-    }
+    uksort($nachEinheit, fn($a, $b) => array_search($a, ['l', 'kwh', 'kg']) <=> array_search($b, ['l', 'kwh', 'kg']));
 
     foreach ($flat as $e) {
         $datum = $e['datum'] ?? '';
@@ -275,42 +253,15 @@ function getStatistikDatenFromApi($api, string $vehicleId): array
     }
     rsort($verfuegbareJahre);
 
-    // Jahresdaten: Tankstops, gekaufte Menge/Kosten, Verbrauch pro Jahr
-    foreach ($verfuegbareJahre as $y) {
-        $jahresdaten[$y] = [
-            'anzahl_tankstops' => 0,
-            'gekauft_menge' => 0.0,
-            'gekauft_ausgaben' => 0.0,
-            'verbrauch_menge' => 0.0,
-            'verbrauch_km' => 0.0,
-            'verbrauch_l100km' => 0.0,
-        ];
+    $einheiten = [];
+    foreach ($nachEinheit as $einheit => $rows) {
+        $einheiten[$einheit] = verbrauchAusTankfuellungen($rows, $verfuegbareJahre);
     }
-    $letzteVoll2 = null;
-    $mengeSeitVoll2 = 0.0;
-    foreach ($fillupsOnly as $row) {
-        $y = (int)substr($row['datum'], 0, 4);
-        if (!isset($jahresdaten[$y])) continue;
-        $jahresdaten[$y]['anzahl_tankstops']++;
-        $jahresdaten[$y]['gekauft_menge'] += (float)($row['menge'] ?? 0);
-        $jahresdaten[$y]['gekauft_ausgaben'] += (float)($row['kosten'] ?? 0);
-        $mengeSeitVoll2 += (float)($row['menge'] ?? 0);
-        if (!empty($row['vollgetankt'])) {
-            if ($letzteVoll2 && empty($row['skip_previous']) && ($row['tachostand'] - $letzteVoll2['tachostand']) > 0) {
-                $km = $row['tachostand'] - $letzteVoll2['tachostand'];
-                $jahresdaten[$y]['verbrauch_menge'] += $mengeSeitVoll2;
-                $jahresdaten[$y]['verbrauch_km'] += $km;
-            }
-            $letzteVoll2 = $row;
-            $mengeSeitVoll2 = 0.0;
-        }
-    }
-    foreach ($jahresdaten as $y => &$d) {
-        if ($d['verbrauch_km'] > 0) {
-            $d['verbrauch_l100km'] = round(($d['verbrauch_menge'] / $d['verbrauch_km']) * 100, 2);
-        }
-    }
-    unset($d);
+    // Bisherige Schlüssel: Werte der ersten Einheit (beim Plug-in-Hybrid der Kraftstoff)
+    $haupt = $einheiten ? reset($einheiten) : verbrauchAusTankfuellungen([], $verfuegbareJahre);
+    $verbrauchswerte = $haupt['verbrauchswerte'];
+    $verbrauchProMonat = $haupt['verbrauchProMonat'];
+    $jahresdaten = $haupt['jahresdaten'];
 
     return [
         'verbrauchswerte' => $verbrauchswerte,
@@ -320,7 +271,74 @@ function getStatistikDatenFromApi($api, string $vehicleId): array
         'ausgabenDaten' => $ausgabenDaten,
         'detailAusgabenDaten' => $detailAusgabenDaten,
         'verfuegbareJahre' => $verfuegbareJahre,
+        'einheiten' => $einheiten,
     ];
+}
+
+/**
+ * Verbrauch aus Tank- bzw. Ladevorgängen einer Einheit (nach Datum und Tachostand sortiert), Full-to-Full.
+ * @return array verbrauchswerte (Datum => Wert je voller Füllung), verbrauchProMonat, jahresdaten je Jahr
+ */
+function verbrauchAusTankfuellungen(array $rows, array $jahre): array
+{
+    $verbrauchswerte = [];
+    $verbrauchProMonat = [];
+    $jahresdaten = [];
+    foreach ($jahre as $y) {
+        $jahresdaten[$y] = [
+            'anzahl_tankstops' => 0,
+            'gekauft_menge' => 0.0,
+            'gekauft_ausgaben' => 0.0,
+            'verbrauch_menge' => 0.0,
+            'verbrauch_km' => 0.0,
+            'verbrauch_l100km' => 0.0,
+        ];
+    }
+    $letzteVoll = null;
+    $mengeSeitVoll = 0.0;
+    foreach ($rows as $row) {
+        $y = (int)substr($row['datum'], 0, 4);
+        if (isset($jahresdaten[$y])) {
+            $jahresdaten[$y]['anzahl_tankstops']++;
+            $jahresdaten[$y]['gekauft_menge'] += (float)($row['menge'] ?? 0);
+            $jahresdaten[$y]['gekauft_ausgaben'] += (float)($row['kosten'] ?? 0);
+        }
+        $mengeSeitVoll += (float)($row['menge'] ?? 0);
+        if (!empty($row['vollgetankt'])) {
+            // skip_previous: nur neuer Startpunkt, kein Verbrauch über die Lücke
+            if ($letzteVoll && empty($row['skip_previous']) && ($row['tachostand'] - $letzteVoll['tachostand']) > 0) {
+                $km = $row['tachostand'] - $letzteVoll['tachostand'];
+                $monat = substr($row['datum'], 0, 7);
+                if (!isset($verbrauchProMonat[$monat])) {
+                    $verbrauchProMonat[$monat] = ['liter' => 0.0, 'km' => 0];
+                }
+                $verbrauchProMonat[$monat]['liter'] += $mengeSeitVoll;
+                $verbrauchProMonat[$monat]['km'] += $km;
+                if (isset($jahresdaten[$y])) {
+                    $jahresdaten[$y]['verbrauch_menge'] += $mengeSeitVoll;
+                    $jahresdaten[$y]['verbrauch_km'] += $km;
+                }
+                // Schlüssel = Datum; weitere Werte am selben Tag bekommen " #2", " #3" … angehängt
+                $schluessel = $row['datum'];
+                for ($n = 2; isset($verbrauchswerte[$schluessel]); $n++) {
+                    $schluessel = $row['datum'] . ' #' . $n;
+                }
+                $verbrauchswerte[$schluessel] = ($mengeSeitVoll / $km) * 100;
+            }
+            $letzteVoll = $row;
+            $mengeSeitVoll = 0.0;
+        }
+    }
+    foreach ($verbrauchProMonat as $monat => $d) {
+        $verbrauchProMonat[$monat] = $d['km'] > 0 ? round(($d['liter'] / $d['km']) * 100, 2) : 0.0;
+    }
+    foreach ($jahresdaten as $y => &$d) {
+        if ($d['verbrauch_km'] > 0) {
+            $d['verbrauch_l100km'] = round(($d['verbrauch_menge'] / $d['verbrauch_km']) * 100, 2);
+        }
+    }
+    unset($d);
+    return ['verbrauchswerte' => $verbrauchswerte, 'verbrauchProMonat' => $verbrauchProMonat, 'jahresdaten' => $jahresdaten];
 }
 
 /** Filtert Statistikdaten nach Jahr (für Ausgaben-Tab). */
@@ -401,6 +419,8 @@ function fahrzeugDatenAusPost(array $post): array
         return $v === '' ? null : $v;
     };
     $tank = trim(str_replace(',', '.', (string)($post['tankCapacity'] ?? '')));
+    // Akku nur beim Plug-in-Hybrid (Elektroautos tragen ihren Akku im Feld für den Tank ein)
+    $akku = ($post['fuelType'] ?? '') === 'phev' ? trim(str_replace(',', '.', (string)($post['batteryCapacity'] ?? ''))) : '';
 
     return [
         'name' => trim((string)($post['name'] ?? '')),
@@ -410,6 +430,7 @@ function fahrzeugDatenAusPost(array $post): array
         'year' => $optionalInt('year'),
         'odometerKm' => $optionalInt('odometerKm'),
         'tankCapacity' => $tank === '' ? null : (float)$tank,
+        'batteryCapacity' => $akku === '' ? null : (float)$akku,
     ];
 }
 

@@ -7,8 +7,8 @@ const { sendUserMail, loadDefaultSmtp, withDefaultSmtp } = require('./mail');
 const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
 const CATEGORY_NAMES = { Tankfuellung: 'Tankfüllung', TUV: 'TÜV' };
 const UNITS = { l: 'l', kwh: 'kWh', kg: 'kg' };
-// Bezeichnung der Tank- bzw. Ladevorgänge passend zur Antriebsart (wie verbrauchsBegriffe() im Frontend)
-const vorgaengeName = (fuelType) => (fuelType === 'electric' ? 'Ladevorgänge' : 'Tankfüllungen');
+// Bezeichnung der Tank- bzw. Ladevorgänge passend zur Einheit (wie verbrauchsBegriffe() im Frontend)
+const vorgaengeName = (fuelType, unit) => (fuelType === 'electric' || unit === 'kwh' ? 'Ladevorgänge' : 'Tankfüllungen');
 
 const fmt = (n, digits = 2) => Number(n).toLocaleString('de-DE', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 const fmtDate = (iso) => iso.split('-').reverse().join('.');
@@ -73,9 +73,9 @@ async function buildMonthlyReport(pool, settings, year, month) {
 
   for (const v of await loadVehicles(pool, settings.user_id)) {
     const f = await pool.query(
-      `SELECT COUNT(*)::int AS n, COALESCE(SUM(amount), 0) AS amount, COALESCE(SUM(total_cost_eur), 0) AS cost,
-              MAX(unit) AS unit
-       FROM fillups WHERE user_id = $1 AND vehicle_id = $2 AND filled_at >= $3 AND filled_at < $4`,
+      `SELECT unit, COUNT(*)::int AS n, COALESCE(SUM(amount), 0) AS amount, COALESCE(SUM(total_cost_eur), 0) AS cost
+       FROM fillups WHERE user_id = $1 AND vehicle_id = $2 AND filled_at >= $3 AND filled_at < $4
+       GROUP BY unit ORDER BY unit = 'kwh', unit`,
       [settings.user_id, v.id, start, end]
     );
     const e = await pool.query(
@@ -91,27 +91,35 @@ async function buildMonthlyReport(pool, settings, year, month) {
     );
     const stats = await getVehicleStats(pool, settings.user_id, v.id);
     const segs = (stats.segments || []).filter((s) => new Date(s.full_at) >= start && new Date(s.full_at) < end);
-    const segKm = segs.reduce((a, s) => a + Number(s.km), 0);
-    const segAmount = segs.reduce((a, s) => a + Number(s.liters_segment), 0);
     const reminders = (await getVehicleReminders(pool, settings.user_id, v.id, settings.reminder_days))
       .filter((r) => r.status === 'bald' || r.status === 'ueberfaellig');
 
-    const fuel = f.rows[0];
+    // Je Einheit eine Zeile (Plug-in-Hybrid: Tankfüllungen in Litern und Ladevorgänge in kWh)
+    const energy = f.rows.map((r) => {
+      const us = segs.filter((s) => s.unit === r.unit);
+      const km = us.reduce((a, s) => a + Number(s.km), 0);
+      const amount = us.reduce((a, s) => a + Number(s.liters_segment), 0);
+      return {
+        label: vorgaengeName(v.fuel_type, r.unit),
+        unit: UNITS[r.unit] || 'l',
+        fillups: r.n,
+        amount: Number(r.amount),
+        cost: Number(r.cost),
+        consumption: km > 0 ? (amount / km) * 100 : null
+      };
+    });
+    const fuelCost = energy.reduce((a, x) => a + x.cost, 0);
     const otherCost = e.rows.reduce((a, r) => a + Number(r.cost), 0);
-    const cost = Number(fuel.cost) + otherCost;
+    const cost = fuelCost + otherCost;
     total += cost;
     const { end_odo: endOdo, start_odo: startOdo } = odo.rows[0];
     sections.push({
       name: v.name,
-      fillupLabel: vorgaengeName(v.fuel_type),
-      unit: UNITS[fuel.unit] || 'l',
-      fillups: fuel.n,
-      amount: Number(fuel.amount),
-      fuelCost: Number(fuel.cost),
+      energy,
+      fillups: energy.reduce((a, x) => a + x.fillups, 0),
       expenses: e.rows.map((r) => ({ category: CATEGORY_NAMES[r.category] || r.category, cost: Number(r.cost) })),
       cost,
       km: endOdo !== null && startOdo !== null ? endOdo - startOdo : null,
-      consumption: segKm > 0 ? (segAmount / segKm) * 100 : null,
       reminders
     });
   }
@@ -130,11 +138,15 @@ function reportMail(report) {
   for (const s of active) {
     const leer = s.fillups === 0 && s.expenses.length === 0;
     const rows = leer ? [['Einträge', 'keine in diesem Monat']] : [
-      [s.fillupLabel, `${s.fillups} (${fmt(s.amount)} ${s.unit}, ${fmt(s.fuelCost)} €)`],
+      ...s.energy.map((x) => [x.label, `${x.fillups} (${fmt(x.amount)} ${x.unit}, ${fmt(x.cost)} €)`]),
       ...s.expenses.map((x) => [x.category, `${fmt(x.cost)} €`]),
       ['Kosten gesamt', `${fmt(s.cost)} €`],
       ['Gefahrene Strecke', s.km !== null ? `${fmt(s.km, 0)} km` : '–'],
-      ['Ø Verbrauch', s.consumption !== null ? `${fmt(s.consumption)} ${s.unit}/100km` : '–']
+      // Ohne Tank-/Ladevorgang im Monat bleibt es bei einer Zeile mit „–“
+      ...(s.energy.length ? s.energy : [{ consumption: null }]).map((x) => [
+        s.energy.length > 1 ? `Ø Verbrauch (${x.unit})` : 'Ø Verbrauch',
+        x.consumption !== null ? `${fmt(x.consumption)} ${x.unit}/100km` : '–'
+      ])
     ];
     const due = s.reminders.map((r) => `${r.title}: ${r.status === 'ueberfaellig' ? 'überfällig' : 'fällig am ' + fmtDate(r.due_date)}`);
     textParts.push(`\n${s.name}\n${rows.map(([k, v]) => `  ${k}: ${v}`).join('\n')}${due.length ? '\n  Termine: ' + due.join(', ') : ''}\n`);
