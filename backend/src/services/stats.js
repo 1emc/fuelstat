@@ -26,15 +26,16 @@ async function getVehicleStats(pool, userId, vehicleId) {
   const segments = await pool.query(
     `
     WITH ordered AS (
-      SELECT id, filled_at, odometer_km, amount, unit, is_full, skip_previous
+      -- Reihenfolge: Zeitpunkt, bei gleichem Zeitpunkt (z. B. importierte Ladungen eines Tages) der Tachostand
+      SELECT id, filled_at, odometer_km, amount, unit, is_full, skip_previous,
+        ROW_NUMBER() OVER (ORDER BY filled_at, odometer_km, created_at) AS rn
       FROM fillups
       WHERE user_id=$1 AND vehicle_id=$2
-      ORDER BY filled_at
     ),
     fulls AS (
       SELECT *,
-        LAG(odometer_km) OVER (ORDER BY filled_at) AS prev_full_odo,
-        LAG(filled_at) OVER (ORDER BY filled_at) AS prev_full_at
+        LAG(odometer_km) OVER (ORDER BY rn) AS prev_full_odo,
+        LAG(rn) OVER (ORDER BY rn) AS prev_full_rn
       FROM ordered
       WHERE is_full = true
     ),
@@ -42,21 +43,22 @@ async function getVehicleStats(pool, userId, vehicleId) {
       SELECT
         f.id AS full_id,
         f.filled_at AS full_at,
+        f.rn,
         (f.odometer_km - f.prev_full_odo) AS km,
         (
           SELECT COALESCE(SUM(o.amount),0)
           FROM ordered o
-          WHERE o.filled_at > f.prev_full_at AND o.filled_at <= f.filled_at
+          WHERE o.rn > f.prev_full_rn AND o.rn <= f.rn
         ) AS liters_segment
       FROM fulls f
       -- skip_previous: Vollbetankung ist nur neuer Startpunkt (vorherige Tankfüllungen fehlen)
-      WHERE f.prev_full_at IS NOT NULL AND f.skip_previous = false
+      WHERE f.prev_full_rn IS NOT NULL AND f.skip_previous = false
     )
     SELECT
       full_id, full_at, km, liters_segment,
       CASE WHEN km > 0 THEN ROUND(((liters_segment / km) * 100)::numeric, 2) ELSE NULL END AS l_per_100km
     FROM seg
-    ORDER BY full_at DESC
+    ORDER BY rn DESC
     `,
     [userId, vehicleId]
   );
