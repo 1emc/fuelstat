@@ -4,252 +4,391 @@ include_once __DIR__ . '/../includes/functions.php';
 include_once __DIR__ . '/../includes/api_helpers.php';
 
 $selectedYear = isset($_GET['jahr']) && $_GET['jahr'] !== '' ? (int)$_GET['jahr'] : null;
+$istStrom = $einheitKurz === 'kWh';
+$zahl = fn($wert, int $stellen = 2) => number_format((float)$wert, $stellen, ',', '.');
 
-if ($selectedYear !== null) {
-    $d = getStatistikDatenFromApiForYear($api, $fahrzeug_id, $selectedYear);
-    $ausgabenDaten = $d['ausgabenDaten'];
-    $detailDaten = $d['detailAusgabenDaten'];
-    $gesamtKosten = $d['gesamtKostenForYear'] ?? array_sum($ausgabenDaten);
-    $anzahlMonate = $d['anzahlMonateForYear'] ?? 0;
-} else {
-    $d = getStatistikDatenFromApi($api, $fahrzeug_id);
-    $ausgabenDaten = $d['ausgabenDaten'];
-    $detailDaten = $d['detailAusgabenDaten'];
-    $gesamtKosten = array_sum($ausgabenDaten);
-    $anzahlMonate = count($d['kostenProMonat']);
-}
-$ausgabenDaten = array_filter($ausgabenDaten, fn($sum) => $sum > 0);
-$kategorien = array_keys($ausgabenDaten);
-$beträge = array_values($ausgabenDaten);
-$durchschnittMonat = $anzahlMonate > 0 ? $gesamtKosten / $anzahlMonate : 0;
-$topKategorie = '-';
-$topSumme = 0;
-foreach ($detailDaten as $k => $daten) {
-    if ($daten['summe'] > $topSumme) {
-        $topKategorie = $k;
-        $topSumme = $daten['summe'];
+// Alle Einträge (Tankfüllungen und Ausgaben) flach, ohne Fahrten
+$alle = [];
+foreach (getMergedEintraegeFromApi($api, $fahrzeug_id)['eintraege'] as $monatsEintraege) {
+    foreach ($monatsEintraege as $e) {
+        if (($e['kategorie'] ?? '') !== 'Fahrt' && !empty($e['datum'])) {
+            $alle[] = $e;
+        }
     }
 }
-$jahre = $d['verfuegbareJahre'] ?? [];
-$currentOdo = null;
-try {
-    $stats = $api->getVehicleStats($fahrzeug_id);
-    $currentOdo = $stats['currentOdo'] ?? null;
-} catch (Throwable $e) {
-}
-$gefahreneKm = $currentOdo !== null ? $currentOdo : 0;
-$kostenProKm = $gefahreneKm > 0 ? $gesamtKosten / $gefahreneKm : 0;
+usort($alle, fn($a, $b) => strcmp($a['datum'], $b['datum']));
+$jahre = array_values(array_unique(array_map(fn($e) => (int)substr($e['datum'], 0, 4), $alle)));
+rsort($jahre);
 
-// Farben für Kategorien definieren
-function getCategoryColor($kategorie) {
-    $colors = [
-        'Tankfuellung' => 'rgba(54, 162, 235, 0.7)',    // Blau
-        'Versicherung' => 'rgba(255, 99, 132, 0.7)',    // Rot
-        'Werkstatt'    => 'rgba(255, 206, 86, 0.7)',    // Gelb
-        'Inspektion'   => 'rgba(75, 192, 192, 0.7)',    // Türkis
-        'Steuer'       => 'rgba(153, 102, 255, 0.7)',   // Lila
-        'Reparatur'    => 'rgba(255, 159, 64, 0.7)',    // Orange
-        'Reifen'       => 'rgba(201, 203, 207, 0.7)',   // Grau
-        'TUV'          => 'rgba(255, 99, 71, 0.7)',     // Tomate
-        'Wartung'      => 'rgba(60, 179, 113, 0.7)',    // Grün
-        'Dekor'        => 'rgba(238, 130, 238, 0.7)',   // Violett
-        'Verbrauch'    => 'rgba(106, 90, 205, 0.7)',    // Slate Blue
-        'Fahrt'        => 'rgba(30, 144, 255, 0.7)'     // DodgerBlue
-    ];
-    return $colors[$kategorie] ?? 'rgba(169, 169, 169, 0.7)'; // Standard: Dunkelgrau
+$imZeitraum = fn($e) => $selectedYear === null || (int)substr($e['datum'], 0, 4) === $selectedYear;
+$eintraege = array_values(array_filter($alle, $imZeitraum));
+
+// Kategorien zu Gruppen zusammenfassen (Kostenstruktur und Jahresvergleich)
+$gruppen = [
+    'kraftstoff' => [$istStrom ? 'Laden' : 'Tanken', $istStrom ? 'fa-plug' : 'fa-gas-pump', '#0d6efd', ['Tankfuellung']],
+    'fix' => ['Versicherung & Steuer', 'fa-shield-alt', '#6f42c1', ['Versicherung', 'Steuer']],
+    'wartung' => ['Werkstatt & Wartung', 'fa-tools', '#fd7e14', ['Werkstatt', 'Inspektion', 'Reparatur', 'Wartung', 'Reifen', 'TUV']],
+    'sonstiges' => ['Sonstiges', 'fa-ellipsis', '#20c997', []],
+];
+$gruppeVon = function (string $kategorie) use ($gruppen): string {
+    foreach ($gruppen as $schluessel => [, , , $kategorien]) {
+        if (in_array($kategorie, $kategorien, true)) {
+            return $schluessel;
+        }
+    }
+    return 'sonstiges';
+};
+$kategorieName = fn(string $k) => $k === 'Tankfuellung' && $istStrom ? 'Laden' : getKategorieName($k);
+
+// Farben je Kategorie (Diagramm und Liste)
+$kategorieFarben = [
+    'Tankfuellung' => '#0d6efd', 'Versicherung' => '#6f42c1', 'Steuer' => '#a370f7', 'Werkstatt' => '#fd7e14',
+    'Inspektion' => '#ffc107', 'Reparatur' => '#dc3545', 'Wartung' => '#e8590c', 'Reifen' => '#6c757d',
+    'TUV' => '#d63384', 'Dekor' => '#20c997',
+];
+
+// Summen je Kategorie und Gruppe
+$kategorien = [];
+$gruppenSummen = array_fill_keys(array_keys($gruppen), 0.0);
+foreach ($eintraege as $e) {
+    $k = $e['kategorie'];
+    $kategorien[$k] ??= ['summe' => 0.0, 'anzahl' => 0];
+    $kategorien[$k]['summe'] += (float)$e['kosten'];
+    $kategorien[$k]['anzahl']++;
+    $gruppenSummen[$gruppeVon($k)] += (float)$e['kosten'];
+}
+uasort($kategorien, fn($a, $b) => $b['summe'] <=> $a['summe']);
+$gesamt = array_sum(array_column($kategorien, 'summe'));
+
+// Gefahrene Kilometer im Zeitraum aus den Tachoständen
+$tachoBis = function (string $bisDatum) use ($alle): ?int {
+    $werte = array_map(fn($e) => (int)$e['tachostand'], array_filter($alle, fn($e) => (int)($e['tachostand'] ?? 0) > 0 && $e['datum'] < $bisDatum));
+    return $werte ? max($werte) : null;
+};
+// Kilometer passend zu den erfassten Ausgaben: ab dem ersten erfassten Tachostand, nicht ab Anschaffung
+// (sonst würden Kilometer ohne erfasste Kosten den Wert pro km verfälschen)
+$kmImJahr = function (int $jahr) use ($alle, $tachoBis): ?int {
+    $ende = $tachoBis(($jahr + 1) . '-01-01');
+    $start = $tachoBis($jahr . '-01-01');
+    if ($start === null) {
+        $imJahr = array_map(fn($e) => (int)$e['tachostand'], array_filter($alle, fn($e) => (int)($e['tachostand'] ?? 0) > 0 && (int)substr($e['datum'], 0, 4) === $jahr));
+        $start = $imJahr ? min($imJahr) : null;
+    }
+    return $ende !== null && $start !== null && $ende > $start ? $ende - $start : null;
+};
+if ($selectedYear !== null) {
+    $km = $kmImJahr($selectedYear);
+} else {
+    $ende = $tachoBis('9999-12-31');
+    $odos = array_map(fn($e) => (int)$e['tachostand'], array_filter($alle, fn($e) => (int)($e['tachostand'] ?? 0) > 0));
+    $start = $odos ? min($odos) : null;
+    $km = $ende !== null && $start !== null && $ende > $start ? $ende - $start : null;
 }
 
-// Farben für das Diagramm vorbereiten
-$farben = array_map('getCategoryColor', $kategorien);
+// Monate im Zeitraum: vom ersten Eintrag bis heute bzw. bis Jahresende (auch Monate ohne Ausgaben zählen)
+$monate = 0;
+if ($alle) {
+    $erster = new DateTime(substr($alle[0]['datum'], 0, 7) . '-01');
+    $von = $selectedYear !== null ? max($erster, new DateTime($selectedYear . '-01-01')) : $erster;
+    $bis = $selectedYear !== null && $selectedYear < (int)date('Y') ? new DateTime($selectedYear . '-12-01') : new DateTime(date('Y-m-01'));
+    $monate = $bis >= $von ? ((int)$bis->format('Y') - (int)$von->format('Y')) * 12 + (int)$bis->format('n') - (int)$von->format('n') + 1 : 0;
+}
+$proMonat = $monate > 0 ? $gesamt / $monate : null;
+$proKm = $km ? $gesamt / $km : null;
+$wartungPro10k = $km ? $gruppenSummen['wartung'] / $km * 10000 : null;
+$groessteKategorie = array_key_first($kategorien);
+// Leere Gruppen (z. B. "Sonstiges" ohne Einträge) nicht anzeigen
+$sichtbareGruppen = array_filter($gruppen, fn($g) => $gruppenSummen[$g] > 0, ARRAY_FILTER_USE_KEY);
+
+// Ausgaben pro Monat, gestapelt nach Gruppe
+$monatsReihen = [];
+foreach ($eintraege as $e) {
+    $m = substr($e['datum'], 0, 7);
+    $monatsReihen[$m] ??= array_fill_keys(array_keys($gruppen), 0.0);
+    $monatsReihen[$m][$gruppeVon($e['kategorie'])] += (float)$e['kosten'];
+}
+ksort($monatsReihen);
+if ($selectedYear !== null) {
+    // Ganzes Jahr zeigen, auch Monate ohne Ausgaben
+    for ($i = 1; $i <= 12; $i++) {
+        $monatsReihen[sprintf('%d-%02d', $selectedYear, $i)] ??= array_fill_keys(array_keys($gruppen), 0.0);
+    }
+    ksort($monatsReihen);
+}
+
+// Jahresvergleich (nur bei "Alle Jahre")
+$jahresVergleich = [];
+$vergleichsGruppen = $gruppen;
+if ($selectedYear === null) {
+    foreach ($jahre as $j) {
+        $zeile = array_fill_keys(array_keys($gruppen), 0.0);
+        foreach ($alle as $e) {
+            if ((int)substr($e['datum'], 0, 4) === $j) {
+                $zeile[$gruppeVon($e['kategorie'])] += (float)$e['kosten'];
+            }
+        }
+        $summe = array_sum($zeile);
+        $kmJahr = $kmImJahr($j);
+        $jahresVergleich[$j] = ['gruppen' => $zeile, 'summe' => $summe, 'km' => $kmJahr, 'pro_km' => $kmJahr ? $summe / $kmJahr : null];
+    }
+}
+$vergleichsGruppen = array_filter($gruppen, fn($g) => array_sum(array_map(fn($z) => $z['gruppen'][$g], $jahresVergleich)) > 0, ARRAY_FILTER_USE_KEY);
+
+// Größte Einzelausgaben (ohne Tankfüllungen)
+$groesste = array_filter($eintraege, fn($e) => $e['kategorie'] !== 'Tankfuellung');
+usort($groesste, fn($a, $b) => (float)$b['kosten'] <=> (float)$a['kosten']);
+$groesste = array_slice($groesste, 0, 5);
+
+$zeitraumText = $selectedYear !== null ? 'im Jahr ' . $selectedYear : 'gesamt';
 ?>
 
-<div class="mt-4">
-    <h3>Ausgabenanalyse</h3>
-
-    <div class="row mb-4">
-        <div class="col-md-4 mb-2">
-            <div class="card p-2 text-center">
-                <strong>Gesamtausgaben</strong><br>
-                <span><?php echo number_format($gesamtKosten, 2, ',', '.'); ?> €</span>
-            </div>
-        </div>
-        <div class="col-md-4 mb-2">
-            <div class="card p-2 text-center">
-                <strong>Ø Ausgaben pro Monat</strong><br>
-                <span><?php echo number_format($durchschnittMonat, 2, ',', '.'); ?> €</span>
-            </div>
-        </div>
-        <div class="col-md-4 mb-2">
-            <div class="card p-2 text-center">
-                <strong>Größte Kostenkategorie</strong><br>
-                <span><?php echo htmlspecialchars(getKategorieName($topKategorie)); ?></span>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Filter nach Jahr -->
-    <form method="get" action="" class="mb-3">
+<div class="mt-3 mt-lg-4">
+    <!-- Zeitraum -->
+    <form method="get" action="fahrzeug_detail.php#ausgaben" class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
         <input type="hidden" name="id" value="<?= htmlspecialchars($fahrzeug_id) ?>">
-        <div class="row align-items-center">
-            <div class="col-auto">
-                <label for="jahr" class="form-label">Jahr:</label>
-            </div>
-            <div class="col-auto">
-                <select name="jahr" id="jahr" class="form-select" onchange="this.form.submit()">
-                    <option value="">Alle Jahre</option>
-                    <?php
-                    foreach ($jahre as $jahrOption) {
-                        $selected = ($selectedYear == $jahrOption) ? 'selected' : '';
-                        echo '<option value="' . $jahrOption . '" ' . $selected . '>' . $jahrOption . '</option>';
-                    }
-                    ?>
-                </select>
-            </div>
-        </div>
+        <h3 class="h5 mb-0">Ausgaben <?= htmlspecialchars($zeitraumText) ?></h3>
+        <select name="jahr" class="form-select w-auto" aria-label="Zeitraum" onchange="this.form.submit()">
+            <option value="">Alle Jahre</option>
+            <?php foreach ($jahre as $j): ?>
+                <option value="<?= $j ?>" <?= $selectedYear === $j ? 'selected' : '' ?>><?= $j ?></option>
+            <?php endforeach; ?>
+        </select>
+        <noscript><button class="btn btn-outline-secondary">Anzeigen</button></noscript>
     </form>
 
-    <!-- Container für das Diagramm mit fester Höhe -->
-    <div class="chart-container" style="position: relative; height:300px; width:100%;">
-        <canvas id="ausgabenChart"></canvas>
+    <?php if (!$eintraege): ?>
+        <div class="card border-0 shadow-sm text-center">
+            <div class="card-body p-5">
+                <i class="fas fa-euro-sign fa-2x mb-3"></i>
+                <p class="mb-0 text-body-secondary"><?= $selectedYear !== null ? 'Im Jahr ' . $selectedYear . ' gibt es keine Ausgaben.' : 'Noch keine Ausgaben erfasst. Tankfüllungen, Versicherung, Werkstatt und Co. tauchen hier automatisch auf.' ?></p>
+            </div>
+        </div>
+    <?php else: ?>
+
+    <!-- Kennzahlen -->
+    <div class="row g-2 g-md-3 mb-3">
+        <div class="col-6 col-lg-3">
+            <div class="kennzahl">
+                <div class="small text-body-secondary">Ausgaben</div>
+                <div class="kennzahl-wert"><?= $zahl($gesamt) ?> <small class="fw-normal">€</small></div>
+                <div class="small text-body-secondary"><?= count($eintraege) ?> <?= count($eintraege) === 1 ? 'Eintrag' : 'Einträge' ?></div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="kennzahl">
+                <div class="small text-body-secondary">Ø pro Monat</div>
+                <div class="kennzahl-wert"><?= $proMonat !== null ? $zahl($proMonat) . ' <small class="fw-normal">€</small>' : '—' ?></div>
+                <div class="small text-body-secondary"><?= $monate ?> <?= $monate === 1 ? 'Monat' : 'Monate' ?></div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="kennzahl" title="Alle Ausgaben geteilt durch die gefahrenen Kilometer im Zeitraum">
+                <div class="small text-body-secondary">Kosten pro km</div>
+                <div class="kennzahl-wert"><?= $proKm !== null ? $zahl($proKm) . ' <small class="fw-normal">€/km</small>' : '—' ?></div>
+                <div class="small text-body-secondary"><?= $km ? $zahl($km, 0) . ' km gefahren' : 'Tachostände fehlen' ?></div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="kennzahl">
+                <div class="small text-body-secondary">Größter Posten</div>
+                <div class="kennzahl-wert text-truncate"><?= htmlspecialchars($kategorieName($groessteKategorie)) ?></div>
+                <div class="small text-body-secondary"><?= $gesamt > 0 ? $zahl($kategorien[$groessteKategorie]['summe'] / $gesamt * 100, 0) . ' % der Ausgaben' : '' ?></div>
+            </div>
+        </div>
     </div>
 
-    <!-- Detailtabelle -->
-    <h4 class="mt-4">Aufschlüsselung der Kategorien</h4>
-    <div class="table-responsive">
-    <table class="table table-bordered">
-        <thead>
-            <tr>
-                <th>Kategorie</th>
-                <th>Anzahl Einträge</th>
-                <th>Prozentualer Anteil</th>
-                <th>Kosten Summe (€)</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php foreach ($detailDaten as $kategorie => $daten): ?>
-            <tr>
-                <td><?php echo htmlspecialchars(getKategorieName($kategorie)); ?></td>
-                <td><?php echo $daten['anzahl']; ?></td>
-                <td><?php echo $gesamtKosten > 0 ? number_format(($daten['summe'] / $gesamtKosten) * 100, 2, ',', '.') : '0,00'; ?>%</td>
-                <td><?php echo number_format($daten['summe'], 2, ',', '.'); ?> €</td>
-            </tr>
+    <!-- Kostenstruktur: ein Balken, aufgeteilt nach Gruppen -->
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body">
+            <h3 class="h6 mb-3">Kostenstruktur</h3>
+            <div class="progress-stacked kostenbalken mb-3" role="img" aria-label="Kostenstruktur">
+                <?php foreach ($gruppen as $g => [$name, , $farbe]): if ($gruppenSummen[$g] <= 0) continue; ?>
+                    <div class="progress" style="width: <?= round($gruppenSummen[$g] / $gesamt * 100, 2) ?>%" title="<?= htmlspecialchars($name) ?>">
+                        <div class="progress-bar" style="background-color: <?= $farbe ?>"></div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+            <div class="row g-2">
+                <?php foreach ($sichtbareGruppen as $g => [$name, $icon, $farbe]): ?>
+                <div class="col-6 col-lg-3">
+                    <div class="d-flex align-items-start gap-2">
+                        <span class="statistik-icon flex-shrink-0" style="background-color: <?= $farbe ?>26; color: <?= $farbe ?>"><i class="fas <?= $icon ?>"></i></span>
+                        <div class="min-w-0">
+                            <div class="small text-body-secondary text-truncate"><?= htmlspecialchars($name) ?></div>
+                            <div class="fw-semibold"><?= $zahl($gruppenSummen[$g]) ?> €</div>
+                            <div class="small text-body-secondary">
+                                <?= $gesamt > 0 ? $zahl($gruppenSummen[$g] / $gesamt * 100, 0) . ' %' : '' ?>
+                                <?php if ($g === 'wartung' && $wartungPro10k !== null): ?> · <?= $zahl($wartungPro10k, 0) ?> € / 10.000 km<?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <!-- Kategorien -->
+        <div class="col-lg-5">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <h3 class="h6 mb-3">Nach Kategorie</h3>
+                    <div class="diagramm diagramm-klein mb-3"><canvas id="kategorieChart"></canvas></div>
+                    <ul class="list-unstyled mb-0">
+                        <?php foreach ($kategorien as $k => $d): $anteil = $gesamt > 0 ? $d['summe'] / $gesamt * 100 : 0; $farbe = $kategorieFarben[$k] ?? '#adb5bd'; ?>
+                        <li class="mb-2">
+                            <div class="d-flex justify-content-between align-items-baseline gap-2 small">
+                                <span class="text-truncate"><i class="fas <?= getCategoryIcon($k) ?> fa-fw me-1" style="color: <?= $farbe ?>"></i><?= htmlspecialchars($kategorieName($k)) ?> <span class="text-body-secondary">(<?= $d['anzahl'] ?>)</span></span>
+                                <span class="text-nowrap fw-semibold"><?= $zahl($d['summe']) ?> €</span>
+                            </div>
+                            <div class="progress mt-1" style="height: 4px;" role="presentation">
+                                <div class="progress-bar" style="width: <?= round($anteil, 2) ?>%; background-color: <?= $farbe ?>"></div>
+                            </div>
+                        </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <!-- Verlauf -->
+        <div class="col-lg-7">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <h3 class="h6 mb-3">Ausgaben pro Monat <small class="text-body-secondary fw-normal">€</small></h3>
+                    <div class="diagramm diagramm-hoch"><canvas id="monatChart"></canvas></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <?php if ($groesste): ?>
+    <!-- Größte Einzelausgaben -->
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-header bg-transparent py-3"><h3 class="h6 mb-0">Größte Einzelausgaben <small class="text-body-secondary fw-normal">ohne <?= $istStrom ? 'Laden' : 'Tanken' ?></small></h3></div>
+        <ul class="list-group list-group-flush">
+            <?php foreach ($groesste as $e): $farbe = $kategorieFarben[$e['kategorie']] ?? '#adb5bd'; ?>
+            <li class="list-group-item d-flex align-items-center gap-3 py-3">
+                <span class="statistik-icon flex-shrink-0" style="background-color: <?= $farbe ?>26; color: <?= $farbe ?>"><i class="fas <?= getCategoryIcon($e['kategorie']) ?>"></i></span>
+                <div class="flex-grow-1 min-w-0">
+                    <div class="fw-semibold text-truncate"><?= htmlspecialchars($e['beschreibung'] ?: $kategorieName($e['kategorie'])) ?></div>
+                    <div class="small text-body-secondary text-truncate"><?= date('d.m.Y', strtotime($e['datum'])) ?> · <?= htmlspecialchars($kategorieName($e['kategorie'])) ?><?= !empty($e['standort']) ? ' · ' . htmlspecialchars($e['standort']) : '' ?></div>
+                </div>
+                <span class="fw-semibold text-nowrap"><?= $zahl($e['kosten']) ?> €</span>
+            </li>
             <?php endforeach; ?>
-        </tbody>
-    </table>
+        </ul>
     </div>
+    <?php endif; ?>
 
-    <!-- Zusätzliche Kostenanalysen -->
-    <div class="row mt-4">
-        <!-- Fixkosten vs. variable Kosten -->
-        <div class="col-md-4 mb-4">
-            <div class="card h-100">
-                <div class="card-body">
-                    <h5 class="card-title">Kostenstruktur</h5>
-                    <?php
-                    // Fixkosten (Versicherung, Steuer, TÜV)
-                    $fixkosten = 0;
-                    $fixkategorien = ['Versicherung', 'Steuer', 'TUV'];
-                    foreach ($detailDaten as $kategorie => $daten) {
-                        if (in_array($kategorie, $fixkategorien)) {
-                            $fixkosten += $daten['summe'];
-                        }
-                    }
-                    $variableKosten = $gesamtKosten - $fixkosten;
-                    ?>
-                    <canvas id="kostenstrukturChart" style="max-height:200px;"></canvas>
-                    <div class="mt-3">
-                        <p class="mb-1">Fixkosten: <?php echo number_format($fixkosten, 2, ',', '.'); ?> €</p>
-                        <p class="mb-1">Variable Kosten: <?php echo number_format($variableKosten, 2, ',', '.'); ?> €</p>
-                    </div>
-                </div>
-            </div>
+    <?php if (count($jahresVergleich) > 1): ?>
+    <!-- Jahresvergleich: PC als Tabelle, Handy als Liste -->
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-header bg-transparent py-3"><h3 class="h6 mb-0">Jahresvergleich</h3></div>
+        <div class="table-responsive d-none d-md-block">
+            <table class="table table-hover align-middle mb-0 jahrestabelle">
+                <thead>
+                    <tr>
+                        <th>Jahr</th>
+                        <?php foreach ($vergleichsGruppen as [$name]): ?><th class="text-end"><?= htmlspecialchars($name) ?></th><?php endforeach; ?>
+                        <th class="text-end">Gesamt</th>
+                        <th class="text-end">Strecke</th>
+                        <th class="text-end">€/km</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($jahresVergleich as $j => $z): ?>
+                    <tr>
+                        <th scope="row"><?= $j ?></th>
+                        <?php foreach (array_keys($vergleichsGruppen) as $g): ?><td class="text-end"><?= $z['gruppen'][$g] > 0 ? $zahl($z['gruppen'][$g]) . ' €' : '—' ?></td><?php endforeach; ?>
+                        <td class="text-end fw-semibold"><?= $zahl($z['summe']) ?> €</td>
+                        <td class="text-end"><?= $z['km'] ? $zahl($z['km'], 0) . ' km' : '—' ?></td>
+                        <td class="text-end"><?= $z['pro_km'] !== null ? $zahl($z['pro_km']) . ' €' : '—' ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
         </div>
-
-        <!-- Kosten pro Kilometer -->
-        <div class="col-md-4 mb-4">
-            <div class="card h-100">
-                <div class="card-body">
-                    <h5 class="card-title">Kosten pro Kilometer</h5>
-                    <div class="text-center">
-                        <h3 class="mb-0"><?= number_format($kostenProKm, 2, ',', '.') ?> €/km</h3>
-                        <p class="text-muted mb-0">bei <?= number_format($gefahreneKm, 0, ',', '.') ?> km</p>
-                    </div>
+        <div class="list-group list-group-flush d-md-none">
+            <?php foreach ($jahresVergleich as $j => $z): ?>
+            <div class="list-group-item py-3">
+                <div class="d-flex justify-content-between align-items-baseline mb-2">
+                    <span class="fw-semibold fs-5"><?= $j ?></span>
+                    <span class="fw-semibold"><?= $zahl($z['summe']) ?> €</span>
+                </div>
+                <div class="row row-cols-2 g-2 small">
+                    <?php foreach ($vergleichsGruppen as $g => [$name]): ?>
+                    <div><div class="text-body-secondary"><?= htmlspecialchars($name) ?></div><?= $zahl($z['gruppen'][$g]) ?> €</div>
+                    <?php endforeach; ?>
+                    <div><div class="text-body-secondary">Strecke</div><?= $z['km'] ? $zahl($z['km'], 0) . ' km' : '—' ?></div>
+                    <div><div class="text-body-secondary">Kosten pro km</div><?= $z['pro_km'] !== null ? $zahl($z['pro_km']) . ' €' : '—' ?></div>
                 </div>
             </div>
-        </div>
-
-        <!-- Wartungskosten pro 10.000 km -->
-        <div class="col-md-4 mb-4">
-            <div class="card h-100">
-                <div class="card-body">
-                    <h5 class="card-title">Wartungskosten pro 10.000 km</h5>
-                    <?php
-                    // Wartungskosten (Wartung, Inspektion, Reparatur)
-                    $wartungskosten = 0;
-                    $wartungskategorien = ['Wartung', 'Inspektion', 'Reparatur'];
-                    foreach ($detailDaten as $kategorie => $daten) {
-                        if (in_array($kategorie, $wartungskategorien)) {
-                            $wartungskosten += $daten['summe'];
-                        }
-                    }
-                    $wartungskostenPro10k = $gefahreneKm > 0 ? ($wartungskosten / (float)$gefahreneKm) * 10000 : 0;
-                    ?>
-                    <div class="text-center">
-                        <h3 class="mb-0"><?php echo number_format($wartungskostenPro10k, 2, ',', '.'); ?> €</h3>
-                        <p class="text-muted mb-0">pro 10.000 km</p>
-                    </div>
-                </div>
-            </div>
+            <?php endforeach; ?>
         </div>
     </div>
+    <?php endif; ?>
+    <?php endif; ?>
 </div>
 
-<!-- Chart.js einbinden -->
 <script src="<?= htmlspecialchars(assetUrl($baseUrl, 'vendor/chartjs/chart.umd.min.js')) ?>"></script>
 <script>
-// Daten für das Diagramm vorbereiten
-var ctx = document.getElementById('ausgabenChart').getContext('2d');
-var chart = new Chart(ctx, {
-    type: 'pie',
-    data: {
-        labels: <?php echo json_encode(array_map('getKategorieName', $kategorien)); ?>,
-        datasets: [{
-            data: <?php echo json_encode($beträge); ?>,
-            backgroundColor: <?php echo json_encode($farben); ?>
-        }]
-    },
-    options: {
-        responsive: true,
-        plugins: {
-            legend: {
-                position: 'right'
-            }
-        }
-    }
-});
+(function () {
+    if (!window.Chart) return;
+    var zahl = function (wert, stellen) { return Number(wert).toLocaleString('de-DE', { minimumFractionDigits: stellen, maximumFractionDigits: stellen }); };
+    var euro = function (c) { return (c.dataset.label ? c.dataset.label + ': ' : c.label + ': ') + zahl(c.parsed.y !== undefined ? c.parsed.y : c.parsed, 2) + ' €'; };
 
-// Kostenstruktur Chart
-new Chart(document.getElementById('kostenstrukturChart').getContext('2d'), {
-    type: 'doughnut',
-    data: {
-        labels: ['Fixkosten', 'Variable Kosten'],
-        datasets: [{
-            data: [<?php echo $fixkosten; ?>, <?php echo $variableKosten; ?>],
-            backgroundColor: [
-                'rgba(54, 162, 235, 0.7)',
-                'rgba(255, 99, 132, 0.7)'
-            ]
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                position: 'bottom'
+    var el = document.getElementById('kategorieChart');
+    if (el) {
+        new Chart(el, {
+            type: 'doughnut',
+            data: {
+                labels: <?= json_encode(array_map($kategorieName, array_keys($kategorien)), JSON_UNESCAPED_UNICODE) ?>,
+                datasets: [{
+                    data: <?= json_encode(array_map(fn($d) => round($d['summe'], 2), array_values($kategorien))) ?>,
+                    backgroundColor: <?= json_encode(array_map(fn($k) => $kategorieFarben[$k] ?? '#adb5bd', array_keys($kategorien))) ?>,
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, cutout: '62%',
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (c) { return c.label + ': ' + zahl(c.parsed, 2) + ' €'; } } } }
             }
-        }
+        });
     }
-});
+
+    el = document.getElementById('monatChart');
+    if (el) {
+        var monate = <?= json_encode(array_map(fn($m) => formatMonat($m), array_keys($monatsReihen)), JSON_UNESCAPED_UNICODE) ?>;
+        var reihen = <?= json_encode(array_map(fn($g) => [
+            'label' => $gruppen[$g][0],
+            'data' => array_map(fn($z) => round($z[$g], 2), array_values($monatsReihen)),
+            'backgroundColor' => $gruppen[$g][2],
+            'borderRadius' => 3,
+            'stack' => 'a',
+        ], array_values(array_filter(array_keys($gruppen), fn($g) => $gruppenSummen[$g] > 0)))) ?>;
+        new Chart(el, {
+            type: 'bar',
+            data: { labels: monate, datasets: reihen },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12, boxHeight: 12 } },
+                    tooltip: {
+                        filter: function (c) { return c.parsed.y > 0; },
+                        callbacks: {
+                            label: euro,
+                            footer: function (items) { return 'Summe: ' + zahl(items.reduce(function (s, c) { return s + c.parsed.y; }, 0), 2) + ' €'; }
+                        }
+                    }
+                },
+                scales: {
+                    x: { stacked: true, grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 16 } },
+                    y: { stacked: true, ticks: { callback: function (v) { return zahl(v, 0); } } }
+                }
+            }
+        });
+    }
+})();
 </script>
-
