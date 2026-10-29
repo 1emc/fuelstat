@@ -71,6 +71,8 @@ if ($type === 'entry') {
     </form>
 </div>
     <?php
+    $tachoAusnahmeId = $eintrag_id;
+    include '../includes/tacho_pruefung.php';
     include '../includes/footer.php';
     exit;
 }
@@ -150,4 +152,7 @@ $bearbeitbar = isset($eintrag['filled_at']) && strtotime($eintrag['filled_at']) 
     </form>
 </div>
 
-<?php include '../includes/footer.php'; ?>
+<?php
+$tachoAusnahmeId = $eintrag_id;
+include '../includes/tacho_pruefung.php';
+include '../includes/footer.php'; ?>

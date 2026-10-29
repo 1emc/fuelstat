@@ -321,6 +321,31 @@ body.mit-tabbar {
     }
 }
 
+.diagramm-klein {
+    height: 180px;
+}
+
+.diagramm-hoch {
+    height: 300px;
+}
+
+@media (min-width: 992px) {
+    .diagramm-klein {
+        height: 200px;
+    }
+
+    .diagramm-hoch {
+        height: 420px;
+    }
+}
+
+/* Kostenstruktur als ein durchgehender, aufgeteilter Balken */
+.kostenbalken {
+    height: 14px;
+    gap: 2px;
+    background: transparent;
+}
+
 .statistik-icon {
     width: 2.5rem;
     height: 2.5rem;
