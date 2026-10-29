@@ -19,7 +19,7 @@ $hatBild = !empty($f['image_url']);
                    value="<?= htmlspecialchars($f['name'] ?? '') ?>" required>
         </div>
         <div class="col-md-6 mb-3">
-            <label for="fuelType" class="form-label">Kraftstoffart</label>
+            <label for="fuelType" class="form-label">Antriebsart</label>
             <select id="fuelType" name="fuelType" class="form-select" required>
                 <?php foreach (getKraftstoffOptionen() as $wert => $text): ?>
                     <option value="<?= $wert ?>" <?= $wert === $aktuellerKraftstoff ? 'selected' : '' ?>><?= $text ?></option>
@@ -44,9 +44,26 @@ $hatBild = !empty($f['image_url']);
             <div class="form-text">Wird für die Fahrleistung verwendet.</div>
         </div>
         <div class="col-md-6 mb-3">
-            <label for="tankCapacity" class="form-label">Tank- bzw. Akkugröße</label>
+            <label for="tankCapacity" class="form-label" id="tankCapacityLabel">Tank- bzw. Akkugröße</label>
             <input type="number" id="tankCapacity" name="tankCapacity" class="form-control" min="0" step="0.1" value="<?= isset($f['tank_capacity']) ? htmlspecialchars((string)(float)$f['tank_capacity']) : '' ?>">
-            <div class="form-text">In Liter, kWh bzw. kg.</div>
+            <div class="form-text" id="tankCapacityHinweis">In Liter, kWh bzw. kg.</div>
+            <script>
+              // Beschriftung passend zur Antriebsart (Tank in l/kg, Akku in kWh)
+              (function () {
+                var auswahl = document.getElementById('fuelType');
+                var texte = {
+                  electric: ['Akkugröße (kWh)', 'Nutzbare Kapazität laut Hersteller.'],
+                  cng: ['Tankgröße (kg)', 'Fassungsvermögen in Kilogramm.'],
+                  hydrogen: ['Tankgröße (kg)', 'Fassungsvermögen in Kilogramm.']
+                };
+                function setze() {
+                  var t = texte[auswahl.value] || ['Tankgröße (Liter)', 'Fassungsvermögen in Litern.'];
+                  document.getElementById('tankCapacityLabel').textContent = t[0];
+                  document.getElementById('tankCapacityHinweis').textContent = t[1];
+                }
+                if (auswahl) { auswahl.addEventListener('change', setze); setze(); }
+              })();
+            </script>
         </div>
         <div class="col-12 mb-3">
             <label for="bild" class="form-label">Fahrzeugbild</label>

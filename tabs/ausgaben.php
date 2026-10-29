@@ -4,7 +4,6 @@ include_once __DIR__ . '/../includes/functions.php';
 include_once __DIR__ . '/../includes/api_helpers.php';
 
 $selectedYear = isset($_GET['jahr']) && $_GET['jahr'] !== '' ? (int)$_GET['jahr'] : null;
-$istStrom = $einheitKurz === 'kWh';
 $zahl = fn($wert, int $stellen = 2) => number_format((float)$wert, $stellen, ',', '.');
 
 // Alle Einträge (Tankfüllungen und Ausgaben) flach, ohne Fahrten
@@ -25,7 +24,7 @@ $eintraege = array_values(array_filter($alle, $imZeitraum));
 
 // Kategorien zu Gruppen zusammenfassen (Kostenstruktur und Jahresvergleich)
 $gruppen = [
-    'kraftstoff' => [$istStrom ? 'Laden' : 'Tanken', $istStrom ? 'fa-plug' : 'fa-gas-pump', '#0d6efd', ['Tankfuellung']],
+    'kraftstoff' => [$begriffe['Verb'], $begriffe['icon'], '#0d6efd', ['Tankfuellung']],
     'fix' => ['Versicherung & Steuer', 'fa-shield-alt', '#6f42c1', ['Versicherung', 'Steuer']],
     'wartung' => ['Werkstatt & Wartung', 'fa-tools', '#fd7e14', ['Werkstatt', 'Inspektion', 'Reparatur', 'Wartung', 'Reifen', 'TUV']],
     'sonstiges' => ['Sonstiges', 'fa-ellipsis', '#20c997', []],
@@ -38,7 +37,7 @@ $gruppeVon = function (string $kategorie) use ($gruppen): string {
     }
     return 'sonstiges';
 };
-$kategorieName = fn(string $k) => $k === 'Tankfuellung' && $istStrom ? 'Laden' : getKategorieName($k);
+$kategorieName = fn(string $k) => getKategorieName($k, $fuelType);
 
 // Farben je Kategorie (Diagramm und Liste)
 $kategorieFarben = [
@@ -160,7 +159,7 @@ $zeitraumText = $selectedYear !== null ? 'im Jahr ' . $selectedYear : 'gesamt';
         <div class="card border-0 shadow-sm text-center">
             <div class="card-body p-5">
                 <i class="fas fa-euro-sign fa-2x mb-3"></i>
-                <p class="mb-0 text-body-secondary"><?= $selectedYear !== null ? 'Im Jahr ' . $selectedYear . ' gibt es keine Ausgaben.' : 'Noch keine Ausgaben erfasst. Tankfüllungen, Versicherung, Werkstatt und Co. tauchen hier automatisch auf.' ?></p>
+                <p class="mb-0 text-body-secondary"><?= $selectedYear !== null ? 'Im Jahr ' . $selectedYear . ' gibt es keine Ausgaben.' : 'Noch keine Ausgaben erfasst. ' . $begriffe['vorgaenge'] . ', Versicherung, Werkstatt und Co. tauchen hier automatisch auf.' ?></p>
             </div>
         </div>
     <?php else: ?>
@@ -239,7 +238,7 @@ $zeitraumText = $selectedYear !== null ? 'im Jahr ' . $selectedYear : 'gesamt';
                         <?php foreach ($kategorien as $k => $d): $anteil = $gesamt > 0 ? $d['summe'] / $gesamt * 100 : 0; $farbe = $kategorieFarben[$k] ?? '#adb5bd'; ?>
                         <li class="mb-2">
                             <div class="d-flex justify-content-between align-items-baseline gap-2 small">
-                                <span class="text-truncate"><i class="fas <?= getCategoryIcon($k) ?> fa-fw me-1" style="color: <?= $farbe ?>"></i><?= htmlspecialchars($kategorieName($k)) ?> <span class="text-body-secondary">(<?= $d['anzahl'] ?>)</span></span>
+                                <span class="text-truncate"><i class="fas <?= getCategoryIcon($k, $fuelType) ?> fa-fw me-1" style="color: <?= $farbe ?>"></i><?= htmlspecialchars($kategorieName($k)) ?> <span class="text-body-secondary">(<?= $d['anzahl'] ?>)</span></span>
                                 <span class="text-nowrap fw-semibold"><?= $zahl($d['summe']) ?> €</span>
                             </div>
                             <div class="progress mt-1" style="height: 4px;" role="presentation">
@@ -265,11 +264,11 @@ $zeitraumText = $selectedYear !== null ? 'im Jahr ' . $selectedYear : 'gesamt';
     <?php if ($groesste): ?>
     <!-- Größte Einzelausgaben -->
     <div class="card border-0 shadow-sm mb-3">
-        <div class="card-header bg-transparent py-3"><h3 class="h6 mb-0">Größte Einzelausgaben <small class="text-body-secondary fw-normal">ohne <?= $istStrom ? 'Laden' : 'Tanken' ?></small></h3></div>
+        <div class="card-header bg-transparent py-3"><h3 class="h6 mb-0">Größte Einzelausgaben <small class="text-body-secondary fw-normal">ohne <?= $begriffe['vorgaenge'] ?></small></h3></div>
         <ul class="list-group list-group-flush">
             <?php foreach ($groesste as $e): $farbe = $kategorieFarben[$e['kategorie']] ?? '#adb5bd'; ?>
             <li class="list-group-item d-flex align-items-center gap-3 py-3">
-                <span class="statistik-icon flex-shrink-0" style="background-color: <?= $farbe ?>26; color: <?= $farbe ?>"><i class="fas <?= getCategoryIcon($e['kategorie']) ?>"></i></span>
+                <span class="statistik-icon flex-shrink-0" style="background-color: <?= $farbe ?>26; color: <?= $farbe ?>"><i class="fas <?= getCategoryIcon($e['kategorie'], $fuelType) ?>"></i></span>
                 <div class="flex-grow-1 min-w-0">
                     <div class="fw-semibold text-truncate"><?= htmlspecialchars($e['beschreibung'] ?: $kategorieName($e['kategorie'])) ?></div>
                     <div class="small text-body-secondary text-truncate"><?= date('d.m.Y', strtotime($e['datum'])) ?> · <?= htmlspecialchars($kategorieName($e['kategorie'])) ?><?= !empty($e['standort']) ? ' · ' . htmlspecialchars($e['standort']) : '' ?></div>

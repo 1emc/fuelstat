@@ -4,12 +4,12 @@ $kraftstoffTexte = getKraftstoffOptionen() + ['petrol' => 'Benzin'];
 $fuelTypeWert = $fahrzeug['fuel_type'] ?? '';
 $zeilen = [
     'Name' => $fahrzeug['name'] ?? '',
-    'Kraftstoff' => $kraftstoffTexte[$fuelTypeWert] ?? $fuelTypeWert,
+    'Antriebsart' => $kraftstoffTexte[$fuelTypeWert] ?? $fuelTypeWert,
     'Marke' => $fahrzeug['brand'] ?? '',
     'Modell' => $fahrzeug['model'] ?? '',
     'Baujahr' => $fahrzeug['year'] ?? '',
     'Tachostand bei Anschaffung' => isset($fahrzeug['odometer_km']) ? number_format((int)$fahrzeug['odometer_km'], 0, ',', '.') . ' km' : '',
-    'Tank-/Akkugröße' => !empty($fahrzeug['tank_capacity']) ? number_format((float)$fahrzeug['tank_capacity'], 1, ',', '.') . ' ' . $einheitKurz : '',
+    $begriffe['speicher'] . 'größe' => !empty($fahrzeug['tank_capacity']) ? number_format((float)$fahrzeug['tank_capacity'], 1, ',', '.') . ' ' . $einheitKurz : '',
 ];
 ?>
 <div class="mt-4">

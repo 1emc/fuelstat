@@ -17,12 +17,12 @@ $letzterTUV = getLetzterEintragApi($api, $fahrzeug_id, 'TUV');
 $fuel_type = $fahrzeug['fuel_type'] ?? $fahrzeug['kraftstoff'] ?? '';
 $kraftstoffTexte = getKraftstoffOptionen() + ['petrol' => 'Benzin'];
 
-// Marke, Modell, Baujahr, Kraftstoff und Tankgröße als eine Zeile
+// Marke, Modell, Baujahr, Kraftstoff und Tank- bzw. Akkugröße als eine Zeile
 $fahrzeugDetails = array_filter([
     trim(($fahrzeug['brand'] ?? '') . ' ' . ($fahrzeug['model'] ?? '')),
     !empty($fahrzeug['year']) ? 'Baujahr ' . (int)$fahrzeug['year'] : '',
     $kraftstoffTexte[$fuel_type] ?? ucfirst((string)$fuel_type),
-    !empty($fahrzeug['tank_capacity']) ? 'Tank ' . number_format((float)$fahrzeug['tank_capacity'], 0, ',', '.') . ' ' . $einheitKurz : '',
+    !empty($fahrzeug['tank_capacity']) ? $begriffe['speicher'] . ' ' . number_format((float)$fahrzeug['tank_capacity'], fmod((float)$fahrzeug['tank_capacity'], 1) ? 1 : 0, ',', '.') . ' ' . $einheitKurz : '',
 ]);
 
 // Termine: dringendste zuerst, danach Reifen (ohne Fälligkeit)

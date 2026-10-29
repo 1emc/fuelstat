@@ -21,6 +21,9 @@ $fahrzeug['modell'] = $fahrzeug['name'] ?? '';
 
 // Mengeneinheit für alle Tabs (l, kWh oder kg)
 $einheitKurz = einheitKurz(getEinheitFuerKraftstoff($fahrzeug['fuel_type'] ?? null));
+// Begriffe für alle Reiter: Tankfüllung/Ladevorgang, Tankstelle/Ladestation usw.
+$fuelType = (string)($fahrzeug['fuel_type'] ?? 'other');
+$begriffe = verbrauchsBegriffe($fuelType);
 ?>
 
 <div class="container mt-lg-5">

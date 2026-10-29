@@ -17,7 +17,7 @@ $type = $_POST['type'] ?? 'entry';
 if ($type === 'fillup') {
     try {
         $api->deleteFillup($eintrag_id);
-        $_SESSION['success_message'] = 'Tankvorgang gelöscht.';
+        $_SESSION['success_message'] = 'Eintrag gelöscht.';
     } catch (Throwable $e) {
         $_SESSION['error_message'] = $e->getMessage();
     }

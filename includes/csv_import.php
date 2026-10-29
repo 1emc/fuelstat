@@ -14,9 +14,9 @@ function importFelder(): array
         'menge' => 'Menge (l/kWh/kg)',
         'kosten' => 'Kosten gesamt (€)',
         'preis' => 'Preis pro Einheit (€)',
-        'vollgetankt' => 'Vollgetankt',
-        'luecke' => 'Lücke davor (vorherige Tankfüllung fehlt)',
-        'ort' => 'Tankstelle / Ort / Anbieter',
+        'vollgetankt' => 'Voll getankt bzw. geladen',
+        'luecke' => 'Lücke davor (vorheriger Tank-/Ladevorgang fehlt)',
+        'ort' => 'Tankstelle / Ladestation / Ort',
         'beschreibung' => 'Beschreibung / Notiz',
     ];
 }
@@ -37,15 +37,15 @@ function importNormalisiereKopf(string $kopf): string
 function importErkenneZuordnung(array $kopfzeile): array
 {
     $synonyme = [
-        'datum' => ['datum', 'date', 'tankdatum', 'tag'],
+        'datum' => ['datum', 'date', 'tankdatum', 'ladedatum', 'tag'],
         'art' => ['art', 'typ', 'type', 'kategorie', 'category', 'eintragstyp'],
         'tachostand' => ['tachostand', 'kilometerstand', 'kmstand', 'odometer', 'tacho', 'km', 'odometerkm'],
-        'menge' => ['menge', 'liter', 'litre', 'liters', 'amount', 'quantity', 'tankmenge', 'kwh', 'getankt'],
+        'menge' => ['menge', 'liter', 'litre', 'liters', 'amount', 'quantity', 'tankmenge', 'kwh', 'getankt', 'geladen', 'energie', 'lademenge'],
         'kosten' => ['kosten', 'gesamtpreis', 'betrag', 'preisgesamt', 'gesamtkosten', 'total', 'cost', 'costs', 'summe', 'preis'],
-        'preis' => ['preisproeinheit', 'preisproliter', 'literpreis', 'preisl', 'priceperliter', 'priceperunit', 'einzelpreis'],
-        'vollgetankt' => ['vollgetankt', 'voll', 'full', 'volltank', 'isfull'],
+        'preis' => ['preisproeinheit', 'preisproliter', 'literpreis', 'preisl', 'priceperliter', 'priceperunit', 'einzelpreis', 'preisprokwh', 'kwhpreis', 'strompreis', 'preiskwh'],
+        'vollgetankt' => ['vollgetankt', 'vollgeladen', 'voll', 'full', 'volltank', 'isfull', 'vollgetanktbzwgeladen'],
         'luecke' => ['lueckedavor', 'luecke', 'skipprevious', 'vorherigeignorieren', 'vorherigetankfuellungignorieren'],
-        'ort' => ['ort', 'tankstelle', 'station', 'ortanbieter', 'anbieter', 'vendor', 'location', 'standort'],
+        'ort' => ['ort', 'tankstelle', 'ladestation', 'ladesaeule', 'station', 'ortanbieter', 'anbieter', 'vendor', 'location', 'standort'],
         'beschreibung' => ['beschreibung', 'notiz', 'bemerkung', 'note', 'notes', 'description', 'kommentar', 'comment'],
     ];
     $zuordnung = [];
@@ -209,9 +209,9 @@ function importWandleUm(array $zeilen, array $zuordnung, string $standardKategor
         if ($datum === null) {
             $fehler = 'Datum fehlt oder ist ungültig';
         } elseif ($art['typ'] === 'fillup' && $tacho === null) {
-            $fehler = 'Tankfüllung ohne Tachostand';
+            $fehler = 'Tank-/Ladevorgang ohne Tachostand';
         } elseif ($art['typ'] === 'fillup' && ($menge === null || $menge < 0)) {
-            $fehler = 'Tankfüllung ohne gültige Menge';
+            $fehler = 'Tank-/Ladevorgang ohne gültige Menge';
         } elseif ($kosten === null || $kosten < 0) {
             $fehler = 'Kosten fehlen oder sind ungültig';
         }

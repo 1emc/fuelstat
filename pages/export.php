@@ -19,6 +19,8 @@ try {
     exit('Fahrzeug nicht gefunden.');
 }
 $einheit = einheitKurz(getEinheitFuerKraftstoff($fahrzeug['fuel_type'] ?? null));
+$fuelType = (string)($fahrzeug['fuel_type'] ?? 'other');
+$begriffe = verbrauchsBegriffe($fuelType);
 
 $zeilen = [];
 foreach (getMergedEintraegeFromApi($api, $fahrzeug_id)['eintraege'] as $monatsEintraege) {
@@ -39,12 +41,12 @@ header('Content-Type: text/csv; charset=utf-8');
 header('Content-Disposition: attachment; filename="' . $dateiname . '"');
 $out = fopen('php://output', 'w');
 fwrite($out, "\xEF\xBB\xBF");
-fputcsv($out, ['Datum', 'Kategorie', 'Tachostand (km)', 'Menge (' . $einheit . ')', 'Kosten (EUR)', 'Vollgetankt', 'Lücke davor', 'Verbrauch (' . $einheit . '/100km)', 'Ort/Anbieter', 'Beschreibung'], ';');
+fputcsv($out, ['Datum', 'Kategorie', 'Tachostand (km)', 'Menge (' . $einheit . ')', 'Kosten (EUR)', $begriffe['voll'], 'Lücke davor', 'Verbrauch (' . $einheit . '/100km)', 'Ort/Anbieter', 'Beschreibung'], ';');
 foreach ($zeilen as $e) {
     $istTank = $e['kategorie'] === 'Tankfuellung';
     fputcsv($out, [
         date('d.m.Y', strtotime($e['datum'])),
-        $text(getKategorieName($e['kategorie'])),
+        $text(getKategorieName($e['kategorie'], $fuelType)),
         $e['tachostand'] ?? '',
         $istTank ? $zahl($e['menge'], 2) : '',
         $zahl($e['kosten'], 2),

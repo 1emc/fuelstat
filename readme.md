@@ -11,7 +11,7 @@ Fuelstat ist eine Web-App, mit der du Tankfüllungen, Ladevorgänge und alle and
 
 **Einträge**
 - Tankfüllungen bzw. Ladevorgänge mit Menge (l, kWh oder kg je nach Kraftstoff), Preis, Tankstelle, voll/teilweise getankt
-- Tankstellen in der Nähe samt aktuellem Preis (Tankerkönig)
+- Tankstellen in der Nähe samt aktuellem Preis (Tankerkönig), beim E-Auto Ladestationen mit Leistung und Steckertypen (Open Charge Map); der zuletzt bezahlte kWh-Preis an einer Station wird vorgeschlagen
 - Andere Ausgaben (Versicherung, Werkstatt, Inspektion, Steuer, Reparatur, Reifen, TÜV, Wartung, Dekor) und Fahrten
 - Alle Einträge bearbeiten und löschen (Tankfüllungen innerhalb von 14 Tagen)
 
@@ -105,6 +105,8 @@ docker compose exec -T db psql -U fuelstat -d fuelstat < ../backend/database/pos
 - `includes/db_connect.php` wird noch eingebunden, kann aber leer sein (`<?php`)
 - API-Adresse: Umgebungsvariable `FUELSTAT_API_BASE_URL` setzen, sonst wird `https://tanken.1emc.de/api/v1` verwendet (`includes/api_config.php`)
 - Für die Tankstellensuche einen Tankerkönig-API-Key in `api/key.key` ablegen
+- Für die Ladestationssuche (E-Autos) einen kostenlosen Open-Charge-Map-API-Key (openchargemap.org → Mein Profil → API-Schlüssel) in `api/ocm.key` eintragen. Die leere Datei ist versioniert; nach dem Eintragen `git update-index --skip-worktree api/ocm.key`, damit der Schlüssel nie committet wird
+- `*.key`-Dateien per nginx sperren (siehe `infra/nginx-sicherheit.conf.example`), sonst sind die Schlüssel abrufbar
 - Betreiberangaben für Impressum und Datenschutzerklärung in `includes/betreiber.php` eintragen
 - Bootstrap, Chart.js, QRCode.js und Font Awesome liegen in `vendor/` bzw. `css/` und `webfonts/`; es werden keine CDNs geladen (siehe `vendor/README.md`)
 

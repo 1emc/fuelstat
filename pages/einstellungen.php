@@ -138,7 +138,7 @@ include '../includes/header.php';
             <div class="card shadow border-danger mb-4">
                 <div class="card-body p-4">
                     <h3 class="h4 mb-3 text-danger"><i class="fas fa-trash me-2"></i>Konto löschen</h3>
-                    <p>Löscht dein Konto mit allen Fahrzeugen, Tankfüllungen und Ausgaben endgültig.</p>
+                    <p>Löscht dein Konto mit allen Fahrzeugen, Tank- und Ladevorgängen und Ausgaben endgültig.</p>
                     <form method="post" onsubmit="return confirm('Konto und alle Daten endgültig löschen?');">
                         <input type="hidden" name="aktion" value="konto_loeschen">
                         <div class="mb-3">

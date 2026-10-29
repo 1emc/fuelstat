@@ -12,24 +12,28 @@ if (!isApiAuthenticated()) {
 $fahrzeug_id = trim($_GET['id'] ?? $_POST['id'] ?? '');
 $api = getApiClient();
 
-// Vorlage zum Herunterladen (gleiches Format wie der Export)
-if (isset($_GET['vorlage'])) {
-    header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename="fuelstat_import_vorlage.csv"');
-    echo "\xEF\xBB\xBF" . "Datum;Kategorie;Tachostand (km);Menge;Kosten (EUR);Vollgetankt;Ort/Anbieter;Beschreibung\r\n"
-        . "05.01.2026;Tankfüllung;38337;33,50;61,20;ja;Aral Musterstadt;\r\n"
-        . "20.01.2026;Tankfüllung;38700;15,00;27,90;nein;Shell;\r\n"
-        . "02.01.2026;Versicherung;;;420,00;;HUK;Jahresbeitrag\r\n"
-        . "15.03.2026;Werkstatt;39100;;189,00;;ATU;Bremsbeläge vorne\r\n";
-    exit;
-}
-
 try {
     $fahrzeug = $api->getVehicle($fahrzeug_id);
 } catch (Throwable $e) {
     die('Fahrzeug nicht gefunden.');
 }
 $einheit = einheitKurz(getEinheitFuerKraftstoff($fahrzeug['fuel_type'] ?? null));
+$fuelType = (string)($fahrzeug['fuel_type'] ?? 'other');
+$begriffe = verbrauchsBegriffe($fuelType);
+
+// Vorlage zum Herunterladen (gleiches Format wie der Export), passend zur Antriebsart
+if (isset($_GET['vorlage'])) {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="fuelstat_import_vorlage.csv"');
+    $beispiele = $begriffe['art'] === 'strom'
+        ? ["05.01.2026;Laden;38337;24,50;6,13;ja;Zuhause (Wallbox);", "20.01.2026;Laden;38700;18,00;12,42;ja;EnBW Schnelllader;"]
+        : ["05.01.2026;Tankfüllung;38337;33,50;61,20;ja;Aral Musterstadt;", "20.01.2026;Tankfüllung;38700;15,00;27,90;nein;Shell;"];
+    echo "\xEF\xBB\xBF" . "Datum;Kategorie;Tachostand (km);Menge (" . $einheit . ");Kosten (EUR);" . $begriffe['voll'] . ";Ort/Anbieter;Beschreibung\r\n"
+        . implode("\r\n", $beispiele) . "\r\n"
+        . "02.01.2026;Versicherung;;;420,00;;HUK;Jahresbeitrag\r\n"
+        . "15.03.2026;Werkstatt;39100;;189,00;;ATU;Bremsbeläge vorne\r\n";
+    exit;
+}
 $sitzungsKey = 'csv_import_' . $fahrzeug_id;
 $daten = $_SESSION[$sitzungsKey] ?? null;
 $schritt = $_POST['schritt'] ?? ($daten ? 'zuordnen' : 'upload');
@@ -95,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $schritt === 'importieren' && $umge
                 foreach (['imported', 'skipped'] as $k) { $summe[$k]['entries'] += $r[$k]['entries']; }
             }
             unset($_SESSION[$sitzungsKey]);
-            $meldung = sprintf('Import abgeschlossen: %d Tankfüllungen und %d Ausgaben übernommen.', $summe['imported']['fillups'], $summe['imported']['entries']);
+            $meldung = sprintf('Import abgeschlossen: %d ' . $begriffe['vorgaenge'] . ' und %d Ausgaben übernommen.', $summe['imported']['fillups'], $summe['imported']['entries']);
             $doppelt = $summe['skipped']['fillups'] + $summe['skipped']['entries'];
             if ($doppelt > 0) {
                 $meldung .= ' ' . $doppelt . ' bereits vorhandene Einträge wurden übersprungen.';
@@ -122,11 +126,11 @@ $f2 = fn($v) => $v === null ? '' : number_format((float)$v, 2, ',', '.');
     <?php endif; ?>
 
     <?php if (!$daten): ?>
-        <p>Übernimm Tankfüllungen und Ausgaben aus einer CSV-Datei, z. B. aus einer Excel-Liste, einer anderen App oder einem Fuelstat-Export.</p>
+        <p>Übernimm <?= $begriffe['vorgaenge'] ?> und Ausgaben aus einer CSV-Datei, z. B. aus einer Excel-Liste, einer anderen App oder einem Fuelstat-Export.</p>
         <ul>
             <li>Erste Zeile: Spaltenüberschriften. Trennzeichen Semikolon, Komma oder Tab.</li>
-            <li>Pflicht ist ein Datum; Tankfüllungen brauchen außerdem Tachostand und Menge.</li>
-            <li>Zeilen mit Menge gelten als Tankfüllung, sonst als Ausgabe. Eine Spalte „Kategorie“ (z. B. Tankfüllung, Versicherung, TÜV) legt die Art fest.</li>
+            <li>Pflicht ist ein Datum; <?= $begriffe['vorgaenge'] ?> brauchen außerdem Tachostand und Menge (<?= $einheit ?>).</li>
+            <li>Zeilen mit Menge gelten als <?= $begriffe['vorgang'] ?>, sonst als Ausgabe. Eine Spalte „Kategorie“ (z. B. <?= $begriffe['art'] === 'strom' ? 'Laden' : 'Tankfüllung' ?>, Versicherung, TÜV) legt die Art fest.</li>
             <li>Bereits vorhandene Einträge (gleiches Datum und gleicher Tachostand bzw. gleiche Kategorie und Betrag) werden übersprungen.</li>
         </ul>
         <p><a href="import.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?>&vorlage=1"><i class="fas fa-download me-1"></i>Vorlage herunterladen</a></p>
@@ -172,7 +176,7 @@ $f2 = fn($v) => $v === null ? '' : number_format((float)$v, 2, ',', '.');
 
             <h5>2. Vorschau</h5>
             <p>
-                <span class="badge text-bg-primary"><?= count($umgewandelt['fillups']) ?> Tankfüllungen</span>
+                <span class="badge text-bg-primary"><?= count($umgewandelt['fillups']) ?> <?= $begriffe['vorgaenge'] ?></span>
                 <span class="badge text-bg-success"><?= count($umgewandelt['entries']) ?> Ausgaben</span>
                 <?php if ($umgewandelt['fehler']): ?><span class="badge text-bg-danger"><?= count($umgewandelt['fehler']) ?> fehlerhafte Zeilen</span><?php endif; ?>
             </p>
@@ -188,7 +192,7 @@ $f2 = fn($v) => $v === null ? '' : number_format((float)$v, 2, ',', '.');
                         <tr class="<?= $z['fehler'] ? 'table-danger' : '' ?>">
                             <td><?= $z['nr'] ?></td>
                             <td><?= $z['datum'] ? date('d.m.Y', strtotime($z['datum'])) : '' ?></td>
-                            <td><?= $z['fehler'] ? '<strong>' . htmlspecialchars($z['fehler']) . '</strong>' : htmlspecialchars(getKategorieName($z['kategorie'])) ?></td>
+                            <td><?= $z['fehler'] ? '<strong>' . htmlspecialchars($z['fehler']) . '</strong>' : htmlspecialchars(getKategorieName($z['kategorie'], $fuelType)) ?></td>
                             <td><?= $z['tachostand'] !== null ? number_format($z['tachostand'], 0, ',', '.') : '' ?></td>
                             <td><?= $f2($z['menge']) ?></td>
                             <td><?= $z['kosten'] !== null ? $f2($z['kosten']) . ' €' : '' ?></td>

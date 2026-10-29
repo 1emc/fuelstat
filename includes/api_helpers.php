@@ -173,7 +173,7 @@ function getFahrleistungFromApi($api, string $vehicleId, array $fahrzeug, $curre
     if (!$odos) {
         return null;
     }
-    return ['km' => $currentOdo - (int)min($odos), 'basis' => 'seit erster Tankfüllung'];
+    return ['km' => $currentOdo - (int)min($odos), 'basis' => 'seit dem ersten Eintrag'];
 }
 
 /**

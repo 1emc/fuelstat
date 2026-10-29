@@ -62,7 +62,7 @@ include '../includes/header.php';
             </a>
         <?php else: ?>
             <h1 class="mb-3">Ersten Eintrag erfassen</h1>
-            <p class="mb-4">Erfassen Sie eine Tankfüllung oder andere Ausgabe, um Statistiken zu erhalten.</p>
+            <p class="mb-4">Erfasse eine Tankfüllung, einen Ladevorgang oder eine andere Ausgabe, um Statistiken zu erhalten.</p>
             <a href="eintrag_hinzufuegen.php?fahrzeug_id=<?= htmlspecialchars(urlencode($vehicleId)) ?>" class="btn btn-primary">
                 <i class="fas fa-plus me-2"></i>Eintrag hinzufügen
             </a>

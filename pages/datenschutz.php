@@ -34,8 +34,14 @@ $email = ($b['email'] ?? '') !== '' ? htmlspecialchars(str_replace('@', '[at]', 
   <h2 class="h5 mt-4">4. Fahrzeug- und Fahrtdaten</h2>
   <p>Gespeichert wird, was du einträgst: Fahrzeuge (Name, Marke, Modell, Baujahr, Kraftstoff, Tank- bzw. Akkugröße, Fotos), Tankfüllungen und Ladevorgänge (Datum, Tachostand, Menge, Preis, Tankstelle bzw. Ort), Ausgaben und Fahrten. Daraus berechnet Fuelstat Verbrauch, Kosten, CO₂-Werte und Fälligkeiten. Die Daten sind nur in deinem Konto sichtbar. Als Betreiber habe ich technisch Zugriff auf die Datenbank, sehe mir deine Daten aber nur an, wenn du mich zur Fehlerbehebung darum bittest. Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO.</p>
 
-  <h2 class="h5 mt-4">5. Tankstellensuche</h2>
-  <p>Nur wenn du beim Erfassen einer Tankfüllung die Suche nach Tankstellen in der Nähe startest, fragt dein Browser nach deinem Standort. Gibst du ihn frei (Art. 6 Abs. 1 lit. a DSGVO), werden die Koordinaten an den Fuelstat-Server und von dort an die Tankerkönig-API (<a href="https://creativecommons.tankerkoenig.de" target="_blank" rel="noopener">creativecommons.tankerkoenig.de</a>) übermittelt, um Tankstellen und aktuelle Preise abzufragen. Tankerkönig erhält dabei nur die Koordinaten und die Adresse des Fuelstat-Servers, keine Konto- oder Fahrzeugdaten. Der Standort wird nicht gespeichert, nur die Tankstelle, die du auswählst.</p>
+  <h2 class="h5 mt-4">5. Tankstellen- und Ladestationssuche</h2>
+  <p>Nur wenn du beim Erfassen eines Eintrags die Suche nach Stationen in der Nähe startest, fragt dein Browser nach deinem Standort. Gibst du ihn frei (Art. 6 Abs. 1 lit. a DSGVO), werden die Koordinaten an den Fuelstat-Server und von dort weitergegeben:</p>
+  <ul>
+    <li>bei Verbrennern an die Tankerkönig-API (<a href="https://creativecommons.tankerkoenig.de" target="_blank" rel="noopener">creativecommons.tankerkoenig.de</a>), um Tankstellen und aktuelle Preise abzufragen,</li>
+    <li>bei E-Autos an die API von Open Charge Map (<a href="https://openchargemap.org" target="_blank" rel="noopener">openchargemap.org</a>), um Ladestationen abzufragen.</li>
+  </ul>
+  <p>Die Dienste erhalten dabei nur die Koordinaten und die Adresse des Fuelstat-Servers, keine Konto- oder Fahrzeugdaten. Die Ergebnisse der Ladestationssuche hält der Server einige Stunden für den gerundeten Standort vor, ohne Bezug zu deinem Konto. Dein Standort selbst wird nicht gespeichert, nur die Station, die du auswählst.</p>
+  <p>Gibst du deinen Standort nicht frei, kannst du stattdessen eine Postleitzahl oder einen Ort eingeben. Diese Eingabe sendet dein Browser direkt an den Ortssuchdienst Nominatim von OpenStreetMap (<a href="https://osmfoundation.org/wiki/Privacy_Policy" target="_blank" rel="noopener">OpenStreetMap Foundation</a>), um die Koordinaten zu ermitteln; dabei erhält OpenStreetMap deine IP-Adresse.</p>
 
   <h2 class="h5 mt-4">6. E-Mail-Benachrichtigungen</h2>
   <p>Erinnerungen an Termine und den Monatsbericht schalten nur du selbst ein. Sie gehen an die E-Mail-Adresse deines Kontos und werden über den Mailserver des Betreibers verschickt oder, wenn du einen einträgst, über deinen eigenen Mailserver. Dessen Passwort wird verschlüsselt (AES-256) gespeichert. Damit keine Mail doppelt verschickt wird, merkt sich Fuelstat, welche Erinnerungen und Berichte bereits versandt wurden. Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO.</p>
@@ -53,7 +59,7 @@ $email = ($b['email'] ?? '') !== '' ? htmlspecialchars(str_replace('@', '[at]', 
   <p>Diese Speicherungen sind für die angebotenen Funktionen unbedingt erforderlich (§ 25 Abs. 2 Nr. 2 TDDDG); es gibt keine Tracking- oder Werbe-Cookies.</p>
 
   <h2 class="h5 mt-4">9. Keine Drittanbieter</h2>
-  <p>Alle Bestandteile der App (Schriften, Symbole, Bibliotheken) werden vom Fuelstat-Server selbst ausgeliefert. Beim Aufruf werden keine Daten an Content-Delivery-Networks, Google oder andere Dritte übertragen. Einzige Ausnahme ist die Tankstellensuche (Abschnitt 5), und auch die nur auf deinen Wunsch.</p>
+  <p>Alle Bestandteile der App (Schriften, Symbole, Bibliotheken) werden vom Fuelstat-Server selbst ausgeliefert. Beim Aufruf werden keine Daten an Content-Delivery-Networks, Google oder andere Dritte übertragen. Einzige Ausnahme ist die Tankstellen- und Ladestationssuche (Abschnitt 5), und auch die nur auf deinen Wunsch.</p>
 
   <h2 class="h5 mt-4">10. Speicherdauer und Löschung</h2>
   <p>Deine Daten bleiben gespeichert, solange du dein Konto hast. Unter „Profil bearbeiten“ kannst du dein Konto jederzeit selbst löschen; dabei werden alle Fahrzeuge, Einträge, Einstellungen und hochgeladenen Bilder sofort entfernt<?= !empty($b['backup_tage']) ? '. Aus Datensicherungen verschwinden sie spätestens nach ' . (int)$b['backup_tage'] . ' Tagen' : '' ?>. Vorher kannst du deine Einträge als CSV exportieren.</p>

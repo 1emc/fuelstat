@@ -12,8 +12,8 @@ try {
 $beta = istBetaPhase();
 
 $funktionen = [
-    ['fa-gas-pump', 'Tanken & Laden', 'Tankfüllungen und Ladevorgänge in Sekunden erfassen – mit Tankstellen in der Nähe und aktuellen Spritpreisen.'],
-    ['fa-chart-line', 'Verbrauch & Statistiken', 'Verbrauch pro Tankfüllung, Monat und Jahr, Trends und Diagramme für jedes Fahrzeug.'],
+    ['fa-gas-pump', 'Tanken & Laden', 'Tankfüllungen und Ladevorgänge in Sekunden erfassen – beim Tanken mit Tankstellen in der Nähe und aktuellen Spritpreisen.'],
+    ['fa-chart-line', 'Verbrauch & Statistiken', 'Verbrauch pro Tank- oder Ladevorgang, Monat und Jahr, Trends und Diagramme für jedes Fahrzeug.'],
     ['fa-euro-sign', 'Alle Kosten im Blick', 'Versicherung, Werkstatt, Steuer, Reifen: alle Ausgaben, Kosten pro Kilometer und Fixkosten.'],
     ['fa-bell', 'Erinnerungen', 'Rechtzeitig an TÜV, Wartung, Versicherung und Steuer denken – auf Wunsch per E-Mail.'],
     ['fa-leaf', 'CO₂-Bilanz', 'Wie viel CO₂ dein Fahrzeug ausstößt, insgesamt, pro Kilometer und pro Jahr.'],
@@ -79,8 +79,8 @@ $funktionen = [
             $registrierungOffen
                 ? ['Konto anlegen', 'Mit E-Mail und Passwort, auf Wunsch zusätzlich mit Zwei-Faktor-Schutz.']
                 : ['Zugang erhalten', 'Mit den Zugangsdaten anmelden, die du vom Betreiber bekommen hast.'],
-            ['Fahrzeug hinzufügen', 'Name, Kraftstoff und gern ein Foto – bisherige Daten lassen sich per CSV übernehmen.'],
-            ['Losfahren & erfassen', 'Nach jedem Tankstopp kurz eintragen, den Rest rechnet Fuelstat für dich aus.'],
+            ['Fahrzeug hinzufügen', 'Name, Antriebsart und gern ein Foto – bisherige Daten lassen sich per CSV übernehmen.'],
+            ['Losfahren & erfassen', 'Nach jedem Tank- oder Ladestopp kurz eintragen, den Rest rechnet Fuelstat für dich aus.'],
         ] as $nr => [$titel, $text]): ?>
         <div class="col-md-4">
             <div class="d-flex gap-3">
@@ -120,7 +120,7 @@ $funktionen = [
 <?php endif; ?>
 
 <section class="text-center bg-body-tertiary rounded-4 px-4 py-5 mb-4">
-    <h2 class="h4 mb-3">Bereit für den ersten Tankstopp?</h2>
+    <h2 class="h4 mb-3">Bereit für den ersten Tank- oder Ladestopp?</h2>
     <p class="text-body-secondary mb-4">Fuelstat läuft im Browser und lässt sich auf dem Handy wie eine App installieren.</p>
     <div class="d-flex flex-column flex-sm-row justify-content-center gap-2">
         <?php if ($registrierungOffen): ?>

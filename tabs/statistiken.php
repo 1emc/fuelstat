@@ -98,7 +98,7 @@ $tankJahre = array_filter($jahresdaten, fn($d) => $d['anzahl_tankstops'] > 0 || 
         <div class="card border-0 shadow-sm text-center">
             <div class="card-body p-5">
                 <i class="fas fa-chart-line fa-2x mb-3"></i>
-                <p class="mb-0 text-body-secondary">Noch keine Tankfüllungen erfasst. Ab zwei vollen Tankfüllungen gibt es hier Verbrauch, Kosten und Diagramme.</p>
+                <p class="mb-0 text-body-secondary">Noch keine <?= $begriffe['vorgaenge'] ?> erfasst. Ab zwei vollen <?= $begriffe['vorgaengen'] ?> gibt es hier Verbrauch, Kosten und Diagramme.</p>
             </div>
         </div>
     <?php else: ?>
@@ -114,14 +114,14 @@ $tankJahre = array_filter($jahresdaten, fn($d) => $d['anzahl_tankstops'] > 0 || 
         </div>
         <div class="col-6 col-lg-3">
             <div class="kennzahl">
-                <div class="small text-body-secondary">Kraftstoffkosten</div>
+                <div class="small text-body-secondary"><?= $begriffe['kosten'] ?></div>
                 <div class="kennzahl-wert"><?= $kraftstoffKostenProKm !== null ? $zahl($kraftstoffKostenProKm * 100) . ' <small class="fw-normal">€/100 km</small>' : '—' ?></div>
                 <?php if ($durchschnittPreis !== null): ?><div class="small text-body-secondary">Ø <?= $zahl($durchschnittPreis, 3) ?> €/<?= $einheitKurz ?></div><?php endif; ?>
             </div>
         </div>
         <div class="col-6 col-lg-3">
             <div class="kennzahl">
-                <div class="small text-body-secondary">Getankt gesamt</div>
+                <div class="small text-body-secondary"><?= $begriffe['menge_gesamt'] ?></div>
                 <div class="kennzahl-wert"><?= $zahl($gekauftMenge, 0) ?> <small class="fw-normal"><?= $einheitKurz ?></small></div>
                 <div class="small text-body-secondary">für <?= $zahl($gekauftKosten) ?> €</div>
             </div>
@@ -156,11 +156,11 @@ $tankJahre = array_filter($jahresdaten, fn($d) => $d['anzahl_tankstops'] > 0 || 
         <div class="col-lg-6">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body">
-                    <h3 class="h6 mb-3">Verbrauch pro Tankfüllung <small class="text-body-secondary fw-normal"><?= $einheitKurz ?>/100 km</small></h3>
+                    <h3 class="h6 mb-3">Verbrauch pro <?= $begriffe['vorgang'] ?> <small class="text-body-secondary fw-normal"><?= $einheitKurz ?>/100 km</small></h3>
                     <?php if ($verbrauchswerte): ?>
                         <div class="diagramm"><canvas id="verbrauchChart"></canvas></div>
                     <?php else: ?>
-                        <p class="text-body-secondary small mb-0">Ab zwei vollen Tankfüllungen verfügbar.</p>
+                        <p class="text-body-secondary small mb-0">Ab zwei vollen <?= $begriffe['vorgaengen'] ?> verfügbar.</p>
                     <?php endif; ?>
                 </div>
             </div>
@@ -172,7 +172,7 @@ $tankJahre = array_filter($jahresdaten, fn($d) => $d['anzahl_tankstops'] > 0 || 
                     <?php if ($verbrauchProMonatFormatted): ?>
                         <div class="diagramm"><canvas id="verbrauchMonatChart"></canvas></div>
                     <?php else: ?>
-                        <p class="text-body-secondary small mb-0">Ab zwei vollen Tankfüllungen verfügbar.</p>
+                        <p class="text-body-secondary small mb-0">Ab zwei vollen <?= $begriffe['vorgaengen'] ?> verfügbar.</p>
                     <?php endif; ?>
                 </div>
             </div>
@@ -197,8 +197,8 @@ $tankJahre = array_filter($jahresdaten, fn($d) => $d['anzahl_tankstops'] > 0 || 
                 <thead>
                     <tr>
                         <th>Jahr</th>
-                        <th class="text-end">Tankstopps</th>
-                        <th class="text-end">Getankt</th>
+                        <th class="text-end"><?= $begriffe['vorgaenge'] ?></th>
+                        <th class="text-end"><?= $begriffe['menge'] ?></th>
                         <th class="text-end">Kosten</th>
                         <th class="text-end">Ø Preis</th>
                         <th class="text-end">Strecke</th>
@@ -235,8 +235,8 @@ $tankJahre = array_filter($jahresdaten, fn($d) => $d['anzahl_tankstops'] > 0 || 
                     <span class="fw-semibold"><?= $daten['verbrauch_l100km'] > 0 ? $zahl($daten['verbrauch_l100km']) . ' ' . $einheitKurz . '/100 km' : '—' ?></span>
                 </div>
                 <div class="row row-cols-3 g-2 small">
-                    <div><div class="text-body-secondary">Tankstopps</div><?= (int)$daten['anzahl_tankstops'] ?></div>
-                    <div><div class="text-body-secondary">Getankt</div><?= $zahl($daten['gekauft_menge'], 1) ?> <?= $einheitKurz ?></div>
+                    <div><div class="text-body-secondary"><?= $begriffe['vorgaenge'] ?></div><?= (int)$daten['anzahl_tankstops'] ?></div>
+                    <div><div class="text-body-secondary"><?= $begriffe['menge'] ?></div><?= $zahl($daten['gekauft_menge'], 1) ?> <?= $einheitKurz ?></div>
                     <div><div class="text-body-secondary">Kosten</div><?= $zahl($daten['gekauft_ausgaben']) ?> €</div>
                     <div><div class="text-body-secondary">Strecke</div><?= $daten['verbrauch_km'] > 0 ? $zahl($daten['verbrauch_km'], 0) . ' km' : '—' ?></div>
                     <div><div class="text-body-secondary">Ø Preis</div><?= $preis !== null ? $zahl($preis, 3) . ' €' : '—' ?></div>
@@ -297,7 +297,7 @@ $tankJahre = array_filter($jahresdaten, fn($d) => $d['anzahl_tankstops'] > 0 || 
         var werte = <?= json_encode(array_values(array_map(fn($v) => round($v, 2), $verbrauchswerte))) ?>;
         var schnitt = <?= json_encode($durchschnittVerbrauch !== null ? round($durchschnittVerbrauch, 2) : null) ?>;
         var datasets = [{
-            label: 'Tankfüllung', data: werte, borderColor: farbe(1), backgroundColor: farbe(.12),
+            label: <?= json_encode($begriffe['vorgang'], JSON_UNESCAPED_UNICODE) ?>, data: werte, borderColor: farbe(1), backgroundColor: farbe(.12),
             fill: true, cubicInterpolationMode: 'monotone', pointRadius: werte.length > 60 ? 0 : 2, pointHoverRadius: 5, borderWidth: 2
         }];
         if (schnitt !== null) {
