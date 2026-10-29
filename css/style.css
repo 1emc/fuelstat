@@ -303,6 +303,38 @@ body.mit-tabbar {
     font-weight: 600;
 }
 
+/* Statistik: Diagramme mit fester Höhe, Symbol-Kreise für Höhepunkte */
+.diagramm {
+    position: relative;
+    height: 220px;
+}
+
+@media (min-width: 992px) {
+    .diagramm {
+        height: 260px;
+    }
+}
+
+.statistik-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    flex-shrink: 0;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.jahrestabelle th,
+.jahrestabelle td {
+    white-space: nowrap;
+    padding: .75rem 1rem;
+}
+
+.jahrestabelle td {
+    font-variant-numeric: tabular-nums;
+}
+
 /* --- Mobil allgemein: weniger Abstand oben, größere Tippflächen ---------- */
 @media (max-width: 991.98px) {
     .hauptinhalt .container.mt-5 {
