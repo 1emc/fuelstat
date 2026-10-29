@@ -105,6 +105,8 @@ docker compose exec -T db psql -U fuelstat -d fuelstat < ../backend/database/pos
 - `includes/db_connect.php` wird noch eingebunden, kann aber leer sein (`<?php`)
 - API-Adresse: Umgebungsvariable `FUELSTAT_API_BASE_URL` setzen, sonst wird `https://tanken.1emc.de/api/v1` verwendet (`includes/api_config.php`)
 - Für die Tankstellensuche einen Tankerkönig-API-Key in `api/key.key` ablegen
+- Betreiberangaben für Impressum und Datenschutzerklärung in `includes/betreiber.php` eintragen
+- Bootstrap, Chart.js, QRCode.js und Font Awesome liegen in `vendor/` bzw. `css/` und `webfonts/`; es werden keine CDNs geladen (siehe `vendor/README.md`)
 
 ### 4. Webserver
 

@@ -90,7 +90,7 @@ include '../includes/header.php';
                             <button type="submit" class="btn btn-primary">2FA aktivieren</button>
                             <a href="einstellungen.php" class="btn btn-outline-secondary ms-2">Abbrechen</a>
                         </form>
-                        <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+                        <script src="<?= htmlspecialchars(assetUrl('../', 'vendor/qrcodejs/qrcode.min.js')) ?>"></script>
                         <script>
                           if (window.QRCode) {
                             new QRCode(document.getElementById('qrcode'), { text: <?= json_encode($setup['otpauthUrl']) ?>, width: 180, height: 180 });

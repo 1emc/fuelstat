@@ -358,3 +358,12 @@ body.mit-tabbar {
         padding-bottom: .6rem;
     }
 }
+
+/* Impressum und Datenschutz: angenehme Zeilenlänge */
+.rechtstext {
+    max-width: 52rem;
+}
+
+.rechtstext h2 {
+    margin-top: 1.5rem;
+}

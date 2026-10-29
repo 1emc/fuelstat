@@ -48,7 +48,7 @@ $f2 = fn($v) => number_format((float)$v, 2, ',', '.');
     <meta charset="utf-8">
     <title>Fuelstat-Bericht <?= htmlspecialchars($fahrzeug['name'] ?? '') ?><?= $jahr ? ' ' . $jahr : '' ?></title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="<?= htmlspecialchars(assetUrl('../', 'vendor/bootstrap/bootstrap.min.css')) ?>" rel="stylesheet">
     <style>
         body { background: #fff; color: #212529; font-size: 0.9rem; }
         @media print { .no-print { display: none !important; } a { text-decoration: none; color: inherit; } }
