@@ -115,6 +115,7 @@ $farben = array_map('getCategoryColor', $kategorien);
 
     <!-- Detailtabelle -->
     <h4 class="mt-4">Aufschlüsselung der Kategorien</h4>
+    <div class="table-responsive">
     <table class="table table-bordered">
         <thead>
             <tr>
@@ -135,6 +136,7 @@ $farben = array_map('getCategoryColor', $kategorien);
             <?php endforeach; ?>
         </tbody>
     </table>
+    </div>
 
     <!-- Zusätzliche Kostenanalysen -->
     <div class="row mt-4">

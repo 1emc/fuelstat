@@ -70,6 +70,55 @@ if (isApiAuthenticated()) {
         }
     }
 }
+
+// --- Navigation: Seitentitel, Zurück-Link und Fahrzeug-Kontext für die mobile Ansicht ---
+$angemeldet = isApiAuthenticated();
+$userVehicles = $angemeldet ? getUserVehicles($_SESSION['user_id'] ?? null) : [];
+$skript = basename($_SERVER['SCRIPT_NAME'] ?? '');
+
+// Fahrzeug, um das es auf der aktuellen Seite geht (nur eigene Fahrzeuge)
+$kontextId = (string)($_GET['fahrzeug_id'] ?? (in_array($skript, ['fahrzeug_detail.php', 'fahrzeug_bearbeiten.php', 'import.php'], true) ? ($_GET['id'] ?? '') : ''));
+$kontextFahrzeug = null;
+foreach ($userVehicles as $vehicle) {
+    if ($kontextId !== '' && (string)$vehicle['id'] === $kontextId) {
+        $kontextFahrzeug = $vehicle;
+    }
+}
+$detailUrl = $kontextFahrzeug ? 'pages/fahrzeug_detail.php?id=' . urlencode($kontextFahrzeug['id']) : null;
+$eintraegeUrl = $detailUrl ? $detailUrl . '#eintraege' : null;
+
+// [Titel, Zurück-Link relativ zu $baseUrl]
+$seitenInfo = [
+    'fahrzeug_detail.php'      => [$kontextFahrzeug['modell'] ?? 'Fahrzeug', 'index.php'],
+    'fahrzeug_hinzufuegen.php' => ['Neues Fahrzeug', 'index.php'],
+    'fahrzeug_bearbeiten.php'  => ['Fahrzeug bearbeiten', $detailUrl],
+    'eintrag_hinzufuegen.php'  => ['Neuer Eintrag', $eintraegeUrl],
+    'eintrag_bearbeiten.php'   => ['Eintrag bearbeiten', $eintraegeUrl],
+    'import.php'               => ['Import', $eintraegeUrl],
+    'einstellungen.php'        => ['Profil', null],
+    'passwort_aendern.php'     => ['Passwort ändern', null],
+    'mfa_einrichten.php'       => ['Zwei-Faktor-Schutz', null],
+    'benachrichtigungen.php'   => ['E-Mail-Benachrichtigungen', null],
+    'admin.php'                => ['Benutzerverwaltung', null],
+    'onboarding.php'           => ['Willkommen', null],
+];
+[$seitenTitel, $zurueckUrl] = $angemeldet && isset($seitenInfo[$skript]) ? $seitenInfo[$skript] : [null, null];
+
+// Aktiver Eintrag der unteren Leiste (Statistik wird auf der Fahrzeugseite per JS umgeschaltet)
+$tabbarAktiv = [
+    'index.php' => 'uebersicht',
+    'fahrzeug_detail.php' => 'fahrzeuge', 'fahrzeug_bearbeiten.php' => 'fahrzeuge',
+    'fahrzeug_hinzufuegen.php' => 'fahrzeuge', 'import.php' => 'fahrzeuge',
+    'eintrag_hinzufuegen.php' => 'eintrag', 'eintrag_bearbeiten.php' => 'eintrag',
+    'einstellungen.php' => 'profil', 'passwort_aendern.php' => 'profil', 'mfa_einrichten.php' => 'profil',
+    'benachrichtigungen.php' => 'profil', 'admin.php' => 'profil',
+][$skript] ?? null;
+
+// Ziel von "+ Eintrag" und "Statistik": aktuelles Fahrzeug, das einzige Fahrzeug oder Auswahl im Blatt
+$zielFahrzeug = $kontextFahrzeug ?? (count($userVehicles) === 1 ? $userVehicles[0] : null);
+$profilBildUrl = !empty($currentUser['profile_image_url'])
+    ? (preg_match('#^https?://#i', $currentUser['profile_image_url']) ? $currentUser['profile_image_url'] : $baseUrl . ltrim($currentUser['profile_image_url'], '/'))
+    : null;
 ?>
 <!doctype html>
 <html lang="de" class="light-style layout-menu-fixed layout-compact" dir="ltr">
@@ -84,6 +133,7 @@ if (isApiAuthenticated()) {
     <meta name="apple-mobile-web-app-capable" content="yes">
 	<meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#f8f9fa">
     <link rel="apple-touch-icon" href="<?= htmlspecialchars($baseUrl) ?>images/new-icon-512x512.png">
 	<link rel="icon" type="image/x-icon" href="<?= htmlspecialchars($baseUrl) ?>images/new-icon.ico">
 	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -98,6 +148,8 @@ if (isApiAuthenticated()) {
           theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
         }
         document.documentElement.setAttribute('data-bs-theme', theme);
+        // Farbe der Statusleiste (Android/Chrome) passend zur Kopfleiste
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', theme === 'dark' ? '#2b3035' : '#f8f9fa');
       })();
     </script>
 
@@ -111,36 +163,55 @@ if (isApiAuthenticated()) {
     <link rel="stylesheet" href="<?= htmlspecialchars($baseUrl) ?>css/style.css" />
 </head>
 
-<body>
+<body<?= $angemeldet ? ' class="mit-tabbar"' : '' ?>>
 
-<!-- Navigation Menu -->
-<nav class="navbar sticky-top navbar-expand-lg bg-body-tertiary">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="<?= htmlspecialchars($baseUrl) ?>index.php">
+<!-- Kopfleiste: am PC komplettes Menü, mobil Zurück-Pfeil und Seitentitel (Menü steckt dort in der unteren Leiste) -->
+<nav class="navbar sticky-top navbar-expand-lg bg-body-tertiary kopfleiste">
+    <div class="container-fluid flex-nowrap">
+        <?php if ($seitenTitel !== null): ?>
+        <div class="d-flex d-lg-none align-items-center flex-grow-1 min-w-0">
+            <?php if ($zurueckUrl !== null): ?>
+            <a href="<?= htmlspecialchars($baseUrl . $zurueckUrl) ?>" class="btn btn-link text-body px-2 me-1 kopf-zurueck" aria-label="Zurück">
+                <i class="fas fa-chevron-left"></i>
+            </a>
+            <?php endif; ?>
+            <span class="navbar-brand mb-0 text-truncate kopf-titel"><?= htmlspecialchars($seitenTitel) ?></span>
+        </div>
+        <?php endif; ?>
+        <a class="navbar-brand <?= $seitenTitel !== null ? 'd-none d-lg-inline' : '' ?>" href="<?= htmlspecialchars($baseUrl) ?>index.php">
             <i class="fas fa-gas-pump"></i> Fuelstat
         </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
-            aria-controls="navbarNav" aria-expanded="false" aria-label="Navigation umschalten">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse justify-content-end bg-body-tertiary" id="navbarNav">
+
+        <!-- Mobil: Aktionen rechts in der Kopfleiste -->
+        <div class="d-flex d-lg-none align-items-center gap-1 ms-auto">
+            <?php if ($angemeldet && $skript === 'fahrzeug_detail.php' && $kontextFahrzeug): ?>
+                <a href="<?= htmlspecialchars($baseUrl) ?>pages/fahrzeug_bearbeiten.php?id=<?= htmlspecialchars(urlencode($kontextFahrzeug['id'])) ?>" class="btn btn-link text-body px-2" aria-label="Fahrzeug bearbeiten">
+                    <i class="fas fa-pen"></i>
+                </a>
+            <?php elseif (!$angemeldet): ?>
+                <button type="button" class="btn btn-link text-body px-2 theme-umschalter" aria-label="Darstellung umschalten">
+                    <i class="fas fa-moon"></i>
+                </button>
+                <?php if ($skript !== 'login.php'): ?>
+                <a class="btn btn-sm btn-primary" href="<?= htmlspecialchars($baseUrl) ?>pages/login.php">Anmelden</a>
+                <?php endif; ?>
+            <?php endif; ?>
+        </div>
+
+        <!-- PC: Menü -->
+        <div class="collapse navbar-collapse justify-content-end d-none d-lg-flex" id="navbarNav">
             <ul class="navbar-nav">
-                <!-- Menüelemente -->
                 <li class="nav-item">
                     <a class="nav-link" href="<?= htmlspecialchars($baseUrl) ?>index.php">Home</a>
                 </li>
-                <?php if (isApiAuthenticated()): ?>
+                <?php if ($angemeldet): ?>
                     <!-- Dropdown für Fahrzeuge -->
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="fahrzeugeDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             Meine Fahrzeuge
                         </a>
                         <ul class="dropdown-menu" aria-labelledby="fahrzeugeDropdown">
-                            <?php
-                            // Funktion zum Abrufen der Fahrzeuge des Benutzers
-                            $userVehicles = getUserVehicles($_SESSION['user_id'] ?? null);
-                            foreach ($userVehicles as $vehicle):
-                            ?>
+                            <?php foreach ($userVehicles as $vehicle): ?>
                                 <li>
                                     <a class="dropdown-item" href="<?= htmlspecialchars($baseUrl) ?>pages/fahrzeug_detail.php?id=<?php echo htmlspecialchars($vehicle['id']); ?>">
                                         <?php echo htmlspecialchars(trim($vehicle['marke'] . ' ' . $vehicle['modell'])); ?>
@@ -154,59 +225,26 @@ if (isApiAuthenticated()) {
                     <!-- Benutzereinstellungen -->
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="userSettingsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <?php if (!empty($currentUser['profile_image_url'])): ?>
-                                <img src="<?= htmlspecialchars(preg_match('#^https?://#i', $currentUser['profile_image_url']) ? $currentUser['profile_image_url'] : $baseUrl . ltrim($currentUser['profile_image_url'], '/')) ?>" alt="" class="rounded-circle me-1" style="width:22px;height:22px;object-fit:cover;vertical-align:-5px">
-                                <?= htmlspecialchars($currentUser['username'] ?: 'Einstellungen') ?>
+                            <?php if ($profilBildUrl): ?>
+                                <img src="<?= htmlspecialchars($profilBildUrl) ?>" alt="" class="rounded-circle me-1" style="width:22px;height:22px;object-fit:cover;vertical-align:-5px">
                             <?php else: ?>
-                                <i class="fas fa-user-cog"></i> <?= htmlspecialchars(($currentUser['username'] ?? '') ?: 'Einstellungen') ?>
+                                <i class="fas fa-user-cog"></i>
                             <?php endif; ?>
+                            <?= htmlspecialchars(($currentUser['username'] ?? '') ?: 'Einstellungen') ?>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userSettingsDropdown">
-                            <li>
-                                <a class="dropdown-item" href="<?= htmlspecialchars($baseUrl) ?>pages/einstellungen.php">
-                                    <i class="fas fa-user-edit me-2"></i> Profil bearbeiten
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item" href="<?= htmlspecialchars($baseUrl) ?>pages/passwort_aendern.php">
-                                    <i class="fas fa-key me-2"></i> Passwort ändern
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item" href="<?= htmlspecialchars($baseUrl) ?>pages/mfa_einrichten.php">
-                                    <i class="fas fa-shield-alt me-2"></i> 2FA einrichten
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item" href="<?= htmlspecialchars($baseUrl) ?>pages/benachrichtigungen.php">
-                                    <i class="fas fa-envelope me-2"></i> E-Mail-Benachrichtigungen
-                                </a>
-                            </li>
-                            <?php if (!empty($currentUser['is_admin'])): ?>
-                            <li>
-                                <a class="dropdown-item" href="<?= htmlspecialchars($baseUrl) ?>pages/admin.php">
-                                    <i class="fas fa-users-cog me-2"></i> Benutzerverwaltung
-                                </a>
-                            </li>
-                            <?php endif; ?>
-                            <li><hr class="dropdown-divider"></li>
-                            <li>
-                                <a class="dropdown-item" href="<?= htmlspecialchars($baseUrl) ?>pages/logout.php">
-                                    <i class="fas fa-sign-out-alt me-2"></i> Abmelden
-                                </a>
-                            </li>
+                            <?php include __DIR__ . '/profil_menue.php'; ?>
                         </ul>
                     </li>
                 <?php else: ?>
-                    <!-- Anmelden -->
                     <li class="nav-item">
                         <a class="nav-link" href="<?= htmlspecialchars($baseUrl) ?>pages/login.php">Anmelden</a>
                     </li>
                 <?php endif; ?>
                 <!-- Darkmode umschalten -->
                 <li class="nav-item">
-                    <button type="button" class="nav-link" id="themeToggle" aria-label="Darstellung umschalten">
-                        <i class="fas fa-moon"></i> <span class="d-lg-none">Darstellung</span>
+                    <button type="button" class="nav-link theme-umschalter" aria-label="Darstellung umschalten">
+                        <i class="fas fa-moon"></i>
                     </button>
                 </li>
             </ul>
@@ -214,8 +252,107 @@ if (isApiAuthenticated()) {
     </div>
 </nav>
 
-<!-- Hauptinhalt -->
-<div class="container mt-4">
+<?php if ($angemeldet): ?>
+<!-- Mobil: untere Leiste wie in einer App -->
+<nav class="tabbar d-lg-none" aria-label="Hauptnavigation">
+    <a href="<?= htmlspecialchars($baseUrl) ?>index.php" class="tabbar-link<?= $tabbarAktiv === 'uebersicht' ? ' active' : '' ?>">
+        <i class="fas fa-house"></i><span>Übersicht</span>
+    </a>
+    <button type="button" id="tabbarFahrzeuge" class="tabbar-link<?= $tabbarAktiv === 'fahrzeuge' ? ' active' : '' ?>" data-bs-toggle="offcanvas" data-bs-target="#blattFahrzeuge" data-aktion="details">
+        <i class="fas fa-car"></i><span>Fahrzeuge</span>
+    </button>
+    <?php if (!$userVehicles): ?>
+    <a href="<?= htmlspecialchars($baseUrl) ?>pages/fahrzeug_hinzufuegen.php" class="tabbar-link tabbar-plus" aria-label="Fahrzeug hinzufügen">
+        <span class="tabbar-kreis"><i class="fas fa-plus"></i></span>
+    </a>
+    <?php elseif ($zielFahrzeug): ?>
+    <a href="<?= htmlspecialchars($baseUrl) ?>pages/eintrag_hinzufuegen.php?fahrzeug_id=<?= htmlspecialchars(urlencode($zielFahrzeug['id'])) ?>" class="tabbar-link tabbar-plus<?= $tabbarAktiv === 'eintrag' ? ' active' : '' ?>" aria-label="Neuer Eintrag">
+        <span class="tabbar-kreis"><i class="fas fa-plus"></i></span>
+    </a>
+    <?php else: ?>
+    <button type="button" class="tabbar-link tabbar-plus<?= $tabbarAktiv === 'eintrag' ? ' active' : '' ?>" data-bs-toggle="offcanvas" data-bs-target="#blattFahrzeuge" data-aktion="eintrag" aria-label="Neuer Eintrag">
+        <span class="tabbar-kreis"><i class="fas fa-plus"></i></span>
+    </button>
+    <?php endif; ?>
+    <?php if ($zielFahrzeug): ?>
+    <a href="<?= htmlspecialchars($baseUrl) ?>pages/fahrzeug_detail.php?id=<?= htmlspecialchars(urlencode($zielFahrzeug['id'])) ?>#statistiken" id="tabbarStatistik" class="tabbar-link">
+        <i class="fas fa-chart-line"></i><span>Statistik</span>
+    </a>
+    <?php else: ?>
+    <button type="button" id="tabbarStatistik" class="tabbar-link" data-bs-toggle="offcanvas" data-bs-target="#blattFahrzeuge" data-aktion="statistik"<?= $userVehicles ? '' : ' disabled' ?>>
+        <i class="fas fa-chart-line"></i><span>Statistik</span>
+    </button>
+    <?php endif; ?>
+    <button type="button" class="tabbar-link<?= $tabbarAktiv === 'profil' ? ' active' : '' ?>" data-bs-toggle="offcanvas" data-bs-target="#blattProfil">
+        <?php if ($profilBildUrl): ?>
+            <img src="<?= htmlspecialchars($profilBildUrl) ?>" alt="" class="tabbar-avatar">
+        <?php else: ?>
+            <i class="fas fa-circle-user"></i>
+        <?php endif; ?>
+        <span>Profil</span>
+    </button>
+</nav>
+
+<!-- Blatt: Fahrzeug wählen (Details, neuer Eintrag oder Statistik – je nach Knopf) -->
+<div class="offcanvas offcanvas-bottom blatt d-lg-none" tabindex="-1" id="blattFahrzeuge" aria-labelledby="blattFahrzeugeTitel">
+    <div class="blatt-griff"></div>
+    <div class="offcanvas-header pb-2">
+        <h2 class="offcanvas-title h5" id="blattFahrzeugeTitel">Meine Fahrzeuge</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Schließen"></button>
+    </div>
+    <div class="offcanvas-body pt-0">
+        <div class="list-group list-group-flush">
+            <?php foreach ($userVehicles as $vehicle):
+                $vid = urlencode($vehicle['id']); ?>
+            <a class="list-group-item list-group-item-action d-flex align-items-center blatt-fahrzeug<?= $kontextFahrzeug && $kontextFahrzeug['id'] === $vehicle['id'] ? ' active' : '' ?>"
+               href="<?= htmlspecialchars($baseUrl) ?>pages/fahrzeug_detail.php?id=<?= htmlspecialchars($vid) ?>"
+               data-details="<?= htmlspecialchars($baseUrl) ?>pages/fahrzeug_detail.php?id=<?= htmlspecialchars($vid) ?>#allgemein"
+               data-statistik="<?= htmlspecialchars($baseUrl) ?>pages/fahrzeug_detail.php?id=<?= htmlspecialchars($vid) ?>#statistiken"
+               data-eintrag="<?= htmlspecialchars($baseUrl) ?>pages/eintrag_hinzufuegen.php?fahrzeug_id=<?= htmlspecialchars($vid) ?>">
+                <i class="fas fa-car-side me-3"></i><?= htmlspecialchars($vehicle['modell']) ?>
+                <i class="fas fa-chevron-right ms-auto small opacity-50"></i>
+            </a>
+            <?php endforeach; ?>
+            <a class="list-group-item list-group-item-action d-flex align-items-center text-primary blatt-neu" href="<?= htmlspecialchars($baseUrl) ?>pages/fahrzeug_hinzufuegen.php">
+                <i class="fas fa-plus me-3"></i>Fahrzeug hinzufügen
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Blatt: Profil und Einstellungen -->
+<div class="offcanvas offcanvas-bottom blatt d-lg-none" tabindex="-1" id="blattProfil" aria-labelledby="blattProfilTitel">
+    <div class="blatt-griff"></div>
+    <div class="offcanvas-header pb-2">
+        <div class="d-flex align-items-center gap-3 min-w-0">
+            <?php if ($profilBildUrl): ?>
+                <img src="<?= htmlspecialchars($profilBildUrl) ?>" alt="" class="rounded-circle" style="width:44px;height:44px;object-fit:cover">
+            <?php else: ?>
+                <i class="fas fa-circle-user fa-2x text-body-secondary"></i>
+            <?php endif; ?>
+            <div class="min-w-0">
+                <h2 class="offcanvas-title h5 mb-0 text-truncate" id="blattProfilTitel"><?= htmlspecialchars(($currentUser['username'] ?? '') ?: 'Mein Konto') ?></h2>
+                <?php if (!empty($currentUser['email'])): ?>
+                <div class="small text-body-secondary text-truncate"><?= htmlspecialchars($currentUser['email']) ?></div>
+                <?php endif; ?>
+            </div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Schließen"></button>
+    </div>
+    <div class="offcanvas-body pt-0">
+        <div class="list-group list-group-flush">
+            <?php $profilMenueAlsListe = true; include __DIR__ . '/profil_menue.php'; $profilMenueAlsListe = false; ?>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- Hauptinhalt (wird in footer.php geschlossen) -->
+<div class="hauptinhalt">
+
+<?php if (isset($_SESSION['success_message']) || isset($_SESSION['warning_message']) || isset($_SESSION['error_message'])): ?>
+<!-- Meldungen -->
+<div class="container mt-3 mt-lg-4">
 
 <?php
 // Erfolgs- und Warnmeldungen anzeigen
@@ -243,3 +380,5 @@ if (isset($_SESSION['error_message'])) {
     unset($_SESSION['error_message']);
 }
 ?>
+</div>
+<?php endif; ?>

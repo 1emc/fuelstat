@@ -34,7 +34,7 @@ Fuelstat ist eine Web-App, mit der du Tankfüllungen, Ladevorgänge und alle and
 - Profil mit Benutzername und Profilbild, Passwort ändern
 - Abmelden auf allen Geräten, Konto löschen
 - Benutzerverwaltung für Admins
-- Hell- und Dunkelmodus, als App installierbar (PWA)
+- Hell- und Dunkelmodus, als App installierbar (PWA), auf dem Handy mit App-Navigation (untere Leiste, Profil- und Fahrzeugauswahl von unten)
 
 ## Aufbau
 

@@ -11,7 +11,8 @@ if (!isApiAuthenticated()) {
 
 $id = trim((string)($_POST['id'] ?? ''));
 $richtung = $_POST['richtung'] ?? '';
-$zurueck = '../index.php';
+// Im Sortiermodus der Übersicht bleiben
+$zurueck = !empty($_POST['sortieren']) ? '../index.php?sortieren=1' : '../index.php';
 
 if ($id === '' || !in_array($richtung, ['hoch', 'runter'], true)) {
     header('Location: ' . $zurueck);

@@ -1,11 +1,11 @@
 {
-  "name": "Fahrzeugverwaltung",
-  "short_name": "Fahrzeuge",
-  "description": "Eine App zur Verwaltung von Fahrzeugen, Ausgaben und Statistiken.",
+  "name": "Fuelstat",
+  "short_name": "Fuelstat",
+  "description": "Verbrauch, Kosten und Termine deiner Fahrzeuge im Blick.",
   "start_url": "index.php",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#000000",
+  "background_color": "#f8f9fa",
+  "theme_color": "#f8f9fa",
   "icons": [
     {
       "src": "images/icon-192x192.png",
