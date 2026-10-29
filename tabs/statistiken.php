@@ -83,7 +83,7 @@ if ($kostenProMonatFormatted) {
 }
 
 // Diagramm-Beschriftung: Datum kurz (25.11.24)
-$verbrauchLabels = array_map(fn($datum) => date('d.m.y', strtotime($datum)), array_keys($verbrauchswerte));
+$verbrauchLabels = array_map(fn($datum) => date('d.m.y', strtotime(substr($datum, 0, 10))), array_keys($verbrauchswerte));
 
 $co2Hinweis = ($fahrzeug['fuel_type'] ?? '') === 'electric'
     ? 'Berechnet mit dem deutschen Strommix (0,363 kg CO₂/kWh)'

@@ -192,9 +192,8 @@ function getStatistikDatenFromApi($api, string $vehicleId): array
     $fillupsOnly = array_filter($flat, function ($e) {
         return ($e['kategorie'] ?? '') === 'Tankfuellung' && !empty($e['datum']);
     });
-    usort($fillupsOnly, function ($a, $b) {
-        return strcmp($a['datum'], $b['datum']);
-    });
+    // Bei mehreren Tankfüllungen/Ladungen am selben Tag entscheidet der Tachostand
+    usort($fillupsOnly, fn($a, $b) => [$a['datum'], (float)($a['tachostand'] ?? 0)] <=> [$b['datum'], (float)($b['tachostand'] ?? 0)]);
 
     $letzteVoll = null;
     $mengeSeitVoll = 0.0;
@@ -210,7 +209,12 @@ function getStatistikDatenFromApi($api, string $vehicleId): array
                 }
                 $verbrauchProMonat[$monat]['liter'] += $mengeSeitVoll;
                 $verbrauchProMonat[$monat]['km'] += $km;
-                $verbrauchswerte[$row['datum']] = ($mengeSeitVoll / $km) * 100;
+                // Schlüssel = Datum; weitere Werte am selben Tag bekommen " #2", " #3" … angehängt
+                $schluessel = $row['datum'];
+                for ($n = 2; isset($verbrauchswerte[$schluessel]); $n++) {
+                    $schluessel = $row['datum'] . ' #' . $n;
+                }
+                $verbrauchswerte[$schluessel] = ($mengeSeitVoll / $km) * 100;
             }
             $letzteVoll = $row;
             $mengeSeitVoll = 0.0;
