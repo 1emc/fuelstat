@@ -25,6 +25,7 @@ $email = ($b['email'] ?? '') !== '' ? htmlspecialchars(str_replace('@', '[at]', 
     E-Mail: <?= $email ?>
   </p>
   <p>Fragen, Fehler oder Ideen zur App kannst du nach dem Anmelden auch direkt über „Feedback senden“ schicken.</p>
+  <p>Sicherheitslücke gefunden? Bitte vertraulich melden, wie in der <a href="https://github.com/1emc/fuelstat/security/policy" target="_blank" rel="noopener">Sicherheitsrichtlinie</a> beschrieben (auch unter <a href="<?= htmlspecialchars($baseUrl) ?>.well-known/security.txt">/.well-known/security.txt</a>).</p>
 
   <h2 class="h5">Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2>
   <p><?= $anschrift ?></p>

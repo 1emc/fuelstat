@@ -2,6 +2,12 @@
 # Hintergrund: Liegt das ganze Repository im Webroot, wären sonst .env-Dateien, das .git-Verzeichnis,
 # die API-Schlüssel (Tankerkönig, Open Charge Map) und das Backend direkt abrufbar.
 
+# security.txt (RFC 9116) als Text mit UTF-8 ausliefern; /.well-known/ ist von der Sperre unten ausgenommen
+location = /.well-known/security.txt {
+    default_type text/plain;
+    charset utf-8;
+}
+
 # Versteckte Dateien und Verzeichnisse (.git, .env, .htaccess …)
 location ~ /\.(?!well-known/) {
     deny all;

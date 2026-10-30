@@ -1,13 +1,40 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+# Dependabot: Versions-Updates für alles, was Fuelstat über Paketquellen bezieht.
+# Sicherheitsupdates kommen unabhängig davon sofort (Einstellung „Dependabot security updates“).
+# Doku: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# Nicht abgedeckt: Bootstrap, Chart.js, QRCode.js und Font Awesome liegen von Hand in vendor/, css/ und webfonts/
+# (siehe vendor/README.md) und müssen manuell aktualisiert werden.
+# GitHub Actions kommen dazu, sobald es Workflows gibt (#58).
 
 version: 2
 updates:
-  - package-ecosystem: "" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  # Node-API (backend/package.json): kleine Updates gesammelt in einem PR, große einzeln
+  - package-ecosystem: "npm"
+    directory: "/backend"
     schedule:
       interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      kleine-updates:
+        update-types: ["minor", "patch"]
 
-# hier muss noch zeug rein
+  # Basis-Image der API (backend/Dockerfile). Neue Node-Hauptversionen bewusst von Hand umstellen.
+  - package-ecosystem: "docker"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+
+  # Datenbank und Adminer (infra/docker-compose.yml). Postgres-Hauptversionen brauchen Dump und Wiederherstellung.
+  - package-ecosystem: "docker-compose"
+    directory: "/infra"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    ignore:
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
