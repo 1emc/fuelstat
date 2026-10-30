@@ -4,7 +4,6 @@
 #
 # Nicht abgedeckt: Bootstrap, Chart.js, QRCode.js und Font Awesome liegen von Hand in vendor/, css/ und webfonts/
 # (siehe vendor/README.md) und müssen manuell aktualisiert werden.
-# GitHub Actions kommen dazu, sobald es Workflows gibt (#58).
 
 version: 2
 updates:
@@ -38,3 +37,10 @@ updates:
     ignore:
       - dependency-name: "postgres"
         update-types: ["version-update:semver-major"]
+
+  # Versionen der GitHub Actions in .github/workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"

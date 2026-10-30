@@ -1,0 +1,11 @@
+# CodeQL: nur eigenen Code prüfen
+name: "Fuelstat CodeQL"
+
+paths-ignore:
+  # Fremde Bibliotheken, von Hand eingebunden (Bootstrap, Chart.js, QRCode.js, Font Awesome)
+  - vendor
+  - webfonts
+  - "**/*.min.js"
+  # Tests und Doku
+  - tests
+  - docs

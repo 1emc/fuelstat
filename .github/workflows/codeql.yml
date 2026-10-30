@@ -1,0 +1,37 @@
+# Code-Scanning mit CodeQL (erweiterte Einrichtung, damit vendor/ ausgeschlossen werden kann).
+# Voraussetzung: In Settings → Advanced Security bei „CodeQL analysis“ die Standard-Einrichtung (Default setup)
+# abschalten, sonst werden die Ergebnisse dieses Workflows nicht übernommen.
+# PHP unterstützt CodeQL nicht; geprüft werden die Node-API und das JavaScript des Frontends.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * 1"   # montags 03:17 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyse (JavaScript)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          config-file: ./.github/codeql/codeql-config.yml
+          queries: security-extended
+
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:javascript-typescript"

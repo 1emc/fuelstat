@@ -6,6 +6,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const { randomUUID, randomBytes, createHmac, timingSafeEqual } = require('crypto');
 const multer = require('multer');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
 const { getVehicleStats, FUEL_TYPES, unitForFuelType, unitsForFuelType } = require('./services/stats');
@@ -25,7 +26,39 @@ const MEDIA_BASE_URL = process.env.MEDIA_BASE_URL || '/uploads';
 
 const app = express();
 
+// Die API läuft hinter nginx (Docker-Port auf 127.0.0.1): Client-IP aus X-Forwarded-For nur von lokalen bzw.
+// privaten Adressen (Docker-Netz) übernehmen
+app.set('trust proxy', 'loopback, uniquelocal');
+
+// Rate Limiting. Das PHP-Frontend ruft die API über den Server selbst auf, alle Nutzer kämen also von
+// derselben IP: angemeldete Anfragen zählen deshalb je Konto, nur anonyme je IP.
+function limitKey(req) {
+  const token = bearerToken(req);
+  if (token) {
+    try {
+      return 'u:' + jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] }).sub;
+    } catch {
+      // ungültiges Token: wie anonym behandeln
+    }
+  }
+  return 'ip:' + ipKeyGenerator(req.ip || '');
+}
+const limiter = (windowMs, angemeldet, anonym) => rateLimit({
+  windowMs,
+  limit: (req) => (limitKey(req).startsWith('u:') ? angemeldet : anonym),
+  keyGenerator: limitKey,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  handler: (req, res) => res.status(429).json({ error: 'too_many_requests' })
+});
+// Eine Seite im Frontend braucht höchstens etwa 20 API-Aufrufe
+const apiLimiter = limiter(60 * 1000, 600, 300);
+// Nach auth eingehängt, zählen also immer je Konto
+const uploadLimiter = limiter(10 * 60 * 1000, 30, 30);
+const importLimiter = limiter(10 * 60 * 1000, 60, 60);
+
 app.use(helmet());
+app.use(apiLimiter);
 app.use(cors());
 // 2 MB erlaubt größere CSV-Importe (Frontend sendet max. 500 Zeilen pro Anfrage)
 app.use(express.json({ limit: '2mb' }));
@@ -74,25 +107,45 @@ function detectImageType(buf) {
   return null;
 }
 
+// Pfad einer hochgeladenen Datei immer selbst aus UPLOAD_DIR und dem von uns vergebenen Namen bilden
+// (UUID + Endung, siehe storage oben), nie aus Angaben der Anfrage. Unerwartete Namen ergeben null.
+function uploadPath(filename) {
+  const name = path.basename(String(filename || ''));
+  return /^[0-9a-f-]{36}\.(upload|jpg|png|gif|webp)$/.test(name) ? path.join(UPLOAD_DIR, name) : null;
+}
+
+// Datei zu einer gespeicherten Bild-URL (aus der Datenbank): nur der Dateiname zählt, nur einfache Namen
+function storedMediaPath(url) {
+  const name = path.basename(String(url || ''));
+  return /^[\w-]+\.[a-z]{3,4}$/i.test(name) ? path.join(UPLOAD_DIR, name) : null;
+}
+
+function removeUpload(file) {
+  const p = file && uploadPath(file.filename);
+  return p ? fs.promises.unlink(p).catch(() => {}) : Promise.resolve();
+}
+
 // Nach multer: nur echte Bilder behalten und mit passender Endung speichern
 async function verifyUploadedImage(req, res, next) {
   if (!req.file) return next();
+  const source = uploadPath(req.file.filename);
+  if (!source) return res.status(400).json({ error: 'invalid_image' });
   try {
-    const fd = await fs.promises.open(req.file.path, 'r');
+    const fd = await fs.promises.open(source, 'r');
     const { buffer, bytesRead } = await fd.read(Buffer.alloc(16), 0, 16, 0);
     await fd.close();
     const type = detectImageType(buffer.subarray(0, bytesRead));
     if (!type) {
-      await fs.promises.unlink(req.file.path).catch(() => {});
+      await fs.promises.unlink(source).catch(() => {});
       return res.status(400).json({ error: 'invalid_image' });
     }
-    const filename = req.file.filename.replace(/\.upload$/, type.ext);
+    const filename = path.basename(source).replace(/\.upload$/, type.ext);
     const target = path.join(UPLOAD_DIR, filename);
-    await fs.promises.rename(req.file.path, target);
+    await fs.promises.rename(source, target);
     Object.assign(req.file, { filename, path: target, mimetype: type.mime });
     return next();
   } catch (e) {
-    await fs.promises.unlink(req.file.path).catch(() => {});
+    await fs.promises.unlink(source).catch(() => {});
     return res.status(500).json({ error: 'server_error' });
   }
 }
@@ -142,13 +195,21 @@ async function recordLogin(userId) {
     .catch((e) => console.error('[last_login]', e.message));
 }
 
+// Token aus "Authorization: Bearer <token>". Ohne überlappende Wiederholungen im Regex, damit ein
+// präparierter Header die Prüfung nicht quadratisch verlangsamt (ReDoS).
+function bearerToken(req) {
+  const h = String(req.header('Authorization') || '');
+  if (h.length > 8192) return null;
+  const m = /^Bearer[ \t]+(\S+)[ \t]*$/i.exec(h);
+  return m ? m[1] : null;
+}
+
 async function auth(req, res, next) {
-  const h = req.header('Authorization') || '';
-  const m = h.match(/^Bearer\s+(.+)$/i);
-  if (!m) return res.status(401).json({ error: 'missing_token' });
+  const token = bearerToken(req);
+  if (!token) return res.status(401).json({ error: 'missing_token' });
 
   try {
-    const payload = jwt.verify(m[1], process.env.JWT_SECRET, { algorithms: ['HS256'] });
+    const payload = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
 
     // Falls Token eine jti besitzt, prüfen wir, ob es widerrufen wurde
     if (payload.jti) {
@@ -754,8 +815,8 @@ app.delete('/api/v1/auth/users/:userId', auth, requireSelfOrAdmin, async (req, r
     }
 
     await Promise.all(media.rows.map(({ url }) => {
-      const filename = path.basename(String(url || ''));
-      return /^[\w.-]+$/.test(filename) ? fs.promises.unlink(path.join(UPLOAD_DIR, filename)).catch(() => {}) : null;
+      const p = storedMediaPath(url);
+      return p ? fs.promises.unlink(p).catch(() => {}) : null;
     }));
 
     return res.status(204).send();
@@ -1834,7 +1895,7 @@ app.get('/api/v1/vehicles/:vehicleId/entries', auth, async (req, res) => {
 });
 
 // Massen-Import (z. B. aus CSV): alle Zeilen in einer Transaktion, Duplikate werden übersprungen
-app.post('/api/v1/vehicles/:vehicleId/import', auth, async (req, res) => {
+app.post('/api/v1/vehicles/:vehicleId/import', auth, importLimiter, async (req, res) => {
   const vehicleId = String(req.params.vehicleId || '').trim();
   const fillups = Array.isArray(req.body?.fillups) ? req.body.fillups : [];
   const entries = Array.isArray(req.body?.entries) ? req.body.entries : [];
@@ -1991,12 +2052,13 @@ app.put('/api/v1/auth/mail-settings', auth, async (req, res) => {
   const host = optionalText(b.smtpHost) ?? null;
   const port = optionalNumber(b.smtpPort) ?? null;
   const security = b.smtpSecurity === undefined ? 'starttls' : String(b.smtpSecurity);
-  const emailOk = (v) => v === null || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  // Länge zuerst prüfen (E-Mail max. 254 Zeichen) und Domain ohne überlappende Wiederholung: kein ReDoS
+  const emailOk = (v) => v === null || (v.length <= 254 && /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/.test(v));
   const fromAddress = optionalText(b.fromAddress) ?? null;
   const toAddress = optionalText(b.toAddress) ?? null;
   const reminderDays = optionalNumber(b.reminderDays) ?? 30;
 
-  if (host !== null && !/^[a-z0-9.-]+$/i.test(host)) return res.status(400).json({ error: 'invalid_smtpHost' });
+  if (host !== null && (host.length > 253 || !/^[a-z0-9.-]+$/i.test(host))) return res.status(400).json({ error: 'invalid_smtpHost' });
   if (host !== null && !ALLOWED_PORTS.includes(port)) return res.status(400).json({ error: 'invalid_smtpPort', allowed: ALLOWED_PORTS });
   if (!['tls', 'starttls', 'none'].includes(security)) return res.status(400).json({ error: 'invalid_smtpSecurity' });
   if (!emailOk(fromAddress)) return res.status(400).json({ error: 'invalid_fromAddress' });
@@ -2191,7 +2253,7 @@ app.get('/api/v1/vehicles/:vehicleId/stats', auth, async (req, res) => {
 // ============================================
 
 // Upload user media
-app.post('/api/v1/media/upload', auth, upload.single('file'), verifyUploadedImage, async (req, res) => {
+app.post('/api/v1/media/upload', auth, uploadLimiter, upload.single('file'), verifyUploadedImage, async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'missing_file' });
   }
@@ -2212,7 +2274,7 @@ app.post('/api/v1/media/upload', auth, upload.single('file'), verifyUploadedImag
     res.status(201).json(r.rows[0]);
   } catch (e) {
     // Datei löschen falls DB-Insert fehlschlägt
-    fs.unlink(req.file.path, () => {});
+    removeUpload(req.file);
     serverError(res, e);
   }
 });
@@ -2272,7 +2334,6 @@ app.delete('/api/v1/media/:mediaId', auth, async (req, res) => {
     }
 
     const url = r.rows[0].url;
-    const filename = path.basename(url);
 
     // Aus DB löschen
     await pool.query(
@@ -2280,11 +2341,9 @@ app.delete('/api/v1/media/:mediaId', auth, async (req, res) => {
       [mediaId, req.user.sub]
     );
 
-    // Datei löschen
-    const filePath = path.join(UPLOAD_DIR, filename);
-    fs.unlink(filePath, (err) => {
-      // Ignoriere Fehler wenn Datei nicht existiert
-    });
+    // Datei löschen (fehlt sie schon, ist das kein Fehler)
+    const filePath = storedMediaPath(url);
+    if (filePath) fs.promises.unlink(filePath).catch(() => {});
 
     return res.status(204).send();
   } catch (e) {
@@ -2297,7 +2356,7 @@ app.delete('/api/v1/media/:mediaId', auth, async (req, res) => {
 // ============================================
 
 // Upload vehicle media
-app.post('/api/v1/vehicles/:vehicleId/media/upload', auth, upload.single('file'), verifyUploadedImage, async (req, res) => {
+app.post('/api/v1/vehicles/:vehicleId/media/upload', auth, uploadLimiter, upload.single('file'), verifyUploadedImage, async (req, res) => {
   const vehicleId = String(req.params.vehicleId || '').trim();
   if (!vehicleId) return res.status(400).json({ error: 'missing_vehicleId' });
 
@@ -2312,7 +2371,7 @@ app.post('/api/v1/vehicles/:vehicleId/media/upload', auth, upload.single('file')
       [vehicleId, req.user.sub]
     );
     if (v.rowCount === 0) {
-      fs.unlink(req.file.path, () => {});
+      removeUpload(req.file);
       return res.status(404).json({ error: 'vehicle_not_found' });
     }
 
@@ -2331,7 +2390,7 @@ app.post('/api/v1/vehicles/:vehicleId/media/upload', auth, upload.single('file')
     res.status(201).json(r.rows[0]);
   } catch (e) {
     // Datei löschen falls DB-Insert fehlschlägt
-    fs.unlink(req.file.path, () => {});
+    removeUpload(req.file);
     serverError(res, e);
   }
 });
@@ -2383,7 +2442,6 @@ app.delete('/api/v1/vehicles/:vehicleId/media/:mediaId', auth, async (req, res) 
     }
 
     const url = r.rows[0].url;
-    const filename = path.basename(url);
 
     // Aus DB löschen
     await pool.query(
@@ -2391,11 +2449,9 @@ app.delete('/api/v1/vehicles/:vehicleId/media/:mediaId', auth, async (req, res) 
       [mediaId, vehicleId, req.user.sub]
     );
 
-    // Datei löschen
-    const filePath = path.join(UPLOAD_DIR, filename);
-    fs.unlink(filePath, (err) => {
-      // Ignoriere Fehler wenn Datei nicht existiert
-    });
+    // Datei löschen (fehlt sie schon, ist das kein Fehler)
+    const filePath = storedMediaPath(url);
+    if (filePath) fs.promises.unlink(filePath).catch(() => {});
 
     return res.status(204).send();
   } catch (e) {
