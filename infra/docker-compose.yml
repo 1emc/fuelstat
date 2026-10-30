@@ -39,6 +39,9 @@ services:
     #   - "${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # Neue Installation: Schema beim allerersten Start (leeres Datenverzeichnis) automatisch anlegen.
+      # Bei bestehender Datenbank ignoriert Postgres diesen Ordner; dort die Migrationen einspielen.
+      - ../backend/database/postgres_init.sql:/docker-entrypoint-initdb.d/01-fuelstat.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s

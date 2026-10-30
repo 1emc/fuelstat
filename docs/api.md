@@ -1,8 +1,53 @@
 # Fuelstat V2 API
 
 Base URL: https://tanken.1emc.de/api/v1  
-Content-Type: application/json  
-Auth: Bearer JWT (Authorization Header)
+Content-Type: application/json (Uploads: multipart/form-data)  
+Auth: Bearer JWT (Authorization Header), Token gilt 7 Tage
+
+Maschinenlesbare Beschreibung: `docs/openapi.1.0.0.yaml`.
+
+## Übersicht aller Endpunkte
+
+Pfade relativ zu `/api/v1`. „Auth“: ohne = öffentlich, ✓ = angemeldet, Admin = nur `ADMIN_USER_IDS`, Selbst/Admin = eigenes Konto oder Admin.
+
+| Methode | Pfad | Auth | Zweck |
+|---|---|---|---|
+| GET | `/health` | – | Healthcheck, enthält `registration_enabled` und `beta_phase` |
+| GET | `/db-ping` | – | Datenbank erreichbar? |
+| GET | `/whoami` | ✓ | Eigenes Konto inkl. `is_admin`, `beta_tester` |
+| POST | `/auth/register` | – | Konto anlegen, liefert Token |
+| POST | `/auth/login` | – | Anmelden (bei 2FA: `mfa_required` + `mfaToken`) |
+| POST | `/auth/login/mfa` | – | Zweiter Schritt mit 2FA-Code |
+| POST | `/auth/password` | ✓ | Passwort ändern, widerruft alle Tokens |
+| POST | `/auth/mfa/setup` · `/enable` · `/disable` | ✓ | 2FA einrichten, aktivieren, abschalten |
+| GET | `/auth/users` | Admin | Alle Benutzer mit Aktivität |
+| GET · PATCH · DELETE | `/auth/users/:userId` | Selbst/Admin | Konto lesen, `email`/`username`/`profileImageUrl` ändern, löschen |
+| PUT | `/auth/users/:userId/beta` | Admin | Beta-Tester setzen |
+| POST | `/auth/users/:userId/revoke-all` | Selbst/Admin | Auf allen Geräten abmelden |
+| GET | `/auth/tokens` | ✓ | Gesperrte Tokens (Admin: alle) |
+| POST | `/auth/tokens/revoke` | ✓ | Ein Token sperren (Abmelden) |
+| GET · PUT | `/auth/mail-settings` | ✓ | E-Mail-Einstellungen |
+| POST | `/auth/mail-settings/test` · `/send-now` | ✓ | Test-Mail, Erinnerungen bzw. Bericht sofort |
+| GET · POST | `/vehicles` | ✓ | Fahrzeuge auflisten, anlegen |
+| GET · PATCH · DELETE | `/vehicles/:vehicleId` | ✓ | Fahrzeug lesen, ändern, löschen (samt Einträgen) |
+| GET | `/vehicles/:vehicleId/stats` | ✓ | Tachostand, Ø Preis, Verbrauchsabschnitte, Trend je Einheit |
+| GET | `/vehicles/:vehicleId/reminders` | ✓ | Fälligkeiten TÜV, Wartung, Versicherung, Steuer |
+| POST | `/vehicles/:vehicleId/import` | ✓ | Massenimport (CSV) |
+| GET | `/vehicles/:vehicleId/fillups` | ✓ | Tank- und Ladevorgänge (`limit`, `offset`) |
+| POST | `/fillups` | ✓ | Tank- bzw. Ladevorgang anlegen |
+| GET · PATCH · DELETE | `/fillups/:fillupId` | ✓ | Lesen, ändern (nur 14 Tage), löschen |
+| GET | `/vehicles/:vehicleId/entries` | ✓ | Ausgaben und Fahrten (`limit`, `offset`) |
+| POST | `/entries` | ✓ | Ausgabe anlegen |
+| GET · PATCH · DELETE | `/entries/:entryId` | ✓ | Ausgabe lesen, ändern, löschen |
+| POST | `/media/upload` | ✓ | Profilbild hochladen (Feld `file`) |
+| GET | `/media` · `/media/:mediaId` | ✓ | Eigene Bilder |
+| DELETE | `/media/:mediaId` | ✓ | Bild löschen |
+| POST | `/vehicles/:vehicleId/media/upload` | ✓ | Fahrzeugbild hochladen (Feld `file`) |
+| GET | `/vehicles/:vehicleId/media` | ✓ | Bilder eines Fahrzeugs |
+| DELETE | `/vehicles/:vehicleId/media/:mediaId` | ✓ | Fahrzeugbild löschen |
+| POST | `/feedback` | ✓ | Feedback senden |
+| GET | `/feedback` | Admin | Feedback-Eingang |
+| PATCH | `/feedback/:id` | Admin | Feedback als erledigt markieren |
 
 ## Auth
 
@@ -104,14 +149,26 @@ Legt ein Fahrzeug für den eingeloggten User an.
 **Header**
 Authorization: Bearer <jwt>
 
-**Body**
+**Body** (nur `name` und `fuelType` sind Pflicht)
 
 ```json
 {
-  "name": "Mein Auto",
-  "fuelType": "diesel"
+  "name": "Mazda CX-60",
+  "fuelType": "phev",
+  "brand": "Mazda",
+  "model": "CX-60 e-Skyactiv PHEV",
+  "year": 2023,
+  "odometerKm": 12,
+  "tankCapacity": 50,
+  "batteryCapacity": 17.8,
+  "sortOrder": 0
 }
 ```
+
+* `odometerKm`: Tachostand bei Anschaffung (Basis für die Fahrleistung)
+* `tankCapacity`: Tank in l bzw. kg, bei Elektroautos der Akku in kWh
+* `batteryCapacity`: Akku in kWh, nur für Plug-in-Hybride
+* `PATCH /vehicles/:vehicleId` nimmt dieselben Felder (alle optional, `null` leert optionale Felder)
 
 **fuelType erlaubt**
 `diesel`, `e5`, `e10`, `lpg`, `cng`, `electric`, `hybrid` (Vollhybrid, tankt nur), `phev` (Plug-in-Hybrid, tankt und lädt), `hydrogen`, `other`
@@ -121,43 +178,37 @@ Authorization: Bearer <jwt>
 ```json
 {
   "id": "<uuid>",
-  "name": "Mein Auto",
-  "fuel_type": "diesel",
-  "created_at": "2025-12-23T08:38:47.952Z"
+  "name": "Mazda CX-60",
+  "fuel_type": "phev",
+  "brand": "Mazda",
+  "model": "CX-60 e-Skyactiv PHEV",
+  "year": 2023,
+  "image_url": null,
+  "odometer_km": 12,
+  "mileage_km": null,
+  "tank_capacity": "50.000",
+  "battery_capacity": "17.800",
+  "sort_order": 0,
+  "created_at": "2026-10-29T08:38:47.952Z",
+  "updated_at": "2026-10-29T08:38:47.952Z"
 }
 ```
 
 **Errors**
 
-* 400: `missing_name` | `invalid_fuelType`
+* 400: `missing_name` | `invalid_fuelType` | `invalid_year` | `invalid_odometerKm` | `invalid_tankCapacity` | `invalid_batteryCapacity`
 * 401: `missing_token` | `invalid_token`
 * 500: `server_error`
 
 ### GET /vehicles
 
-Listet alle Fahrzeuge des Users, absteigend nach created_at.
-
-**Header**
-Authorization: Bearer <jwt>
-
-**Response 200**
-
-```json
-[
-  {
-    "id": "<uuid>",
-    "name": "Mein Auto",
-    "fuel_type": "diesel",
-    "created_at": "2025-12-23T08:38:47.952Z"
-  }
-]
-```
+Listet alle Fahrzeuge des Users, sortiert nach `sort_order`, danach neueste zuerst. Felder wie bei `POST /vehicles`.
 
 ## Fillups (Auth required)
 
 ### POST /fillups
 
-Legt eine Tankfüllung an. Prüft, ob `vehicleId` dem User gehört.
+Legt eine Tankfüllung bzw. einen Ladevorgang an. Prüft, ob `vehicleId` dem User gehört.
 
 **Header**
 Authorization: Bearer <jwt>
@@ -168,36 +219,28 @@ Authorization: Bearer <jwt>
 {
   "vehicleId": "<vehicle-uuid>",
   "odometerKm": 12845,
-  "liters": 47.2,
-  "priceTotalEur": 86.3,
+  "amount": 47.2,
+  "unit": "l",
+  "totalCostEur": 86.3,
   "station": "Aral",
-  "filledAt": "2025-12-23T09:16:08.998Z"
+  "filledAt": "2025-12-23T09:16:08.998Z",
+  "isFull": true,
+  "skipPrevious": false
 }
 ```
 
 **Notes**
 
-* `station` optional
-* `filledAt` optional. Wenn nicht gesetzt, nutzt die API `now()`.
+* `unit` optional: Ohne Angabe gilt die Einheit des Fahrzeugs (`electric` → `kwh`, `cng`/`hydrogen` → `kg`, sonst `l`). Plug-in-Hybride (`phev`) erlauben `l` (getankt) und `kwh` (geladen), Standard `l`.
+* `liters` und `priceTotalEur` werden als alte Namen für `amount` und `totalCostEur` weiter angenommen.
+* `station` optional, `filledAt` optional (Standard `now()`).
+* `price_per_unit` berechnet die API selbst.
 
-**Response 201**
-
-```json
-{
-  "id": "<uuid>",
-  "vehicle_id": "<vehicle-uuid>",
-  "odometer_km": 12845,
-  "liters": "47.200",
-  "price_total_eur": "86.30",
-  "station": "Aral",
-  "filled_at": "2025-12-23T09:16:08.998Z",
-  "created_at": "2025-12-23T09:16:08.998Z"
-}
-```
+**Response 201**: der angelegte Eintrag mit `amount`, `unit`, `total_cost_eur`, `price_per_unit`, `is_full`, `skip_previous` (Felder wie bei der Liste unten).
 
 **Errors**
 
-* 400: `missing_vehicleId` | `invalid_odometerKm` | `invalid_liters` | `invalid_priceTotalEur` | `invalid_filledAt`
+* 400: `missing_vehicleId` | `invalid_odometerKm` | `invalid_amount` | `invalid_totalCostEur` | `invalid_filledAt` | `invalid_unit`
 * 401: `missing_token` | `invalid_token`
 * 404: `vehicle_not_found`
 * 500: `server_error`
@@ -242,37 +285,50 @@ Authorization: Bearer <jwt>
 * 404: `vehicle_not_found`
 * 500: `server_error`
 
+### GET · PATCH · DELETE /fillups/:fillupId
+
+* `GET` liefert einen Eintrag.
+* `PATCH` nimmt `odometerKm`, `amount`, `unit`, `totalCostEur`, `station`, `filledAt`, `isFull`, `skipPrevious` (alle optional). Nur innerhalb von 14 Tagen nach `filled_at`, sonst 409 `fillup_edit_window_expired`.
+* `DELETE` löscht immer. War der Eintrag älter als 14 Tage, bekommt der nächste Eintrag `skip_previous = true`, damit über die Lücke kein falscher Verbrauch entsteht. Antwort: `{ "deletedId", "olderThan14Days", "nextUpdated", "message" }`.
+
+Fremde oder ungültige IDs liefern 404 `fillup_not_found`.
+
 ## Stats (Auth required)
 
 ### GET /vehicles/:vehicleId/stats
 
-Gibt aktuelle Kennzahlen und Full-to-Full Segmente zurück.
+Gibt aktuelle Kennzahlen und Full-to-Full-Abschnitte zurück. Abschnitte laufen je Einheit von einer vollen Füllung zur nächsten; beim Plug-in-Hybrid also getrennt für Liter und kWh.
 
 **Header**
 Authorization: Bearer <jwt>
 
-**Response 200 (Beispiel)**
+**Response 200 (Beispiel Plug-in-Hybrid)**
 
 ```json
 {
-  "currentOdo": 12845,
-  "avgPricePerLiter": "1.828",
+  "currentOdo": 68831,
+  "avgPricePerLiter": "1.774",
   "segments": [
     {
       "full_id": "<fillup-uuid>",
-      "full_at": "2025-12-23T09:11:23.890Z",
-      "km": 300,
-      "liters_segment": "47.200",
-      "l_per_100km": "15.73"
+      "full_at": "2026-10-26T12:00:00.000Z",
+      "unit": "kwh",
+      "km": 92,
+      "liters_segment": "16.590",
+      "l_per_100km": "18.03"
     }
   ],
-  "trend": {
-    "current": 15.73,
-    "avgPrev": 23.6,
-    "diff": -7.87
+  "trend": { "current": 1.4, "avgPrev": 2.31, "diff": -0.91 },
+  "units": {
+    "l":   { "avgPrice": "1.774", "avgConsumption": 2.7,  "trend": { "current": 1.4,   "avgPrev": 2.31,  "diff": -0.91 } },
+    "kwh": { "avgPrice": "0.273", "avgConsumption": 20.01, "trend": { "current": 18.03, "avgPrev": 22.4, "diff": -4.37 } }
   }
 }
 ```
+
+* `avgPricePerLiter` und `trend` gelten für die Einheit des Fahrzeugs (beim Plug-in-Hybrid Liter); `units` enthält die Werte für jede vorhandene Einheit.
+* `avgConsumption`: Ø Verbrauch pro 100 km über alle Abschnitte, nach km gewichtet. Abschnitte ohne Strecke (zwei volle Einträge beim selben Tachostand) zählen nicht.
+* `l_per_100km` ist je nach Einheit l, kWh oder kg pro 100 km.
 
 **Errors**
 
@@ -280,7 +336,9 @@ Authorization: Bearer <jwt>
 * 404: `vehicle_not_found`
 * 500: `server_error`
 
-## Ausgaben (Entries) bearbeiten und löschen (Auth required)
+## Ausgaben (Entries) (Auth required)
+
+`POST /entries` `{ "vehicleId", "category", "amountEur", "odometerKm", "occurredAt", "vendor", "description" }`. Pflicht sind `vehicleId`, `category` und `amountEur`. Übliche Kategorien: `Versicherung`, `Werkstatt`, `Inspektion`, `Steuer`, `Reparatur`, `Reifen`, `TUV`, `Wartung`, `Dekor`, `Fahrt`. Freitext ist erlaubt.
 
 * `GET /entries/:entryId` – einzelne Ausgabe
 * `PATCH /entries/:entryId` – Felder `category`, `amountEur`, `odometerKm`, `occurredAt`, `vendor`, `description` (alle optional; `null` löscht optionale Felder)
@@ -317,14 +375,15 @@ Bei aktivem 2FA antwortet `POST /auth/login` ohne `code` mit 401 `{ "error": "mf
 
 ```json
 {
-  "fillups": [{ "filledAt": "2026-01-05", "odometerKm": 38337, "amount": 33.5, "totalCostEur": 61.2, "station": "Aral", "isFull": true, "skipPrevious": false }],
+  "fillups": [{ "filledAt": "2026-01-05", "odometerKm": 38337, "amount": 33.5, "totalCostEur": 61.2, "station": "Aral", "isFull": true, "skipPrevious": false, "unit": "l" }],
   "entries": [{ "occurredAt": "2026-01-02", "category": "Versicherung", "amountEur": 420, "odometerKm": null, "vendor": "HUK", "description": "Jahresbeitrag" }]
 }
 ```
 
 * max. 1000 Zeilen pro Anfrage, alles in einer Transaktion
 * bei ungültigen Zeilen 400 `invalid_rows` mit `rows: [{ type, index, error }]`, es wird nichts importiert
-* Duplikate werden übersprungen: Tankfüllung mit gleichem Datum und Tachostand, Ausgabe mit gleichem Datum, Kategorie und Betrag
+* `unit` je Zeile gilt nur bei Plug-in-Hybriden (`l` oder `kwh`), sonst immer die Einheit des Fahrzeugs
+* Duplikate werden übersprungen: Tank- bzw. Ladevorgang mit gleichem Datum, Tachostand und gleicher Einheit, Ausgabe mit gleichem Datum, Kategorie und Betrag
 * Antwort 201: `{ "imported": { "fillups", "entries" }, "skipped": { "fillups", "entries" } }`
 
 ## Fälligkeiten (Auth required)
@@ -360,6 +419,14 @@ Umgebungsvariablen des Backends:
 * `ALLOW_PRIVATE_SMTP=true` – Mailserver mit internen Adressen erlauben (z. B. eigener Server im selben Netz)
 * `NOTIFICATIONS_ENABLED=false` – automatischen Versand abschalten
 
+## Bilder (Auth required)
+
+Upload als `multipart/form-data` mit dem Feld `file`, höchstens 20 MB. Erlaubt sind nur JPEG, PNG, GIF und WebP; geprüft wird der Inhalt, nicht die Dateiendung. Die Datei wird unter zufälligem Namen in `UPLOAD_DIR` gespeichert, die Antwort enthält die `url` (unter `MEDIA_BASE_URL`).
+
+* `POST /media/upload` → Profilbild; danach `PATCH /auth/users/:userId { "profileImageUrl": url }`
+* `POST /vehicles/:vehicleId/media/upload` → Fahrzeugbild; danach `PATCH /vehicles/:vehicleId { "imageUrl": url }`
+* Fehler: 400 `missing_file`, 400 `invalid_image`, 404 `vehicle_not_found` bzw. `media_not_found`
+
 ## Common error format
 
 ```json
@@ -393,6 +460,6 @@ curl -s https://tanken.1emc.de/api/v1/vehicles \
 curl -s https://tanken.1emc.de/api/v1/fillups \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"vehicleId":"<uuid>","odometerKm":12845,"liters":47.2,"priceTotalEur":86.3,"station":"Aral"}'
+  -d '{"vehicleId":"<uuid>","odometerKm":12845,"amount":47.2,"totalCostEur":86.3,"station":"Aral"}'
 ```
 
