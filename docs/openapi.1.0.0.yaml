@@ -17,6 +17,7 @@ tags:
   - name: Stats
   - name: Entries
   - name: Feedback
+  - name: Media
 
 security:
   - BearerAuth: []
@@ -1199,6 +1200,146 @@ paths:
         "429":
           description: too_many_attempts
 
+  /api/v1/media/upload:
+    post:
+      tags: [Media]
+      summary: Upload profile image
+      description: "multipart/form-data mit Feld `file`, max. 20 MB, nur JPEG/PNG/GIF/WebP (Inhalt wird geprüft). Danach `PATCH /api/v1/auth/users/{userId}` mit `profileImageUrl`."
+      operationId: uploadUserMedia
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+              required: [file]
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Media"
+        "400":
+          description: missing_file | invalid_image
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/media:
+    get:
+      tags: [Media]
+      summary: List own uploaded images
+      operationId: listUserMedia
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Media"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/media/{mediaId}:
+    parameters:
+      - name: mediaId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Media]
+      summary: Get own image
+      operationId: getUserMedia
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Media"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Media]
+      summary: Delete own image
+      operationId: deleteUserMedia
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/vehicles/{vehicleId}/media/upload:
+    post:
+      tags: [Media]
+      summary: Upload vehicle image
+      description: "multipart/form-data mit Feld `file`, wie beim Profilbild. Danach `PATCH /api/v1/vehicles/{vehicleId}` mit `imageUrl`."
+      operationId: uploadVehicleMedia
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+              required: [file]
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Media"
+        "400":
+          description: missing_file | invalid_image
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/vehicles/{vehicleId}/media:
+    get:
+      tags: [Media]
+      summary: List vehicle images
+      operationId: listVehicleMedia
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Media"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/vehicles/{vehicleId}/media/{mediaId}:
+    delete:
+      tags: [Media]
+      summary: Delete vehicle image
+      operationId: deleteVehicleMedia
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+        - name: mediaId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   securitySchemes:
     BearerAuth:
@@ -1306,6 +1447,18 @@ components:
             detail: "Unexpected error"
 
   schemas:
+    Media:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        vehicle_id: { type: string, format: uuid, description: nur bei Fahrzeugbildern }
+        media_type: { type: string, example: image }
+        url: { type: string, example: /uploads/3f9c….jpg }
+        mime_type: { type: string, example: image/jpeg }
+        bytes: { type: integer }
+        created_at: { type: string, format: date-time }
+
     ErrorResponse:
       type: object
       additionalProperties: false
@@ -1714,7 +1867,7 @@ components:
           nullable: true
         units:
           type: object
-          description: Ø Preis und Trend je vorhandener Einheit, z. B. { l: {...}, kwh: {...} } beim Plug-in-Hybrid
+          description: "Ø Preis, Ø Verbrauch und Trend je vorhandener Einheit, z. B. { l: {...}, kwh: {...} } beim Plug-in-Hybrid"
           additionalProperties:
             type: object
             properties:
