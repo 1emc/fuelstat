@@ -1,5 +1,6 @@
-# Sicherheitslücke in Fuelstat gefunden? Bitte vertraulich melden, nicht über öffentliche Issues.
-# Found a security issue in Fuelstat? Please report it privately, not in public issues.
+# Found a security vulnerability in Fuelstat?
+# Please report it confidentially rather than through public issues.
+
 Contact: https://github.com/1emc/fuelstat/security/advisories/new
 Contact: mailto:mario@caraggiu.eu
 Expires: 2027-10-30T00:00:00.000Z
