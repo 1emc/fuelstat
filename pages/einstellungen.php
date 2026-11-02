@@ -8,7 +8,6 @@ if (!isApiAuthenticated()) {
     exit;
 }
 
-include '../includes/db_connect.php';
 $api = getApiClient();
 $error = '';
 $user = ['email' => $_SESSION['user_email'] ?? '', 'username' => '', 'profile_image_url' => null, 'mfa_enabled' => false];

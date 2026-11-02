@@ -1,7 +1,6 @@
 <?php
 include '../includes/session.php';
 require_once __DIR__ . '/../includes/api_config.php';
-include '../includes/db_connect.php';
 require_once __DIR__ . '/../includes/api_helpers.php';
 require_once __DIR__ . '/../includes/functions.php';
 
@@ -28,7 +27,7 @@ try {
     header('Location: onboarding.php');
     exit;
 } catch (Throwable $e) {
-    $_SESSION['error_message'] = tarifHinweis($e) ?? $e->getMessage();
+    $_SESSION['error_message'] = fahrzeugFehlerText($e);
     header('Location: fahrzeug_hinzufuegen.php');
     exit;
 }

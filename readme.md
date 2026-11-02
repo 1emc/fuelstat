@@ -5,11 +5,15 @@ Fuelstat ist eine Web-App, mit der du Tankfüllungen, Ladevorgänge und alle and
 ## Funktionen
 
 **Fahrzeuge**
-- Mehrere Fahrzeuge mit Name, Kraftstoff, Marke, Modell, Baujahr, Tachostand bei Anschaffung, Tank- bzw. Akkugröße und Foto
+- Mehrere Fahrzeuge mit Name, Kraftstoff, Marke, Modell, Baujahr, Tachostand bei Anschaffung, Tank- bzw. Akkugröße und Foto; dazu optional Kennzeichen, FIN, Erstzulassung, Kauf und Verkauf, Wartungs- und Ölwechselintervall, Versicherung und Kfz-Steuer mit Fälligkeitsmonat, Reifengrößen
+- Anlegen als Assistent in vier Schritten mit Live-Vorschau der Fahrzeugkarte; Bearbeiten mit aufklappbaren Abschnitten
 - Reihenfolge in der Übersicht frei sortierbar
 - Hinweise in der Übersicht, wenn TÜV, Wartung, Versicherung oder Steuer bald fällig oder überfällig sind
 
 **Einträge**
+- Erfassen in wenigen Sekunden: Art als große Kacheln (Tanken, Laden, Ausgabe, Fahrt, km notieren), Tachostand zuerst, Datum steht auf heute, zuletzt genutzte Orte als Chips, Speichern-Knopf unten fest
+- App-Kürzel (lange auf das App-Icon tippen): „Tanken oder Laden“ und „Kilometerstand notieren“; bei mehreren Fahrzeugen steht das zuletzt genutzte oben
+- „km notieren“: nur den Tachostand festhalten (ohne Kosten), z. B. beim Parken; hilft beim Schätzen, bei der Plausibilitätsprüfung und bei der Fahrleistung
 - Tankfüllungen bzw. Ladevorgänge mit Menge (l, kWh oder kg je nach Kraftstoff), Preis, Tankstelle, voll/teilweise getankt; alle Texte passen sich der Antriebsart an (Tankstelle/Ladestation, vollgetankt/vollgeladen …)
 - Warnung bei unplausiblem Tachostand (kleiner als der vorige oder ungewöhnlich großer Sprung)
 - Tachostand vergessen? Tank- und Ladevorgänge lassen sich ohne Tachostand (oder mit einer Schätzung aus Menge und Ø Verbrauch) speichern und später nachtragen – auch nach 14 Tagen. Hinweis in der Übersicht und in der Eintragsliste; der Verbrauch bleibt korrekt
@@ -17,6 +21,7 @@ Fuelstat ist eine Web-App, mit der du Tankfüllungen, Ladevorgänge und alle and
 - Plug-in-Hybride: Tanken und Laden im selben Fahrzeug, Verbrauch getrennt in l/100 km und kWh/100 km, gemeinsame Energiekosten und Stromanteil; Tank und Akku als eigene Angaben
 - Tankstellen in der Nähe samt aktuellem Preis (Tankerkönig), beim Laden Ladestationen mit Leistung und Steckertypen (Open Charge Map); der zuletzt bezahlte kWh-Preis an einer Station wird vorgeschlagen
 - Andere Ausgaben (Versicherung, Werkstatt, Inspektion, Steuer, Reparatur, Reifen, TÜV, Wartung, Dekor) und Fahrten
+- Eintragsliste je Monat mit Summe, Filter nach Art (Tanken, Laden, Ausgaben, Fahrten, km-Notizen), Suche nach Ort oder Beschreibung, Aktionen im Menü je Eintrag
 - Alle Einträge bearbeiten und löschen (Tankfüllungen innerhalb von 14 Tagen)
 
 **Auswertungen**
@@ -25,7 +30,7 @@ Fuelstat ist eine Web-App, mit der du Tankfüllungen, Ladevorgänge und alle and
 - Jahresübersicht mit Menge, Kosten, Verbrauch und CO₂
 - Ausgaben nach Kategorie und Kostengruppe, Kosten pro Monat und km, Wartungskosten je 10.000 km, Jahresvergleich
 - CO₂-Ausstoß gesamt und pro km
-- Fälligkeiten: TÜV alle 24 Monate, Wartung alle 12 Monate oder 15.000 km, Versicherung und Steuer jährlich – jeweils ab dem letzten erfassten Eintrag
+- Fälligkeiten: TÜV alle 24 Monate (ohne Eintrag 36 Monate nach Erstzulassung), Wartung nach dem Intervall des Fahrzeugs (Standard 12 Monate oder 15.000 km), Versicherung und Steuer jährlich bzw. im hinterlegten Fälligkeitsmonat
 - Export als CSV (für Excel) und als Bericht zum Drucken bzw. Speichern als PDF
 - Import aus CSV (z. B. Excel-Listen, andere Apps oder ein Fuelstat-Export) mit Spaltenzuordnung, Vorschau, Duplikaterkennung und Vorlage passend zur Antriebsart
 
@@ -80,7 +85,7 @@ Wird `JWT_SECRET` später ohne eigenen `MAIL_ENCRYPTION_KEY` geändert, lassen s
 ### 2. Frontend (PHP)
 
 - Das Repository-Wurzelverzeichnis ist der Webroot des Frontends.
-- `includes/db_connect.php` anlegen. Die Datei wird noch eingebunden, kann aber leer sein: `echo '<?php' > includes/db_connect.php` (Aufräumen siehe [#39](https://github.com/1emc/fuelstat/issues/39)).
+- Eine Datenbankverbindung braucht das Frontend nicht: Es liest und schreibt ausschließlich über die API. Eine alte `includes/db_connect.php` aus der MySQL-Zeit kann gelöscht werden.
 - API-Adresse: Ohne Angabe nutzt das Frontend `https://tanken.1emc.de/api/v1`. Für eine eigene Installation im PHP-FPM-Pool setzen, z. B. `env[FUELSTAT_API_BASE_URL] = https://deine-domain.de/api/v1` (oder direkt `http://127.0.0.1:3000/api/v1`).
 - Tankstellensuche: Tankerkönig-API-Key (kostenlos auf creativecommons.tankerkoenig.de) in `api/key.key` ablegen.
 - Ladestationssuche für E-Autos und Plug-in-Hybride: Open-Charge-Map-API-Key (kostenlos, openchargemap.org → Mein Profil → API-Schlüssel) in `api/ocm.key` eintragen. Die leere Datei ist versioniert. Nach dem Eintragen `git update-index --skip-worktree api/ocm.key` ausführen, damit der Schlüssel nie committet wird.
@@ -135,7 +140,7 @@ Neue Datenbank-Migrationen (siehe unten) **vor** dem Neustart der API einspielen
 
 ```bash
 cd infra
-docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ../backend/database/postgres_012_missing_odometer.sql
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ../backend/database/postgres_013_vehicle_details.sql
 ```
 
 ### Datensicherung
@@ -163,7 +168,7 @@ docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < .
 
 ### Datenbank-Migrationen
 
-Neue Installationen brauchen keine Migrationen: `postgres_init.sql` enthält bereits alles bis einschließlich 012. Bestehende Installationen spielen alle noch fehlenden Migrationen der Reihe nach ein:
+Neue Installationen brauchen keine Migrationen: `postgres_init.sql` enthält bereits alles bis einschließlich 013. Bestehende Installationen spielen alle noch fehlenden Migrationen der Reihe nach ein:
 
 | Datei | Inhalt |
 |---|---|
@@ -175,6 +180,7 @@ Neue Installationen brauchen keine Migrationen: `postgres_init.sql` enthält ber
 | `postgres_010_plugin_hybrid.sql` | Antriebsart Plug-in-Hybrid (`phev`) und Akkugröße |
 | `postgres_011_plans.sql` | Tarif je Konto (`plan`, `plan_until`), siehe `PLAN_LIMITS_ENABLED` |
 | `postgres_012_missing_odometer.sql` | Tank-/Ladevorgänge ohne Tachostand, Markierung „geschätzt“, Erinnerung „Kilometerstand nachtragen“ |
+| `postgres_013_vehicle_details.sql` | Fahrzeugangaben: Kennzeichen, FIN, Erstzulassung, Kauf/Verkauf, Intervalle, Versicherung, Steuer, Reifen |
 
 Alle Migrationen laufen in einer Transaktion und lassen sich gefahrlos ein zweites Mal ausführen.
 
@@ -197,6 +203,22 @@ cd backend && npm install && npm run dev   # API mit Auto-Reload (braucht DATABA
 php -S 127.0.0.1:8088                      # Frontend, dazu FUELSTAT_API_BASE_URL=http://127.0.0.1:3000/api/v1 setzen
 for t in tests/*.php; do php -d zend.assertions=1 $t; done   # PHP-Tests
 ```
+
+### Tests
+
+Bei jedem PR und jedem Push auf `main` laufen automatisch (`.github/workflows/tests.yml`):
+- PHP: Syntax aller Dateien und die Tests in `tests/`
+- API: `node --check` und die Tests in `backend/test/` gegen eine frische Postgres-Datenbank
+- YAML: OpenAPI-Datei, Docker-Compose-Dateien und Workflows
+
+Die API-Tests (Node-Testrunner, ohne zusätzliche Pakete) brauchen eine leere Datenbank mit dem Schema aus `postgres_init.sql`. Jeder Lauf legt eigene Testkonten an, die Datenbank muss danach nicht geleert werden. **Nie gegen die echte Datenbank laufen lassen.**
+
+```bash
+createdb fuelstat_test && psql -d fuelstat_test -f backend/database/postgres_init.sql
+cd backend && DATABASE_URL=postgresql://localhost/fuelstat_test npm test
+```
+
+Ohne `DATABASE_URL` laufen nur die Tests ohne Datenbank (z. B. die Tachostand-Prüfung).
 
 API-Doku: `docs/api.md` (Übersicht aller Endpunkte) und `docs/openapi.1.0.0.yaml`.
 

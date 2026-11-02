@@ -41,7 +41,11 @@ async function getVehicleStats(pool, userId, vehicleId) {
 
   // Geschätzte Tachostände (#41) sind nur Platzhalter und zählen nirgends mit
   const odo = await pool.query(
-    `SELECT MAX(odometer_km) FILTER (WHERE NOT odometer_estimated) AS max_odo,
+    // Aktueller Tachostand: höchster echter Wert aus Tank-/Ladevorgängen und Ausgaben (inkl. "km notieren", #42)
+    `SELECT GREATEST(
+              MAX(odometer_km) FILTER (WHERE NOT odometer_estimated),
+              (SELECT MAX(odometer_km) FROM expenses WHERE user_id=$1 AND vehicle_id=$2)
+            ) AS max_odo,
             COUNT(*) FILTER (WHERE odometer_km IS NULL OR odometer_estimated)::int AS missing
      FROM fillups WHERE user_id=$1 AND vehicle_id=$2`,
     [userId, vehicleId]

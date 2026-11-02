@@ -1,6 +1,5 @@
 <?php
 include '../includes/session.php';
-include '../includes/db_connect.php';
 require_once __DIR__ . '/../includes/api_helpers.php';
 require_once __DIR__ . '/../includes/functions.php';
 $api = getApiClient();
@@ -29,7 +28,7 @@ try {
     header('Location: fahrzeug_detail.php?id=' . rawurlencode($fahrzeug_id));
     exit;
 } catch (Throwable $e) {
-    $_SESSION['error_message'] = $e->getMessage();
+    $_SESSION['error_message'] = fahrzeugFehlerText($e);
     header('Location: fahrzeug_bearbeiten.php?id=' . rawurlencode($fahrzeug_id));
     exit;
 }

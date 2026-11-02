@@ -937,7 +937,12 @@ paths:
                   type: array
                   items:
                     $ref: "#/components/schemas/EntryCreateRequest"
+                dryRun:
+                  type: boolean
+                  description: Nur prüfen, nichts speichern (Antwort 200 mit Duplikaten und Warnungen)
       responses:
+        "200":
+          description: "Probelauf (dryRun): gleiche Felder wie 201 plus dryRun: true"
         "201":
           description: Created
           content:
@@ -955,6 +960,19 @@ paths:
                     properties:
                       fillups: { type: integer }
                       entries: { type: integer }
+                  duplicates:
+                    type: array
+                    description: Übersprungene Zeilen (type fillup|entry, index in der jeweiligen Liste)
+                    items:
+                      type: object
+                      properties:
+                        type: { type: string }
+                        index: { type: integer }
+                  warnings:
+                    type: array
+                    description: Unplausible Tachostände je Zeile (type, index und die Felder von OdometerWarning)
+                    items:
+                      type: object
         "400":
           description: nothing_to_import | too_many_rows | invalid_rows
         "401":
@@ -1719,6 +1737,74 @@ components:
           type: number
           nullable: true
           description: Akku in kWh, nur für Plug-in-Hybride (zusätzlich zum Tank)
+        licensePlate:
+          type: string
+          nullable: true
+          description: "Kennzeichen, max. 15 Zeichen"
+        vin:
+          type: string
+          nullable: true
+          description: "Fahrgestellnummer, max. 17 Zeichen"
+        firstRegistration:
+          type: string
+          format: date
+          nullable: true
+          description: "Erstzulassung; ohne TÜV-Eintrag erster TÜV nach 36 Monaten"
+        purchaseDate:
+          type: string
+          format: date
+          nullable: true
+        purchasePrice:
+          type: number
+          nullable: true
+        saleDate:
+          type: string
+          format: date
+          nullable: true
+        salePrice:
+          type: number
+          nullable: true
+        serviceIntervalMonths:
+          type: integer
+          nullable: true
+          description: "1–60, Standard 12"
+        serviceIntervalKm:
+          type: integer
+          nullable: true
+          description: "1.000–100.000, Standard 15.000"
+        oilIntervalMonths:
+          type: integer
+          nullable: true
+          description: "1–60"
+        oilIntervalKm:
+          type: integer
+          nullable: true
+          description: "1.000–100.000"
+        insuranceCompany:
+          type: string
+          nullable: true
+        insurancePremium:
+          type: number
+          nullable: true
+          description: "Beitrag pro Jahr"
+        insuranceDueMonth:
+          type: integer
+          nullable: true
+          description: "1–12"
+        taxAmount:
+          type: number
+          nullable: true
+          description: "pro Jahr"
+        taxDueMonth:
+          type: integer
+          nullable: true
+          description: "1–12"
+        tireSizeSummer:
+          type: string
+          nullable: true
+        tireSizeWinter:
+          type: string
+          nullable: true
       required: [name, fuelType]
 
     VehiclePatchRequest:
@@ -1735,6 +1821,74 @@ components:
           nullable: true
         batteryCapacity:
           type: number
+          nullable: true
+        licensePlate:
+          type: string
+          nullable: true
+          description: "Kennzeichen, max. 15 Zeichen"
+        vin:
+          type: string
+          nullable: true
+          description: "Fahrgestellnummer, max. 17 Zeichen"
+        firstRegistration:
+          type: string
+          format: date
+          nullable: true
+          description: "Erstzulassung; ohne TÜV-Eintrag erster TÜV nach 36 Monaten"
+        purchaseDate:
+          type: string
+          format: date
+          nullable: true
+        purchasePrice:
+          type: number
+          nullable: true
+        saleDate:
+          type: string
+          format: date
+          nullable: true
+        salePrice:
+          type: number
+          nullable: true
+        serviceIntervalMonths:
+          type: integer
+          nullable: true
+          description: "1–60, Standard 12"
+        serviceIntervalKm:
+          type: integer
+          nullable: true
+          description: "1.000–100.000, Standard 15.000"
+        oilIntervalMonths:
+          type: integer
+          nullable: true
+          description: "1–60"
+        oilIntervalKm:
+          type: integer
+          nullable: true
+          description: "1.000–100.000"
+        insuranceCompany:
+          type: string
+          nullable: true
+        insurancePremium:
+          type: number
+          nullable: true
+          description: "Beitrag pro Jahr"
+        insuranceDueMonth:
+          type: integer
+          nullable: true
+          description: "1–12"
+        taxAmount:
+          type: number
+          nullable: true
+          description: "pro Jahr"
+        taxDueMonth:
+          type: integer
+          nullable: true
+          description: "1–12"
+        tireSizeSummer:
+          type: string
+          nullable: true
+        tireSizeWinter:
+          type: string
           nullable: true
 
     Vehicle:
@@ -1755,6 +1909,63 @@ components:
           type: number
           nullable: true
           description: Nur Plug-in-Hybride
+        license_plate:
+          type: string
+          nullable: true
+        vin:
+          type: string
+          nullable: true
+        first_registration:
+          type: string
+          format: date
+          nullable: true
+        purchase_date:
+          type: string
+          format: date
+          nullable: true
+        purchase_price:
+          type: number
+          nullable: true
+        sale_date:
+          type: string
+          format: date
+          nullable: true
+        sale_price:
+          type: number
+          nullable: true
+        service_interval_months:
+          type: integer
+          nullable: true
+        service_interval_km:
+          type: integer
+          nullable: true
+        oil_interval_months:
+          type: integer
+          nullable: true
+        oil_interval_km:
+          type: integer
+          nullable: true
+        insurance_company:
+          type: string
+          nullable: true
+        insurance_premium:
+          type: number
+          nullable: true
+        insurance_due_month:
+          type: integer
+          nullable: true
+        tax_amount:
+          type: number
+          nullable: true
+        tax_due_month:
+          type: integer
+          nullable: true
+        tire_size_summer:
+          type: string
+          nullable: true
+        tire_size_winter:
+          type: string
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -1864,6 +2075,20 @@ components:
         skipPrevious:
           type: boolean
 
+    OdometerWarning:
+      type: object
+      properties:
+        code:
+          type: string
+          enum: [lower_than_previous, higher_than_next, jump, below_purchase]
+        message:
+          type: string
+        refDate:
+          type: string
+          format: date
+        refKm:
+          type: integer
+
     Fillup:
       type: object
       additionalProperties: false
@@ -1884,6 +2109,11 @@ components:
         odometer_estimated:
           type: boolean
           description: Tachostand ist nur geschätzt
+        warnings:
+          type: array
+          description: Nur bei POST/PATCH – Hinweise auf einen unplausiblen Tachostand (gespeichert wird trotzdem)
+          items:
+            $ref: "#/components/schemas/OdometerWarning"
         unit:
           $ref: "#/components/schemas/FillupUnit"
         amount:

@@ -1,0 +1,367 @@
+// API-Tests gegen eine echte Postgres-Testdatenbank (#58).
+// Voraussetzung: DATABASE_URL zeigt auf eine Datenbank mit dem Schema aus backend/database/postgres_init.sql.
+// Lokal z. B.: createdb fuelstat_test && psql -d fuelstat_test -f backend/database/postgres_init.sql
+//              DATABASE_URL=postgresql://…/fuelstat_test npm test
+// Jeder Lauf legt eigene Konten mit zufälliger E-Mail an, die Datenbank muss also nicht geleert werden.
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
+
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret-0123456789abcdef';
+process.env.NOTIFICATIONS_ENABLED = 'false';
+process.env.UPLOAD_DIR = process.env.UPLOAD_DIR || require('node:os').tmpdir();
+delete process.env.PLAN_LIMITS_ENABLED;
+delete process.env.CORS_ORIGINS;
+
+if (!process.env.DATABASE_URL) {
+  test('API-Tests übersprungen: DATABASE_URL fehlt', { skip: true }, () => {});
+  return;
+}
+
+const { app, pool } = require('../src/server');
+let server;
+let base;
+
+test.before(async () => {
+  server = app.listen(0);
+  await new Promise((r) => server.once('listening', r));
+  base = `http://127.0.0.1:${server.address().port}/api/v1`;
+});
+
+test.after(async () => {
+  await new Promise((r) => server.close(r));
+  await pool.end();
+});
+
+async function api(method, path, { token, body, headers = {} } = {}) {
+  const res = await fetch(base + path, {
+    method,
+    headers: {
+      ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...headers
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined
+  });
+  const text = await res.text();
+  let json = null;
+  try { json = text ? JSON.parse(text) : null; } catch { json = text; }
+  return { status: res.status, body: json, headers: res.headers };
+}
+
+const unique = () => crypto.randomBytes(6).toString('hex');
+async function newUser() {
+  const email = `test-${unique()}@example.test`;
+  const r = await api('POST', '/auth/register', { body: { email, password: 'Passwort123' } });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  return { email, token: r.body.token, id: r.body.user.id };
+}
+async function newVehicle(token, fuelType = 'e10', extra = {}) {
+  const r = await api('POST', '/vehicles', { token, body: { name: `Auto ${unique()}`, fuelType, ...extra } });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  return r.body.id;
+}
+async function fillup(token, vehicleId, data) {
+  const r = await api('POST', '/fillups', { token, body: { vehicleId, totalCostEur: 0, ...data } });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  return r.body;
+}
+
+// TOTP (RFC 6238) für den 2FA-Test
+function totp(secretBase32) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = '';
+  for (const ch of secretBase32.replace(/=+$/, '').toUpperCase()) bits += alphabet.indexOf(ch).toString(2).padStart(5, '0');
+  const key = Buffer.from(bits.match(/.{8}/g).map((b) => parseInt(b, 2)));
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)));
+  const h = crypto.createHmac('sha1', key).update(counter).digest();
+  const o = h[19] & 15;
+  return String((h.readUInt32BE(o) & 0x7fffffff) % 1e6).padStart(6, '0');
+}
+
+test('Healthcheck', async () => {
+  const r = await api('GET', '/health');
+  assert.equal(r.status, 200);
+  assert.equal(r.body.status, 'healthy');
+});
+
+test('Registrierung und Login', async () => {
+  const u = await newUser();
+  assert.equal((await api('POST', '/auth/register', { body: { email: u.email, password: 'Passwort123' } })).status, 409);
+  assert.equal((await api('POST', '/auth/register', { body: { email: 'x@y.de', password: 'kurz' } })).body.error, 'password_too_short');
+  const ok = await api('POST', '/auth/login', { body: { email: u.email, password: 'Passwort123' } });
+  assert.equal(ok.status, 200);
+  assert.ok(ok.body.token);
+  const falsch = await api('POST', '/auth/login', { body: { email: u.email, password: 'falsch-falsch' } });
+  assert.equal(falsch.status, 401);
+  assert.equal((await api('GET', '/vehicles')).status, 401, 'ohne Token');
+  const me = await api('GET', '/whoami', { token: u.token });
+  assert.equal(me.body.email, u.email);
+  assert.equal(me.body.plan, 'free');
+  assert.equal(me.body.effectivePlan, 'plus', 'ohne PLAN_LIMITS_ENABLED volle Rechte');
+});
+
+test('2FA: einrichten, Login ohne/mit Code, zweistufig', async () => {
+  const u = await newUser();
+  const setup = await api('POST', '/auth/mfa/setup', { token: u.token });
+  assert.equal(setup.status, 200);
+  const secret = setup.body.secret;
+  assert.equal((await api('POST', '/auth/mfa/enable', { token: u.token, body: { code: totp(secret) } })).status, 200);
+  // Secret liegt verschlüsselt in der Datenbank (#55)
+  const db = await pool.query('SELECT mfa_secret FROM users WHERE id = $1', [u.id]);
+  assert.match(db.rows[0].mfa_secret, /^v1:/);
+
+  const ohne = await api('POST', '/auth/login', { body: { email: u.email, password: 'Passwort123' } });
+  assert.equal(ohne.status, 401);
+  assert.equal(ohne.body.error, 'mfa_required');
+  assert.ok(ohne.body.mfaToken);
+  const falsch = await api('POST', '/auth/login', { body: { email: u.email, password: 'Passwort123', code: '000000' } });
+  assert.equal(falsch.body.error, 'invalid_mfa_code');
+  const mit = await api('POST', '/auth/login', { body: { email: u.email, password: 'Passwort123', code: totp(secret) } });
+  assert.equal(mit.status, 200);
+  const schritt2 = await api('POST', '/auth/login/mfa', { body: { mfaToken: ohne.body.mfaToken, code: totp(secret) } });
+  assert.equal(schritt2.status, 200);
+  assert.ok(schritt2.body.token);
+});
+
+test('Fremde Fahrzeuge und Einträge sind nicht erreichbar (404)', async () => {
+  const a = await newUser();
+  const b = await newUser();
+  const v = await newVehicle(a.token);
+  const f = await fillup(a.token, v, { odometerKm: 1000, amount: 40 });
+  for (const [m, p, body] of [
+    ['GET', `/vehicles/${v}`],
+    ['PATCH', `/vehicles/${v}`, { name: 'gekapert' }],
+    ['DELETE', `/vehicles/${v}`],
+    ['GET', `/vehicles/${v}/stats`],
+    ['GET', `/vehicles/${v}/fillups`],
+    ['GET', `/vehicles/${v}/entries`],
+    ['POST', '/fillups', { vehicleId: v, odometerKm: 1, amount: 1, totalCostEur: 1 }],
+    ['POST', '/entries', { vehicleId: v, category: 'Werkstatt', amountEur: 1 }],
+    ['GET', `/fillups/${f.id}`],
+    ['PATCH', `/fillups/${f.id}`, { odometerKm: 5 }],
+    ['DELETE', `/fillups/${f.id}`],
+    ['POST', `/vehicles/${v}/import`, { fillups: [{ filledAt: '2026-01-01', odometerKm: 1, amount: 1, totalCostEur: 1 }] }]
+  ]) {
+    const r = await api(m, p, { token: b.token, body });
+    assert.equal(r.status, 404, `${m} ${p} → ${r.status}`);
+  }
+  // Fahrzeug und Eintrag sind unverändert
+  assert.equal((await api('GET', `/fillups/${f.id}`, { token: a.token })).body.odometer_km, 1000);
+});
+
+test('Tanken: Verbrauch Full-to-Full mit Teilbetankung', async () => {
+  const u = await newUser();
+  const v = await newVehicle(u.token);
+  await fillup(u.token, v, { odometerKm: 1000, amount: 40, totalCostEur: 70, filledAt: '2026-01-01T12:00:00Z' });
+  await fillup(u.token, v, { odometerKm: 1300, amount: 10, totalCostEur: 18, isFull: false, filledAt: '2026-01-05T12:00:00Z' });
+  await fillup(u.token, v, { odometerKm: 1500, amount: 25, totalCostEur: 45, filledAt: '2026-01-10T12:00:00Z' });
+  const s = (await api('GET', `/vehicles/${v}/stats`, { token: u.token })).body;
+  assert.equal(s.currentOdo, 1500);
+  assert.equal(s.segments.length, 1);
+  assert.equal(Number(s.segments[0].km), 500);
+  assert.equal(Number(s.segments[0].l_per_100km), 7);
+  assert.equal(s.avgConsumption, 7);
+});
+
+test('Plug-in-Hybrid: Liter und kWh getrennt', async () => {
+  const u = await newUser();
+  const v = await newVehicle(u.token, 'phev', { batteryCapacity: 17.8 });
+  await fillup(u.token, v, { odometerKm: 1000, amount: 30, unit: 'l', filledAt: '2026-01-01T12:00:00Z' });
+  await fillup(u.token, v, { odometerKm: 1000, amount: 15, unit: 'kwh', filledAt: '2026-01-01T13:00:00Z' });
+  await fillup(u.token, v, { odometerKm: 1100, amount: 18, unit: 'kwh', filledAt: '2026-01-03T12:00:00Z' });
+  await fillup(u.token, v, { odometerKm: 2000, amount: 40, unit: 'l', filledAt: '2026-01-20T12:00:00Z' });
+  assert.equal((await api('POST', '/fillups', { token: u.token, body: { vehicleId: v, odometerKm: 2100, amount: 5, totalCostEur: 1, unit: 'kg' } })).status, 400);
+  const s = (await api('GET', `/vehicles/${v}/stats`, { token: u.token })).body;
+  assert.equal(s.units.l.avgConsumption, 4);
+  assert.equal(s.units.kwh.avgConsumption, 18);
+});
+
+test('Kilometerstand fehlt (#41): Abschnitt, Nachtragen nach 14 Tagen', async () => {
+  const u = await newUser();
+  const v = await newVehicle(u.token);
+  await fillup(u.token, v, { odometerKm: 1000, amount: 50, filledAt: '2025-01-01T12:00:00Z' });
+  const ohne = await fillup(u.token, v, { amount: 30, filledAt: '2025-01-10T12:00:00Z' });
+  assert.equal(ohne.odometer_km, null);
+  await fillup(u.token, v, { odometerKm: 2000, amount: 40, filledAt: '2025-01-20T12:00:00Z' });
+  let s = (await api('GET', `/vehicles/${v}/stats`, { token: u.token })).body;
+  assert.equal(s.missingOdometer, 1);
+  assert.equal(s.segments.length, 1, 'Eintrag ohne km schließt keinen Abschnitt ab');
+  assert.equal(Number(s.segments[0].liters_segment), 70);
+
+  // Nachtragen geht trotz 14-Tage-Frist, andere Änderungen nicht
+  assert.equal((await api('PATCH', `/fillups/${ohne.id}`, { token: u.token, body: { odometerKm: 1450, amount: 31 } })).status, 409);
+  const nach = await api('PATCH', `/fillups/${ohne.id}`, { token: u.token, body: { odometerKm: 1450 } });
+  assert.equal(nach.status, 200);
+  assert.equal(nach.body.odometer_km, 1450);
+  s = (await api('GET', `/vehicles/${v}/stats`, { token: u.token })).body;
+  assert.equal(s.missingOdometer, 0);
+  assert.equal(s.segments.length, 2);
+
+  // Geschätzter Wert zählt nicht
+  const geschaetzt = await fillup(u.token, v, { odometerKm: 2600, odometerEstimated: true, amount: 35, filledAt: '2025-02-01T12:00:00Z' });
+  assert.equal(geschaetzt.odometer_estimated, true);
+  s = (await api('GET', `/vehicles/${v}/stats`, { token: u.token })).body;
+  assert.equal(s.currentOdo, 2000);
+  assert.equal(s.missingOdometer, 1);
+});
+
+test('Tachostand-Prüfung (#51): Warnung statt Ablehnung', async () => {
+  const u = await newUser();
+  const v = await newVehicle(u.token, 'diesel', { odometerKm: 5000 });
+  const erst = await fillup(u.token, v, { odometerKm: 4000, amount: 40, filledAt: '2026-01-01T12:00:00Z' });
+  assert.deepEqual(erst.warnings.map((w) => w.code), ['below_purchase']);
+  await fillup(u.token, v, { odometerKm: 6000, amount: 40, filledAt: '2026-01-10T12:00:00Z' });
+  const ok = await fillup(u.token, v, { odometerKm: 6500, amount: 40, filledAt: '2026-01-20T12:00:00Z' });
+  assert.deepEqual(ok.warnings, []);
+  const zurueck = await fillup(u.token, v, { odometerKm: 6100, amount: 40, filledAt: '2026-01-25T12:00:00Z' });
+  assert.deepEqual(zurueck.warnings.map((w) => w.code), ['lower_than_previous'], 'gespeichert, aber mit Warnung');
+  const sprung = await fillup(u.token, v, { odometerKm: 16500, amount: 40, filledAt: '2026-01-26T12:00:00Z' });
+  assert.deepEqual(sprung.warnings.map((w) => w.code), ['jump']);
+  // Ohne Tachostand keine Warnung; Ausgaben werden ebenso geprüft
+  assert.deepEqual((await fillup(u.token, v, { amount: 10, filledAt: '2026-01-27T12:00:00Z' })).warnings, []);
+  const ausgabe = await api('POST', '/entries', { token: u.token, body: { vehicleId: v, category: 'Werkstatt', amountEur: 100, odometerKm: 100, occurredAt: '2026-01-28T12:00:00Z' } });
+  assert.equal(ausgabe.status, 201);
+  assert.deepEqual(ausgabe.body.warnings.map((w) => w.code), ['lower_than_previous']);
+  assert.equal((await api('DELETE', `/entries/${ausgabe.body.id}`, { token: u.token })).status, 204);
+  // PATCH korrigiert die Warnung
+  const korrigiert = await api('PATCH', `/fillups/${zurueck.id}`, { token: u.token, body: { odometerKm: 6600 } });
+  assert.deepEqual(korrigiert.body.warnings, []);
+});
+
+test('Kilometerstand notieren (#42) zählt als aktueller Tachostand, nicht als Kosten', async () => {
+  const u = await newUser();
+  const v = await newVehicle(u.token);
+  await fillup(u.token, v, { odometerKm: 1000, amount: 40, totalCostEur: 70, filledAt: '2026-01-01T12:00:00Z' });
+  const notiz = await api('POST', '/entries', { token: u.token, body: { vehicleId: v, category: 'Kilometerstand', amountEur: 0, odometerKm: 1350, occurredAt: '2026-01-05T12:00:00Z' } });
+  assert.equal(notiz.status, 201);
+  assert.deepEqual(notiz.body.warnings, []);
+  const s = (await api('GET', `/vehicles/${v}/stats`, { token: u.token })).body;
+  assert.equal(s.currentOdo, 1350);
+  assert.equal(s.segments.length, 0, 'kein Verbrauchsabschnitt');
+});
+
+test('Fahrzeugangaben (#45): speichern, ändern, prüfen', async () => {
+  const u = await newUser();
+  const anlegen = await api('POST', '/vehicles', { token: u.token, body: {
+    name: 'Detail', fuelType: 'diesel', licensePlate: ' aa-bb 123 ', vin: 'wvw zzz 1jz xw000001', firstRegistration: '2021-03-15',
+    purchaseDate: '2021-04-01', purchasePrice: 24999.5, serviceIntervalMonths: 24, serviceIntervalKm: 30000,
+    insuranceCompany: 'HUK', insurancePremium: 420, insuranceDueMonth: 1, taxAmount: 180, taxDueMonth: 6, tireSizeSummer: '205/55 R16'
+  } });
+  assert.equal(anlegen.status, 201, JSON.stringify(anlegen.body));
+  const v = anlegen.body;
+  assert.equal(v.license_plate, 'AA-BB 123');
+  assert.equal(v.vin, 'WVWZZZ1JZXW000001');
+  assert.equal(v.first_registration, '2021-03-15', 'Datum ohne Zeitzonenverschiebung');
+  assert.equal(Number(v.purchase_price), 24999.5);
+  assert.equal(v.service_interval_months, 24);
+
+  const geaendert = await api('PATCH', `/vehicles/${v.id}`, { token: u.token, body: { licensePlate: '', taxDueMonth: 7 } });
+  assert.equal(geaendert.status, 200);
+  assert.equal(geaendert.body.license_plate, null);
+  assert.equal(geaendert.body.tax_due_month, 7);
+  assert.equal(geaendert.body.insurance_company, 'HUK', 'nicht gesendete Felder bleiben');
+
+  for (const [feld, wert] of [['taxDueMonth', 13], ['firstRegistration', '15.03.2021'], ['purchasePrice', -1], ['serviceIntervalKm', 50], ['vin', 'X'.repeat(18)]]) {
+    const r = await api('PATCH', `/vehicles/${v.id}`, { token: u.token, body: { [feld]: wert } });
+    assert.equal(r.status, 400, feld);
+    assert.equal(r.body.error, `invalid_${feld}`);
+  }
+  assert.equal((await api('GET', `/vehicles/${v.id}`, { token: u.token })).body.tire_size_summer, '205/55 R16');
+});
+
+test('Fälligkeiten aus Fahrzeugangaben (#45)', async () => {
+  const u = await newUser();
+  const heute = new Date();
+  const iso = (d) => d.toISOString().slice(0, 10);
+  // Erstzulassung vor 30 Monaten: erster TÜV in 6 Monaten (36 Monate nach Erstzulassung)
+  const ez = new Date(Date.UTC(heute.getUTCFullYear(), heute.getUTCMonth() - 30, 10));
+  const tuevErwartet = iso(new Date(Date.UTC(ez.getUTCFullYear(), ez.getUTCMonth() + 36, 10)));
+  const naechsterMonat = ((heute.getUTCMonth() + 1) % 12) + 1;
+  const v = await newVehicle(u.token, 'e10', { firstRegistration: iso(ez), serviceIntervalMonths: 24, taxDueMonth: naechsterMonat });
+  // Wartung vor 13 Monaten: mit 24-Monats-Intervall noch nicht fällig
+  await api('POST', '/entries', { token: u.token, body: { vehicleId: v, category: 'Wartung', amountEur: 300,
+    occurredAt: iso(new Date(Date.UTC(heute.getUTCFullYear(), heute.getUTCMonth() - 13, 1))) } });
+  const r = (await api('GET', `/vehicles/${v}/reminders`, { token: u.token })).body;
+  const nach = Object.fromEntries(r.map((x) => [x.category, x]));
+  assert.equal(nach.TUV.due_date, tuevErwartet);
+  assert.equal(nach.TUV.source, 'erstzulassung');
+  assert.equal(nach.Wartung.status, 'ok');
+  assert.equal(nach.Steuer.source, 'faelligkeitsmonat');
+  assert.equal(nach.Steuer.due_date.slice(5, 7), String(naechsterMonat).padStart(2, '0'));
+  assert.equal(nach.Versicherung.status, 'unbekannt');
+});
+
+test('Ausgabe ohne Tachostand speichert null, nicht 0', async () => {
+  const u = await newUser();
+  const v = await newVehicle(u.token);
+  for (const odometerKm of [null, '']) {
+    const r = await api('POST', '/entries', { token: u.token, body: { vehicleId: v, category: 'Versicherung', amountEur: 300, odometerKm } });
+    assert.equal(r.status, 201);
+    assert.equal(r.body.odometer_km, null);
+  }
+});
+
+test('Import: Probelauf, Duplikate, Warnungen', async () => {
+  const u = await newUser();
+  const v = await newVehicle(u.token);
+  await fillup(u.token, v, { odometerKm: 10000, amount: 40, filledAt: '2026-01-01T12:00:00Z' });
+  const daten = {
+    fillups: [
+      { filledAt: '2026-01-01', odometerKm: 10000, amount: 40, totalCostEur: 70 }, // Duplikat
+      { filledAt: '2026-01-10', odometerKm: 10600, amount: 38, totalCostEur: 66 },
+      { filledAt: '2026-01-15', odometerKm: 9000, amount: 20, totalCostEur: 35 }, // kleiner als vorher
+      { filledAt: '2026-01-20', amount: 30, totalCostEur: 52 } // ohne km
+    ],
+    entries: [{ occurredAt: '2026-01-12', category: 'Werkstatt', amountEur: 120 }]
+  };
+  const probe = await api('POST', `/vehicles/${v}/import`, { token: u.token, body: { ...daten, dryRun: true } });
+  assert.equal(probe.status, 200);
+  assert.equal(probe.body.dryRun, true);
+  assert.deepEqual(probe.body.duplicates, [{ type: 'fillup', index: 0 }]);
+  // Der Ausreißer (Zeile 2) macht auch den Vorgänger verdächtig: dieselbe Logik wie im Formular
+  assert.deepEqual(probe.body.warnings.map((w) => [w.type, w.index, w.code]), [['fillup', 1, 'higher_than_next'], ['fillup', 2, 'lower_than_previous']]);
+  assert.equal((await api('GET', `/vehicles/${v}/fillups`, { token: u.token })).body.length, 1, 'Probelauf schreibt nichts');
+
+  const echt = await api('POST', `/vehicles/${v}/import`, { token: u.token, body: daten });
+  assert.equal(echt.status, 201);
+  assert.deepEqual(echt.body.imported, { fillups: 3, entries: 1 });
+  assert.deepEqual(echt.body.skipped, { fillups: 1, entries: 0 });
+  const nochmal = await api('POST', `/vehicles/${v}/import`, { token: u.token, body: daten });
+  assert.deepEqual(nochmal.body.imported, { fillups: 0, entries: 0 }, 'zweiter Import überspringt alles');
+
+  const kaputt = await api('POST', `/vehicles/${v}/import`, { token: u.token, body: { fillups: [{ filledAt: 'gestern', amount: 1, totalCostEur: 1 }] } });
+  assert.equal(kaputt.status, 400);
+  assert.equal(kaputt.body.error, 'invalid_rows');
+});
+
+test('Tarife (#44): Grenzen nur mit PLAN_LIMITS_ENABLED', async () => {
+  const u = await newUser();
+  await newVehicle(u.token);
+  await newVehicle(u.token);
+  process.env.PLAN_LIMITS_ENABLED = 'true';
+  try {
+    const r = await api('POST', '/vehicles', { token: u.token, body: { name: 'Drittes', fuelType: 'e10' } });
+    assert.equal(r.status, 403);
+    assert.equal(r.body.error, 'plan_required');
+    assert.equal(r.body.feature, 'maxVehicles');
+  } finally {
+    delete process.env.PLAN_LIMITS_ENABLED;
+  }
+  assert.equal((await api('POST', '/vehicles', { token: u.token, body: { name: 'Drittes', fuelType: 'e10' } })).status, 201);
+  // Tarif setzen ist nur für Admins
+  assert.equal((await api('PUT', '/auth/plans', { token: u.token, body: { userIds: [u.id], plan: 'plus' } })).status, 403);
+});
+
+test('Ungültige IDs liefern 404 statt 500', async () => {
+  const u = await newUser();
+  for (const p of ['/fillups/xyz', '/entries/xyz', '/vehicles/xyz', '/vehicles/xyz/stats', '/vehicles/xyz/fillups']) {
+    assert.equal((await api('GET', p, { token: u.token })).status, 404, p);
+  }
+});
+
+test('CORS ist ohne CORS_ORIGINS aus', async () => {
+  const r = await api('GET', '/health', { headers: { origin: 'https://boese.example' } });
+  assert.equal(r.headers.get('access-control-allow-origin'), null);
+});

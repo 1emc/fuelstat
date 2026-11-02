@@ -1,5 +1,5 @@
 -- backend/database/postgres_init.sql
--- Vollständiges Schema für eine NEUE Installation (Stand: Migration 012).
+-- Vollständiges Schema für eine NEUE Installation (Stand: Migration 013).
 -- Beim ersten Start der Datenbank spielt Docker diese Datei automatisch ein (siehe infra/docker-compose.yml).
 -- Bestehende Installationen nutzen stattdessen die Migrationen postgres_0XX_*.sql.
 BEGIN;
@@ -39,6 +39,25 @@ CREATE TABLE IF NOT EXISTS vehicles (
   mileage_km integer NULL,
   tank_capacity numeric(10,3) NULL,        -- l bzw. kg, bei Elektroautos kWh
   battery_capacity numeric(10,3) NULL,     -- kWh, nur Plug-in-Hybride
+  -- Zusatzangaben (#45), alle optional
+  license_plate text NULL,
+  vin text NULL,
+  first_registration date NULL,            -- erster TÜV nach 36 Monaten
+  purchase_date date NULL,
+  purchase_price numeric(10,2) NULL CHECK (purchase_price IS NULL OR purchase_price >= 0),
+  sale_date date NULL,
+  sale_price numeric(10,2) NULL CHECK (sale_price IS NULL OR sale_price >= 0),
+  service_interval_months smallint NULL CHECK (service_interval_months IS NULL OR service_interval_months BETWEEN 1 AND 60),
+  service_interval_km integer NULL CHECK (service_interval_km IS NULL OR service_interval_km BETWEEN 1000 AND 100000),
+  oil_interval_months smallint NULL CHECK (oil_interval_months IS NULL OR oil_interval_months BETWEEN 1 AND 60),
+  oil_interval_km integer NULL CHECK (oil_interval_km IS NULL OR oil_interval_km BETWEEN 1000 AND 100000),
+  insurance_company text NULL,
+  insurance_premium numeric(10,2) NULL CHECK (insurance_premium IS NULL OR insurance_premium >= 0),
+  insurance_due_month smallint NULL CHECK (insurance_due_month IS NULL OR insurance_due_month BETWEEN 1 AND 12),
+  tax_amount numeric(10,2) NULL CHECK (tax_amount IS NULL OR tax_amount >= 0),
+  tax_due_month smallint NULL CHECK (tax_due_month IS NULL OR tax_due_month BETWEEN 1 AND 12),
+  tire_size_summer text NULL,
+  tire_size_winter text NULL,
   sort_order integer NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()

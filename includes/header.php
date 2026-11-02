@@ -1,6 +1,4 @@
 <?php
-// API-Anbindung (ersetzt frühere DB-Verbindung)
-include 'db_connect.php';
 require_once __DIR__ . '/api_helpers.php';
 
 // Basis-URL (mit http/https) und Basis-Pfad (unterhalb Document-Root) ermitteln
@@ -94,6 +92,8 @@ $seitenInfo = [
     'fahrzeug_bearbeiten.php'  => ['Fahrzeug bearbeiten', $detailUrl],
     'eintrag_hinzufuegen.php'  => ['Neuer Eintrag', $eintraegeUrl],
     'eintrag_bearbeiten.php'   => ['Eintrag bearbeiten', $eintraegeUrl],
+    'schnell.php'              => ['Schnellerfassung', 'index.php'],
+    'tachostand_nachtragen.php' => ['Tachostand nachtragen', $eintraegeUrl],
     'import.php'               => ['Import', $eintraegeUrl],
     'einstellungen.php'        => ['Profil', null],
     'passwort_aendern.php'     => ['Passwort ändern', null],
@@ -110,7 +110,7 @@ $tabbarAktiv = [
     'index.php' => 'uebersicht',
     'fahrzeug_detail.php' => 'fahrzeuge', 'fahrzeug_bearbeiten.php' => 'fahrzeuge',
     'fahrzeug_hinzufuegen.php' => 'fahrzeuge', 'import.php' => 'fahrzeuge',
-    'eintrag_hinzufuegen.php' => 'eintrag', 'eintrag_bearbeiten.php' => 'eintrag',
+    'eintrag_hinzufuegen.php' => 'eintrag', 'eintrag_bearbeiten.php' => 'eintrag', 'schnell.php' => 'eintrag',
     'einstellungen.php' => 'profil', 'passwort_aendern.php' => 'profil', 'mfa_einrichten.php' => 'profil',
     'benachrichtigungen.php' => 'profil', 'admin.php' => 'profil', 'feedback.php' => 'profil',
 ][$skript] ?? null;

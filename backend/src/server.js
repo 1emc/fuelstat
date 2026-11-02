@@ -13,6 +13,8 @@ const { getVehicleReminders } = require('./services/reminders');
 const { encryptSecret, decryptSecret, sendUserMail, resolveSmtpHost, ALLOWED_PORTS, loadDefaultSmtp, withDefaultSmtp } = require('./services/mail');
 const notifier = require('./services/notifier');
 const plans = require('./services/plans');
+const { checkOdometer, loadOdometerPoints, odometerWarnings } = require('./services/odometer');
+const { VEHICLE_EXTRA_COLUMNS, parseVehicleExtras } = require('./services/vehicleFields');
 
 // Media Upload Konfiguration
 // Standard-Uploadpfad: im Backend-Projektordner unter ../uploads (z. B. /srv/www/.../uploads)
@@ -94,6 +96,8 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
   throw new Error('JWT_SECRET fehlt oder ist zu kurz');
 }
 
+// DATE-Spalten (z. B. Erstzulassung) als 'YYYY-MM-DD' liefern, nicht als Date mit Zeitzonenverschiebung
+require('pg').types.setTypeParser(1082, (v) => v);
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 // Upload-Verzeichnis erstellen falls nicht vorhanden
@@ -379,6 +383,8 @@ const MFA_TOKEN_SECRET = `${process.env.JWT_SECRET}:mfa-step`;
 
 // Interne Fehler nur ins Log schreiben, nicht an den Client (verrät sonst Tabellen/Spalten)
 function serverError(res, e) {
+  // Ungültige UUID in der URL (z. B. /fillups/xyz): wie ein unbekannter Eintrag behandeln, kein Serverfehler
+  if (e && e.code === '22P02') return res.status(404).json({ error: 'not_found' });
   console.error('[server_error]', e);
   return res.status(500).json({ error: 'server_error' });
 }
@@ -1082,6 +1088,9 @@ app.post('/api/v1/vehicles', auth, async (req, res) => {
   if (!Number.isFinite(sortOrder)) {
     return res.status(400).json({ error: 'invalid_sortOrder' });
   }
+  // Zusatzangaben (#45): Kennzeichen, Erstzulassung, Kauf, Intervalle, Versicherung, Steuer, Reifen
+  const extras = parseVehicleExtras(req.body);
+  if (extras.error) return res.status(400).json({ error: extras.error });
 
   try {
     // Tarifgrenze (nur aktiv mit PLAN_LIMITS_ENABLED=true). Herabstufen löscht nichts, es verhindert nur neue Fahrzeuge.
@@ -1103,10 +1112,21 @@ app.post('/api/v1/vehicles', auth, async (req, res) => {
        )
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING id, name, fuel_type, brand, model, year, image_url,
-                 odometer_km, mileage_km, tank_capacity, battery_capacity, sort_order,
+                 odometer_km, mileage_km, tank_capacity, battery_capacity, sort_order, ${VEHICLE_EXTRA_COLUMNS},
                  created_at, updated_at`,
       [req.user.sub, name, fuelType, brand, model, year, imageUrl, odometerKm, mileageKm, tankCapacity, batteryCapacity, sortOrder]
     );
+    const cols = Object.keys(extras.values);
+    if (cols.length) {
+      const u2 = await pool.query(
+        `UPDATE vehicles SET ${cols.map((c, i) => `${c} = $${i + 3}`).join(', ')} WHERE id = $1 AND user_id = $2
+         RETURNING id, name, fuel_type, brand, model, year, image_url,
+                   odometer_km, mileage_km, tank_capacity, battery_capacity, sort_order, ${VEHICLE_EXTRA_COLUMNS},
+                   created_at, updated_at`,
+        [r.rows[0].id, req.user.sub, ...cols.map((c) => extras.values[c])]
+      );
+      return res.status(201).json(u2.rows[0]);
+    }
     res.status(201).json(r.rows[0]);
   } catch (e) {
     serverError(res, e);
@@ -1118,7 +1138,7 @@ app.get('/api/v1/vehicles', auth, async (req, res) => {
   try {
     const r = await pool.query(
       `SELECT id, name, fuel_type, brand, model, year, image_url,
-              odometer_km, mileage_km, tank_capacity, battery_capacity, sort_order,
+              odometer_km, mileage_km, tank_capacity, battery_capacity, sort_order, ${VEHICLE_EXTRA_COLUMNS},
               created_at, updated_at
        FROM vehicles
        WHERE user_id = $1
@@ -1152,6 +1172,7 @@ app.get('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
          tank_capacity,
          battery_capacity,
          sort_order,
+         ${VEHICLE_EXTRA_COLUMNS},
          created_at,
          updated_at
        FROM vehicles
@@ -1215,8 +1236,11 @@ app.patch('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
   if (sortOrder !== undefined && !Number.isFinite(sortOrder)) {
     return res.status(400).json({ error: 'invalid_sortOrder' });
   }
+  const extras = parseVehicleExtras(req.body);
+  if (extras.error) return res.status(400).json({ error: extras.error });
 
   if (
+    Object.keys(extras.values).length === 0 &&
     name === undefined &&
     fuelType === undefined &&
     brand === undefined &&
@@ -1291,6 +1315,10 @@ app.patch('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
       fields.push(`sort_order = $${idx++}`);
       values.push(sortOrder);
     }
+    for (const [col, value] of Object.entries(extras.values)) {
+      fields.push(`${col} = $${idx++}`);
+      values.push(value);
+    }
 
     fields.push(`updated_at = now()`);
     values.push(vehicleId);
@@ -1301,7 +1329,7 @@ app.patch('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
        SET ${fields.join(', ')}
        WHERE id = $${idx++} AND user_id = $${idx}
        RETURNING id, name, fuel_type, brand, model, year, image_url,
-                 odometer_km, mileage_km, tank_capacity, battery_capacity, sort_order,
+                 odometer_km, mileage_km, tank_capacity, battery_capacity, sort_order, ${VEHICLE_EXTRA_COLUMNS},
                  created_at, updated_at`,
       values
     );
@@ -1413,7 +1441,8 @@ app.post('/api/v1/fillups', auth, async (req, res) => {
       [req.user.sub, vehicleId, odometerKm === null ? null : Math.round(odometerKm), amount, unit, totalCostEur, station, filledAt, isFull, skipPrevious, odometerEstimated]
     );
 
-    res.status(201).json(r.rows[0]);
+    // Unplausibler Tachostand: speichern, aber warnen (#51)
+    res.status(201).json({ ...r.rows[0], warnings: await checkOdometer(pool, req.user.sub, vehicleId, r.rows[0]) });
   } catch (e) {
     serverError(res, e);
   }
@@ -1670,7 +1699,7 @@ app.patch('/api/v1/fillups/:fillupId', auth, async (req, res) => {
       price_per_liter: updated.unit === 'l' ? updated.price_per_unit : null
     };
 
-    res.json({ ...updated, ...legacy });
+    res.json({ ...updated, ...legacy, warnings: await checkOdometer(pool, req.user.sub, updated.vehicle_id, updated) });
   } catch (e) {
     serverError(res, e);
   }
@@ -1811,7 +1840,8 @@ app.post('/api/v1/entries', auth, async (req, res) => {
   const category = String(req.body?.category || '').trim();
 
   const amountEur = Number(req.body?.amountEur);
-  const odometerKm = req.body?.odometerKm !== undefined ? Number(req.body.odometerKm) : null;
+  // null bzw. leer = kein Tachostand (nicht 0 km)
+  const odometerKm = optionalNumber(req.body?.odometerKm) ?? null;
   const occurredAt = req.body?.occurredAt ? new Date(req.body.occurredAt) : null;
 
   const vendor = req.body?.vendor ? String(req.body.vendor).trim() : null;
@@ -1872,7 +1902,7 @@ app.post('/api/v1/entries', auth, async (req, res) => {
       [req.user.sub, vehicleId, category, amountEur, odometerKm, occurredAt, vendor, description]
     );
 
-    res.status(201).json(r.rows[0]);
+    res.status(201).json({ ...r.rows[0], warnings: await checkOdometer(pool, req.user.sub, vehicleId, r.rows[0]) });
   } catch (e) {
     serverError(res, e);
   }
@@ -1900,7 +1930,7 @@ app.get('/api/v1/entries/:entryId', auth, async (req, res) => {
       [entryId, req.user.sub]
     );
     if (r.rowCount === 0) return res.status(404).json({ error: 'entry_not_found' });
-    res.json(r.rows[0]);
+    res.json({ ...r.rows[0], warnings: await checkOdometer(pool, req.user.sub, r.rows[0].vehicle_id, r.rows[0]) });
   } catch (e) {
     if (e.code === '22P02') return res.status(404).json({ error: 'entry_not_found' });
     serverError(res, e);
@@ -2065,10 +2095,13 @@ app.post('/api/v1/vehicles/:vehicleId/import', auth, importLimiter, async (req, 
       return units.includes(u) ? u : units[0];
     };
 
+    // dryRun: alles prüfen und in der Transaktion anlegen, dann zurückrollen (Vorschau mit Duplikaten und Warnungen)
+    const dryRun = req.body?.dryRun === true;
     await client.query('BEGIN');
-    const result = { imported: { fillups: 0, entries: 0 }, skipped: { fillups: 0, entries: 0 } };
+    const result = { imported: { fillups: 0, entries: 0 }, skipped: { fillups: 0, entries: 0 }, duplicates: [], warnings: [] };
+    const inserted = []; // { type, index, id, at, km }
 
-    for (const f of fillups) {
+    for (const [index, f] of fillups.entries()) {
       const filledAt = new Date(f.filledAt);
       const unit = unitOf(f);
       const odo = f.odometerKm === undefined || f.odometerKm === null || f.odometerKm === '' ? null : Math.round(Number(f.odometerKm));
@@ -2080,12 +2113,13 @@ app.post('/api/v1/vehicles/:vehicleId/import', auth, importLimiter, async (req, 
            AND ($3::int IS NOT NULL OR amount = $6::numeric)`,
         [vehicleId, req.user.sub, odo, filledAt, unit, Number(f.amount)]
       );
-      if (dup.rowCount > 0) { result.skipped.fillups++; continue; }
-      await client.query(
+      if (dup.rowCount > 0) { result.skipped.fillups++; result.duplicates.push({ type: 'fillup', index }); continue; }
+      const ins = await client.query(
         `INSERT INTO fillups (user_id, vehicle_id, odometer_km, amount, unit, total_cost_eur, price_per_unit, station, filled_at, is_full, skip_previous)
          VALUES ($1, $2, $3, $4::numeric, $5, $6::numeric,
                  CASE WHEN $4::numeric > 0 THEN ROUND($6::numeric / $4::numeric, 4) ELSE NULL END,
-                 $7, $8, $9, $10)`,
+                 $7, $8, $9, $10)
+         RETURNING id`,
         [
           req.user.sub, vehicleId, odo, Number(f.amount), unit, Number(f.totalCostEur),
           f.station ? String(f.station).trim() : null, filledAt,
@@ -2094,9 +2128,10 @@ app.post('/api/v1/vehicles/:vehicleId/import', auth, importLimiter, async (req, 
         ]
       );
       result.imported.fillups++;
+      inserted.push({ type: 'fillup', index, id: ins.rows[0].id, at: filledAt, km: odo });
     }
 
-    for (const e of entries) {
+    for (const [index, e] of entries.entries()) {
       const occurredAt = new Date(e.occurredAt);
       const category = String(e.category).trim();
       const dup = await client.query(
@@ -2104,19 +2139,35 @@ app.post('/api/v1/vehicles/:vehicleId/import', auth, importLimiter, async (req, 
          WHERE vehicle_id = $1 AND user_id = $2 AND category = $3 AND amount_eur = $4::numeric AND occurred_at::date = $5::date`,
         [vehicleId, req.user.sub, category, Number(e.amountEur), occurredAt]
       );
-      if (dup.rowCount > 0) { result.skipped.entries++; continue; }
+      if (dup.rowCount > 0) { result.skipped.entries++; result.duplicates.push({ type: 'entry', index }); continue; }
       const odometerKm = e.odometerKm === undefined || e.odometerKm === null || e.odometerKm === '' ? null : Math.round(Number(e.odometerKm));
-      await client.query(
+      const ins = await client.query(
         `INSERT INTO expenses (user_id, vehicle_id, category, amount_eur, odometer_km, occurred_at, vendor, description)
-         VALUES ($1, $2, $3, $4::numeric, $5, $6, $7, $8)`,
+         VALUES ($1, $2, $3, $4::numeric, $5, $6, $7, $8)
+         RETURNING id`,
         [
           req.user.sub, vehicleId, category, Number(e.amountEur), odometerKm, occurredAt,
           e.vendor ? String(e.vendor).trim() : null, e.description ? String(e.description).trim() : null
         ]
       );
       result.imported.entries++;
+      inserted.push({ type: 'entry', index, id: ins.rows[0].id, at: occurredAt, km: odometerKm });
     }
 
+    // Tachostand-Prüfung (#51) gegen alle Einträge des Fahrzeugs inklusive der neuen Zeilen
+    const { points, purchaseKm } = await loadOdometerPoints(client, req.user.sub, vehicleId);
+    for (const row of inserted) {
+      if (row.km === null) continue;
+      const others = points.filter((p) => String(p.id) !== String(row.id));
+      for (const w of odometerWarnings(others, { date: row.at, km: row.km }, purchaseKm)) {
+        result.warnings.push({ type: row.type, index: row.index, ...w });
+      }
+    }
+
+    if (dryRun) {
+      await client.query('ROLLBACK');
+      return res.json({ ...result, dryRun: true });
+    }
     await client.query('COMMIT');
     res.status(201).json(result);
   } catch (e) {
@@ -2607,8 +2658,14 @@ app.use((error, req, res, next) => {
   next();
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Backend V2 läuft auf Port ${PORT}`);
-  encryptLegacyMfaSecrets().catch((e) => console.error('[mfa] Verschlüsseln fehlgeschlagen:', e.message));
-  notifier.startNotifier(pool);
-});
+// Direkt gestartet (node src/server.js, nodemon, Docker): Port öffnen und Hintergrundaufgaben starten.
+// Von den Tests importiert (backend/test): nur die App exportieren, die Tests starten sie selbst.
+if (require.main === module) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Backend V2 läuft auf Port ${PORT}`);
+    encryptLegacyMfaSecrets().catch((e) => console.error('[mfa] Verschlüsseln fehlgeschlagen:', e.message));
+    notifier.startNotifier(pool);
+  });
+}
+
+module.exports = { app, pool };

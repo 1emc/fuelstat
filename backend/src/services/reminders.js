@@ -2,6 +2,10 @@
 // Fälligkeiten (TÜV, Wartung, Versicherung, Steuer) aus den erfassten Ausgaben ableiten.
 // Regeln: TÜV alle 24 Monate, Wartung/Inspektion alle 12 Monate oder 15.000 km,
 // Versicherung und Steuer jährlich – jeweils ab dem letzten Eintrag der Kategorie.
+// Fahrzeugangaben (#45) gehen vor bzw. springen ein, wenn es keinen Eintrag gibt:
+// - Erstzulassung: erster TÜV nach 36 Monaten, danach alle 24
+// - eigenes Wartungsintervall (Monate, km)
+// - Fälligkeitsmonat von Versicherung und Steuer
 
 const RULES = [
   { title: 'TÜV', categories: ['TUV'], months: 24, km: null },
@@ -36,12 +40,30 @@ async function getVehicleReminders(pool, userId, vehicleId, warnDays = 30, today
     [userId, vehicleId, categories]
   );
   const odo = await pool.query(
-    'SELECT MAX(odometer_km) AS max_odo FROM fillups WHERE user_id = $1 AND vehicle_id = $2 AND NOT odometer_estimated',
+    `SELECT GREATEST(
+       (SELECT MAX(odometer_km) FROM fillups WHERE user_id = $1 AND vehicle_id = $2 AND NOT odometer_estimated),
+       (SELECT MAX(odometer_km) FROM expenses WHERE user_id = $1 AND vehicle_id = $2)
+     ) AS max_odo`,
     [userId, vehicleId]
   );
   const currentOdo = odo.rows[0]?.max_odo ?? null;
 
+  const v = await pool.query(
+    `SELECT first_registration, service_interval_months, service_interval_km, insurance_due_month, tax_due_month
+     FROM vehicles WHERE id = $1 AND user_id = $2`,
+    [vehicleId, userId]
+  );
+  const fz = v.rows[0] || {};
+
   const todayUtc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  const dayOf = (d) => { const x = new Date(d); return new Date(Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate())); };
+  // Erster Tag des Monats m (1–12) frühestens ab "ab"
+  const nextMonthStart = (m, ab) => {
+    let d = new Date(Date.UTC(ab.getUTCFullYear(), m - 1, 1));
+    if (d < new Date(Date.UTC(ab.getUTCFullYear(), ab.getUTCMonth(), 1))) d = new Date(Date.UTC(ab.getUTCFullYear() + 1, m - 1, 1));
+    return d;
+  };
+
   return RULES.map((rule) => {
     // Neuesten Eintrag aller Kategorien der Regel nehmen (Wartung oder Inspektion)
     const latest = last.rows
@@ -55,25 +77,44 @@ async function getVehicleReminders(pool, userId, vehicleId, warnDays = 30, today
       due_date: null,
       due_km: null,
       status: 'unbekannt',
-      days: null
+      days: null,
+      source: null // eintrag | erstzulassung | faelligkeitsmonat
     };
-    if (!latest) return row;
+    const lastDay = latest ? dayOf(latest.occurred_at) : null;
+    if (lastDay) row.last = toDateString(lastDay);
+    const months = rule.categories[0] === 'Wartung' && fz.service_interval_months ? fz.service_interval_months : rule.months;
+    const intervalKm = rule.km !== null && fz.service_interval_km ? fz.service_interval_km : rule.km;
+    const dueMonth = rule.categories[0] === 'Versicherung' ? fz.insurance_due_month : rule.categories[0] === 'Steuer' ? fz.tax_due_month : null;
 
-    const lastDate = new Date(latest.occurred_at);
-    const lastDay = new Date(Date.UTC(lastDate.getUTCFullYear(), lastDate.getUTCMonth(), lastDate.getUTCDate()));
-    const due = addMonths(lastDay, rule.months);
+    let due = null;
+    if (dueMonth) {
+      // Fester Fälligkeitsmonat: nach einer Zahlung kommt der nächste Termin im Folgejahr
+      due = nextMonthStart(dueMonth, lastDay ? addMonths(lastDay, 1) : todayUtc);
+      row.source = 'faelligkeitsmonat';
+    } else if (lastDay) {
+      due = addMonths(lastDay, months);
+      row.source = 'eintrag';
+    } else if (rule.categories.includes('TUV') && fz.first_registration) {
+      // Ohne TÜV-Eintrag: 36 Monate nach Erstzulassung, danach alle 24 (nächster Termin ab heute)
+      due = addMonths(dayOf(fz.first_registration), 36);
+      while (due < todayUtc) due = addMonths(due, rule.months);
+      row.source = 'erstzulassung';
+    }
+    if (!due) return row;
+
     const days = Math.round((due - todayUtc) / 86400000);
-    row.last = toDateString(lastDay);
     row.due_date = toDateString(due);
     row.days = days;
 
     let restKm = null;
-    if (rule.km !== null && latest.odometer_km !== null && currentOdo !== null) {
-      row.due_km = latest.odometer_km + rule.km;
+    if (intervalKm !== null && latest && latest.odometer_km !== null && currentOdo !== null) {
+      row.due_km = latest.odometer_km + intervalKm;
       restKm = row.due_km - currentOdo;
     }
 
-    if (days < 0 || (restKm !== null && restKm <= 0)) row.status = 'ueberfaellig';
+    // Ohne Eintrag lässt sich "überfällig" nicht sicher sagen (z. B. Steuer diesen Monat schon bezahlt)
+    const sicher = row.source === 'eintrag' || (row.source === 'faelligkeitsmonat' && lastDay);
+    if ((days < 0 && sicher) || (restKm !== null && restKm <= 0)) row.status = 'ueberfaellig';
     else if (days <= warnDays || (restKm !== null && restKm <= 1000)) row.status = 'bald';
     else row.status = 'ok';
     return row;

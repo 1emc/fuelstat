@@ -1,5 +1,4 @@
 <?php
-include_once __DIR__ . '/../includes/db_connect.php';
 include_once __DIR__ . '/../includes/functions.php';
 include_once __DIR__ . '/../includes/api_helpers.php';
 
@@ -10,7 +9,7 @@ $zahl = fn($wert, int $stellen = 2) => number_format((float)$wert, $stellen, ','
 $alle = [];
 foreach (getMergedEintraegeFromApi($api, $fahrzeug_id)['eintraege'] as $monatsEintraege) {
     foreach ($monatsEintraege as $e) {
-        if (($e['kategorie'] ?? '') !== 'Fahrt' && !empty($e['datum'])) {
+        if (!istEintragOhneKosten($e['kategorie'] ?? '') && !empty($e['datum'])) {
             $alle[] = $e;
         }
     }

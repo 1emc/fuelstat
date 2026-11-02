@@ -1,6 +1,5 @@
 <?php
 include '../includes/session.php';
-include '../includes/db_connect.php';
 include '../includes/functions.php';
 include '../includes/header.php';
 
@@ -12,6 +11,7 @@ $fahrzeug_id = trim($_GET['fahrzeug_id']);
 $aktuellerTacho = null;
 $schnittVerbrauch = null;
 $letztePreise = [];
+$letzteOrte = [];
 $fahrzeugKraftstoff = 'diesel';
 $einheit = 'l';
 $standortOptionen = [];
@@ -29,124 +29,121 @@ try {
     usort($fillups, fn($a, $b) => strcmp((string)($b['filled_at'] ?? ''), (string)($a['filled_at'] ?? '')));
     foreach ($fillups as $f) {
         $ort = trim((string)($f['station'] ?? ''));
-        if ($ort === '' || isset($letztePreise[$ort])) {
+        if ($ort === '' || array_key_exists($ort, $letztePreise)) {
             continue;
         }
         if (count($standortOptionen) < 15) {
-            $standortOptionen[] = htmlspecialchars($ort);
+            $standortOptionen[] = $ort;
         }
         // Plug-in-Hybrid: nur Strompreise merken, Spritpreise ändern sich täglich
         if ($fahrzeugKraftstoff === 'phev' && ($f['unit'] ?? 'l') !== 'kwh') {
+            $letztePreise[$ort] = null;
             continue;
         }
         $preis = (float)($f['price_per_unit'] ?? 0) ?: ((float)($f['amount'] ?? 0) > 0 ? (float)($f['total_cost_eur'] ?? 0) / (float)$f['amount'] : 0);
         $letztePreise[$ort] = $preis > 0 ? round($preis, 3) : null;
     }
+    // Zuletzt genutzte Orte als Chips (Einheit je Ort, damit der Plug-in-Hybrid passende Orte zeigt)
+    foreach ($fillups as $f) {
+        $ort = trim((string)($f['station'] ?? ''));
+        $u = $f['unit'] ?? $einheit;
+        if ($ort !== '' && !isset($letzteOrte[$u][$ort]) && count($letzteOrte[$u] ?? []) < 5) {
+            $letzteOrte[$u][$ort] = true;
+        }
+    }
 } catch (Throwable $e) {
 }
+$letzteOrte = array_map('array_keys', $letzteOrte);
 // Begriffe passend zum Fahrzeug (Tankfüllung/Ladevorgang, Tankstelle/Ladestation …)
 $begriffe = verbrauchsBegriffe($vehicle['fuel_type'] ?? 'other');
-// Stationssuche: Tankerkönig für Kraftstoff und Gas, Open Charge Map für E-Autos
-$stationsSuche = true;
-$stationsArt = $begriffe['art'] === 'strom' ? 'lade' : 'tank';
-// Plug-in-Hybrid: vor dem Erfassen wählen, ob getankt oder geladen wurde; Texte wechseln mit
 $istPhev = $fahrzeugKraftstoff === 'phev';
 $texteJeEinheit = [];
 foreach (einheitenFuerKraftstoff($fahrzeugKraftstoff) as $u) {
     $b = begriffeFuerEinheit($fahrzeugKraftstoff, $u);
     $texteJeEinheit[$u] = [
-        'menge' => 'Menge (' . einheitLang($u) . ')',
-        'preis' => 'Preis pro ' . einheitLang($u) . ' (€)',
+        'menge' => einheitLang($u),
+        'preis' => '€/' . einheitKurz($u),
         'kurz' => einheitKurz($u),
         'voll' => $b['voll'],
         'luecke' => $b['luecke'],
         'beispiel' => $b['beispiel_ort'],
+        'station' => $b['station'],
         'stationen' => $b['stationen'] . ' in der Nähe suchen',
         'stationsArt' => $u === 'kwh' ? 'lade' : 'tank',
     ];
 }
-$startEinheit = $istPhev && ($_GET['einheit'] ?? '') === 'kwh' ? 'kwh' : $einheit;
-if ($istPhev) {
-    $stationsArt = $texteJeEinheit[$startEinheit]['stationsArt'];
-    $begriffeStart = begriffeFuerEinheit($fahrzeugKraftstoff, $startEinheit);
-    $begriffe['voll'] = $begriffeStart['voll'];
-    $begriffe['luecke'] = $begriffeStart['luecke'];
-    $begriffe['beispiel_ort'] = $begriffeStart['beispiel_ort'];
-    $begriffe['stationen'] = $begriffeStart['stationen'];
-    $einheit = $startEinheit;
+
+// Eintragsarten als Kacheln (#46). Plug-in-Hybrid: Tanken und Laden getrennt, sonst eine Kachel passend zum Antrieb.
+// Wert => [Beschriftung, Icon, Eintragstyp fürs Speichern, Einheit (nur Tanken/Laden)]
+$arten = [];
+foreach (einheitenFuerKraftstoff($fahrzeugKraftstoff) as $u) {
+    $b = begriffeFuerEinheit($fahrzeugKraftstoff, $u);
+    $arten[$u === 'kwh' ? 'laden' : 'tanken'] = [$u === 'kwh' ? 'Laden' : 'Tanken', $b['icon'], 'Tankfuellung', $u];
 }
-
-$vorgegebeneKategorie = isset($_GET['kategorie']) ? $_GET['kategorie'] : null;
-$allCategories = [
-    'Versicherung', 'Werkstatt', 'Inspektion', 'Steuer',
-    'Reparatur', 'Reifen', 'TUV', 'Wartung', 'Dekor'
+$arten += [
+    'ausgabe' => ['Ausgabe', 'fa-receipt', 'Andere Ausgabe', null],
+    'fahrt' => ['Fahrt', 'fa-route', 'Fahrt', null],
+    'km' => ['km notieren', 'fa-gauge-high', 'Kilometerstand', null],
 ];
+// Start-Art: ?art=… (App-Kürzel), ?kategorie=… (Ausgabe vorgeben), ?einheit=kwh (Plug-in-Hybrid laden)
+$startArt = $_GET['art'] ?? '';
+if ($startArt === 'tanken' && !isset($arten['tanken'])) $startArt = 'laden';
+if (!isset($arten[$startArt])) {
+    $startArt = isset($_GET['kategorie']) ? 'ausgabe' : (($_GET['einheit'] ?? '') === 'kwh' && isset($arten['laden']) ? 'laden' : array_key_first($arten));
+}
+$startEinheit = $arten[$startArt][3] ?? $einheit;
+$einheit = $startEinheit;
+$t = $texteJeEinheit[$einheit] ?? reset($texteJeEinheit);
+$stationsArt = $t['stationsArt'];
+
+$vorgegebeneKategorie = $_GET['kategorie'] ?? null;
+$allCategories = ['Versicherung', 'Werkstatt', 'Inspektion', 'Steuer', 'Reparatur', 'Reifen', 'TUV', 'Wartung', 'Dekor'];
+$heute = (new DateTimeImmutable('now', new DateTimeZone('Europe/Berlin')))->format('Y-m-d');
 ?>
-<style>
-    /* wirkt nur innerhalb dieser Seite */
-    .form-control::placeholder {
-        color: #bfc1c4;     /* helles Grau */
-        opacity: 1;         /* Safari / Firefox: volles Deckungsmaß */
-    }
-</style>
 
-<div class="container mt-5">
-    <h2>Neuen Eintrag hinzufügen</h2>
-    <form method="post" action="eintrag_speichern.php" class="mt-4">
+<div class="container eintrag-formular mt-3 mt-lg-5">
+    <h1 class="h3 d-none d-lg-block mb-3">Neuer Eintrag <small class="text-body-secondary fw-normal">· <?= htmlspecialchars($vehicle['name'] ?? '') ?></small></h1>
+    <form method="post" action="eintrag_speichern.php" id="eintragFormular">
         <input type="hidden" name="fahrzeug_id" value="<?= htmlspecialchars($fahrzeug_id) ?>">
+        <input type="hidden" name="eintragstyp" id="eintragstyp" value="<?= htmlspecialchars($arten[$startArt][2]) ?>">
+        <input type="hidden" name="einheit" id="einheit" value="<?= htmlspecialchars($startEinheit) ?>">
 
-        <!-- Typ-Auswahl -->
-        <div class="mb-3">
-            <label for="entryType" class="form-label">Eintragstyp</label>
-            <select id="entryType" name="eintragstyp" class="form-select" required>
-                <option value="" disabled>Bitte auswählen</option>
-                <option value="Tankfuellung" <?php echo $vorgegebeneKategorie ? '' : 'selected'; ?>><?= $begriffe['vorgang'] ?></option>
-                <option value="Andere Ausgabe" <?php echo $vorgegebeneKategorie ? 'selected' : ''; ?>>Andere Ausgabe</option>
-                <option value="Fahrt">Fahrt</option>
-            </select>
+        <!-- Was wird erfasst? Große Kacheln statt Dropdown -->
+        <div class="art-kacheln mb-4" role="radiogroup" aria-label="Art des Eintrags">
+            <?php foreach ($arten as $wert => [$name, $icon, $typ, $u]): ?>
+                <input type="radio" class="btn-check" name="art" id="art_<?= $wert ?>" value="<?= $wert ?>"
+                       data-typ="<?= htmlspecialchars($typ) ?>" data-einheit="<?= htmlspecialchars((string)$u) ?>" <?= $wert === $startArt ? 'checked' : '' ?>>
+                <label class="art-kachel" for="art_<?= $wert ?>"><i class="fas <?= $icon ?>"></i><span><?= $name ?></span></label>
+            <?php endforeach; ?>
         </div>
 
-        <!-- Gemeinsame Felder -->
-        <div id="fields_common" style="display:none;">
-            <div class="mb-3">
-                <label for="datum" class="form-label">Datum</label>
-                <div class="input-group">
-					<input type="date" id="datum" name="datum" class="form-control" required>
-					<button type="button" id="btnHeute" class="btn btn-outline-secondary">Heute</button>
-				</div>
-            </div>
-            <div class="mb-3">
-                <label for="tachostand" class="form-label">Tachostand (km)</label>
-				<input  type="number"
-						id="tachostand"
-						name="tachostand"
-						class="form-control"
-						min="0" step="1"
-						inputmode="numeric" pattern="[0-9]*"
-						placeholder="<?= $aktuellerTacho !== null
-										 ? number_format($aktuellerTacho, 0, ',', '.')
-										 : '' ?>">
-				<input type="hidden" name="tachostand_geschaetzt" id="tachostand_geschaetzt" value="">
-				<!-- Tankfüllung: Tachostand darf fehlen und wird später nachgetragen (#41) -->
-				<div class="form-text d-none" id="tachoHinweis">
-					Tachostand vergessen? Feld leer lassen und später in der Eintragsliste nachtragen.
-					<button type="button" class="btn btn-link btn-sm p-0 align-baseline d-none" id="btnTachoSchaetzung"></button>
-				</div>
-            </div>
-        </div>
-
-        <!-- Tankfuellung -->
-        <div id="fields_tank" style="display:none;">
-            <?php if ($istPhev): ?>
-            <!-- Plug-in-Hybrid: getankt oder geladen? -->
-            <div class="mb-3">
-                <div class="btn-group w-100" role="group" aria-label="Getankt oder geladen">
-                    <input type="radio" class="btn-check" name="einheit" id="einheit_l" value="l" <?= $startEinheit === 'l' ? 'checked' : '' ?>>
-                    <label class="btn btn-outline-primary" for="einheit_l"><i class="fas fa-gas-pump me-1"></i> Tanken</label>
-                    <input type="radio" class="btn-check" name="einheit" id="einheit_kwh" value="kwh" <?= $startEinheit === 'kwh' ? 'checked' : '' ?>>
-                    <label class="btn btn-outline-success" for="einheit_kwh"><i class="fas fa-charging-station me-1"></i> Laden</label>
+        <!-- Tachostand zuerst (#41/#42), dann Datum -->
+        <div class="row g-3 mb-3" id="fields_common">
+            <div class="col-12 col-sm-7">
+                <label for="tachostand" class="form-label fw-semibold">Tachostand (km)</label>
+                <input type="number" id="tachostand" name="tachostand" class="form-control form-control-lg"
+                       min="0" step="1" inputmode="numeric" pattern="[0-9]*" autofocus enterkeyhint="next"
+                       placeholder="<?= $aktuellerTacho !== null ? 'zuletzt ' . number_format($aktuellerTacho, 0, ',', '.') : '' ?>">
+                <input type="hidden" name="tachostand_geschaetzt" id="tachostand_geschaetzt" value="">
+                <!-- Tankfüllung: Tachostand darf fehlen und wird später nachgetragen (#41) -->
+                <div class="form-text d-none" id="tachoHinweis">
+                    <span id="tachoHinweisText">Vergessen? Leer lassen und später nachtragen.</span>
+                    <button type="button" class="btn btn-link btn-sm p-0 align-baseline d-none" id="btnTachoSchaetzung"></button>
                 </div>
             </div>
+            <div class="col-12 col-sm-5">
+                <label for="datum" class="form-label fw-semibold">Datum</label>
+                <input type="date" id="datum" name="datum" class="form-control form-control-lg" value="<?= $heute ?>" max="<?= $heute ?>" required>
+                <div class="d-flex gap-1 mt-1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary datum-chip" data-tage="0">Heute</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary datum-chip" data-tage="1">Gestern</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tanken / Laden -->
+        <div id="fields_tank" class="eintrag-abschnitt">
+            <?php if ($istPhev): ?>
             <div class="mb-3" id="kraftstoffSorte" <?= $startEinheit === 'kwh' ? 'hidden' : '' ?>>
                 <label class="form-label" for="kraftstoffAuswahl">Kraftstoff</label>
                 <select name="kraftstoff" id="kraftstoffAuswahl" class="form-select">
@@ -155,229 +152,214 @@ $allCategories = [
                 </select>
             </div>
             <?php elseif ($begriffe['art'] !== 'fluessig'): ?>
-            <!-- Strom bzw. Gas: keine Sortenauswahl nötig -->
             <input type="hidden" name="kraftstoff" value="<?= htmlspecialchars($fahrzeugKraftstoff) ?>">
             <?php else: ?>
             <div class="mb-3">
-                <label class="form-label"><?= $begriffe['energie'] ?></label>
-                <select name="kraftstoff" class="form-select" required>
-                    <option value="diesel"   <?php if($fahrzeugKraftstoff==='diesel')   echo 'selected'; ?>>Diesel</option>
-                    <option value="e5"      <?php if($fahrzeugKraftstoff==='e5')      echo 'selected'; ?>>Benzin (E5)</option>
-                    <option value="e10"     <?php if($fahrzeugKraftstoff==='e10')     echo 'selected'; ?>>Benzin (E10)</option>
-                    <option value="lpg"     <?php if($fahrzeugKraftstoff==='lpg')     echo 'selected'; ?>>Autogas (LPG)</option>
-                    <option value="cng"     <?php if($fahrzeugKraftstoff==='cng')     echo 'selected'; ?>>Erdgas (CNG)</option>
-                    <option value="electric"<?php if($fahrzeugKraftstoff==='electric')echo 'selected'; ?>>Elektro</option>
-                    <option value="hybrid"  <?php if($fahrzeugKraftstoff==='hybrid')  echo 'selected'; ?>>Hybrid</option>
-                    <option value="hydrogen"<?php if($fahrzeugKraftstoff==='hydrogen')echo 'selected'; ?>>Wasserstoff</option>
-                    <option value="other"   <?php if($fahrzeugKraftstoff==='other')   echo 'selected'; ?>>Andere</option>
+                <label class="form-label" for="kraftstoffAuswahl"><?= $begriffe['energie'] ?></label>
+                <select name="kraftstoff" id="kraftstoffAuswahl" class="form-select">
+                    <?php foreach (['diesel' => 'Diesel', 'e5' => 'Benzin (E5)', 'e10' => 'Benzin (E10)', 'lpg' => 'Autogas (LPG)', 'cng' => 'Erdgas (CNG)', 'hybrid' => 'Hybrid', 'hydrogen' => 'Wasserstoff', 'other' => 'Andere'] as $wert => $name): ?>
+                        <option value="<?= $wert ?>" <?= $fahrzeugKraftstoff === $wert ? 'selected' : '' ?>><?= $name ?></option>
+                    <?php endforeach; ?>
                 </select>
             </div>
             <?php endif; ?>
+
+            <!-- Menge × Preis = Gesamt nebeneinander; das dritte Feld wird berechnet (js/mengen-rechner.js) -->
+            <div class="row g-2 mb-1">
+                <div class="col-6 col-md-4">
+                    <label for="menge" class="form-label" id="mengeLabel"><?= htmlspecialchars($t['menge']) ?></label>
+                    <div class="input-group">
+                        <input type="number" inputmode="decimal" id="menge" name="menge" class="form-control" min="0" step="0.01">
+                        <button type="button" class="btn btn-outline-secondary" id="info_menge" aria-label="Herkunft des Werts anzeigen"><i class="fas fa-circle-info"></i></button>
+                    </div>
+                </div>
+                <div class="col-6 col-md-4">
+                    <label for="preis_pro_einheit" class="form-label" id="preisLabel"><?= htmlspecialchars($t['preis']) ?></label>
+                    <div class="input-group">
+                        <input type="number" inputmode="decimal" id="preis_pro_einheit" name="preis_pro_einheit" class="form-control" min="0" step="0.001">
+                        <button type="button" class="btn btn-outline-secondary" id="info_preis_pro_einheit" aria-label="Herkunft des Werts anzeigen"><i class="fas fa-circle-info"></i></button>
+                    </div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label for="kosten" class="form-label">Gesamt (€)</label>
+                    <div class="input-group">
+                        <input type="number" inputmode="decimal" id="kosten" name="kosten" class="form-control" min="0" step="0.01">
+                        <button type="button" class="btn btn-outline-secondary" id="info_kosten" aria-label="Herkunft des Werts anzeigen"><i class="fas fa-circle-info"></i></button>
+                    </div>
+                </div>
+            </div>
+            <small class="form-text text-muted d-block mb-3" id="calcHint"></small>
+
+            <!-- Ort: Suche in der Nähe und zuletzt genutzte Orte als Chips -->
             <div class="mb-3">
-                <label for="standort" class="form-label">Standort</label>
+                <label for="standort" class="form-label" id="standortLabel"><?= htmlspecialchars($t['station']) ?></label>
                 <div class="input-group">
-                    <input type="text" list="stationen" placeholder="<?= htmlspecialchars($begriffe['beispiel_ort']) ?>" autocomplete="address-level2" autocapitalize="words" enterkeyhint="done" id="standort" name="standort" class="form-control">
-                    <?php if ($stationsSuche): ?>
-                    <button type="button" class="btn btn-outline-primary" id="btnTankstellenSuche" title="<?= $begriffe['stationen'] ?> in der Nähe suchen" aria-label="<?= $begriffe['stationen'] ?> in der Nähe suchen">
+                    <input type="text" list="stationen" placeholder="<?= htmlspecialchars($t['beispiel']) ?>" autocomplete="off" autocapitalize="words" enterkeyhint="done" id="standort" name="standort" class="form-control">
+                    <button type="button" class="btn btn-outline-primary" id="btnTankstellenSuche" title="<?= htmlspecialchars($t['stationen']) ?>" aria-label="<?= htmlspecialchars($t['stationen']) ?>">
                         <i class="fas fa-map-marker-alt"></i>
                     </button>
-                    <?php endif; ?>
                 </div>
                 <datalist id="stationen">
-                <?php foreach ($standortOptionen as $opt): ?>
-                    <option value="<?= $opt ?>">
-                <?php endforeach; ?>
+                    <?php foreach ($standortOptionen as $opt): ?><option value="<?= htmlspecialchars($opt) ?>"><?php endforeach; ?>
                 </datalist>
+                <div class="d-flex flex-wrap gap-1 mt-2" id="ortChips"></div>
                 <div id="tankstellenVorschlaege" class="mt-2"></div>
             </div>
-			<!-- Menge (Liter/kWh/kg) -->
-			<div class="mb-3">
-			  <label for="menge" class="form-label" id="mengeLabel">Menge (<?= einheitLang($einheit) ?>)</label>
-			  <div class="input-group">
-				  <input type="number"
-						 inputmode="decimal"
-						 id="menge"
-						 name="menge"
-						 class="form-control"
-						 min="0" step="0.01">
-				  <button type="button"
-						  class="btn btn-outline-secondary"
-						  id="info_menge"
-						  aria-label="Herkunft des Werts anzeigen">
-					  <i class="fas fa-circle-info"></i>
-				  </button>
-			  </div>
-			</div>
 
-			<!-- Preis pro Einheit (€) -->
-			<div class="mb-3">
-			  <label for="preis_pro_einheit" class="form-label" id="preisLabel">Preis pro <?= einheitLang($einheit) ?> (€)</label>
-			  <div class="input-group">
-				  <input type="number"
-						 inputmode="decimal"
-						 id="preis_pro_einheit"
-						 name="preis_pro_einheit"
-						 class="form-control"
-						 min="0" step="0.001">
-				  <button type="button"
-						  class="btn btn-outline-secondary"
-						  id="info_preis_pro_einheit"
-						  aria-label="Herkunft des Werts anzeigen">
-					  <i class="fas fa-circle-info"></i>
-				  </button>
-			  </div>
-			</div>
-
-			<!-- Gesamtpreis (€) -->
-			<div class="mb-3">
-			  <label for="kosten" class="form-label">Gesamtpreis (€)</label>
-			  <div class="input-group">
-				  <input type="number"
-						 inputmode="decimal"
-						 id="kosten"
-						 name="kosten"
-						 class="form-control"
-						 min="0" step="0.01">
-				  <button type="button"
-						  class="btn btn-outline-secondary"
-						  id="info_kosten"
-						  aria-label="Herkunft des Werts anzeigen">
-					  <i class="fas fa-circle-info"></i>
-				  </button>
-			  </div>
-			  <small class="form-text text-muted" id="calcHint"></small>
-			</div>
-            <div class="mb-3 form-check">
-                <input type="checkbox" id="vollgetankt" name="vollgetankt" class="form-check-input" value="1">
-                <label for="vollgetankt" class="form-check-label" id="vollLabel"><?= $begriffe['voll'] ?></label>
+            <div class="form-check form-switch mb-2">
+                <input type="checkbox" id="vollgetankt" name="vollgetankt" class="form-check-input" role="switch" value="1" checked>
+                <label for="vollgetankt" class="form-check-label" id="vollLabel"><?= htmlspecialchars($t['voll']) ?></label>
             </div>
-            <div class="mb-3 form-check">
-                <input type="checkbox" id="skip_previous" name="skip_previous" class="form-check-input" value="1">
-                <label for="skip_previous" class="form-check-label" id="lueckeLabel"><?= $begriffe['luecke'] ?></label>
+            <div class="form-check form-switch mb-3">
+                <input type="checkbox" id="skip_previous" name="skip_previous" class="form-check-input" role="switch" value="1">
+                <label for="skip_previous" class="form-check-label" id="lueckeLabel"><?= htmlspecialchars($t['luecke']) ?></label>
             </div>
         </div>
 
         <!-- Andere Ausgabe -->
-        <div id="fields_other" style="display:none;">
-            <div class="mb-3">
-                <label for="kategorie" class="form-label">Kategorie</label>
-                <select id="kategorie" name="kategorie" class="form-select">
-                    <option value="">Bitte auswählen</option>
-                    <?php foreach ($allCategories as $cat): ?>
-                        <option value="<?php echo $cat; ?>" <?php echo ($vorgegebeneKategorie === $cat) ? 'selected' : ''; ?>><?php echo getKategorieName($cat); ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="mb-3">
-                <label for="kosten_other" class="form-label">Kosten (€)</label>
-                <input type="number" id="kosten_other" name="kosten" class="form-control" min="0" step="0.01">
+        <div id="fields_other" class="eintrag-abschnitt" hidden>
+            <div class="row g-2 mb-3">
+                <div class="col-7">
+                    <label for="kategorie" class="form-label">Kategorie</label>
+                    <select id="kategorie" name="kategorie" class="form-select" required>
+                        <option value="">Bitte wählen</option>
+                        <?php foreach ($allCategories as $cat): ?>
+                            <option value="<?= $cat ?>" <?= $vorgegebeneKategorie === $cat ? 'selected' : '' ?>><?= getKategorieName($cat) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-5">
+                    <label for="kosten_other" class="form-label">Kosten (€)</label>
+                    <input type="number" inputmode="decimal" id="kosten_other" name="kosten" class="form-control" min="0" step="0.01" required>
+                </div>
             </div>
             <div class="mb-3">
                 <label for="beschreibung" class="form-label">Beschreibung</label>
-                <textarea id="beschreibung" name="beschreibung" class="form-control"></textarea>
+                <textarea id="beschreibung" name="beschreibung" class="form-control" rows="2"></textarea>
             </div>
         </div>
 
         <!-- Fahrt -->
-        <div id="fields_trip" style="display:none;">
-            <div class="mb-3">
-                <label for="startort" class="form-label">Startort</label>
-                <input type="text" id="startort" name="startort" class="form-control">
-            </div>
-            <div class="mb-3">
-                <label for="zielort" class="form-label">Zielort</label>
-                <input type="text" id="zielort" name="zielort" class="form-control">
-            </div>
-            <div class="mb-3">
-                <label for="zweck" class="form-label">Zweck der Fahrt</label>
-                <input type="text" id="zweck" name="zweck" class="form-control">
-            </div>
-            <div class="mb-3">
-                <label for="gefahrene_km" class="form-label">Gefahrene Kilometer</label>
-                <input type="number" id="gefahrene_km" name="gefahrene_km" class="form-control" min="0" step="0.1">
+        <div id="fields_trip" class="eintrag-abschnitt" hidden>
+            <div class="row g-2 mb-3">
+                <div class="col-6"><label for="startort" class="form-label">Von</label><input type="text" id="startort" name="startort" class="form-control"></div>
+                <div class="col-6"><label for="zielort" class="form-label">Nach</label><input type="text" id="zielort" name="zielort" class="form-control"></div>
+                <div class="col-7"><label for="zweck" class="form-label">Zweck</label><input type="text" id="zweck" name="zweck" class="form-control"></div>
+                <div class="col-5"><label for="gefahrene_km" class="form-label">km</label><input type="number" inputmode="decimal" id="gefahrene_km" name="gefahrene_km" class="form-control" min="0" step="0.1"></div>
             </div>
         </div>
 
-        <button type="submit" class="btn btn-primary">Eintrag speichern</button>
-        <a href="fahrzeug_detail.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?>" class="btn btn-secondary ms-2">Abbrechen</a>
+        <!-- Nur Kilometerstand notieren (#42) -->
+        <div id="fields_km" class="eintrag-abschnitt" hidden>
+            <p class="text-body-secondary small mb-3">
+                <i class="fas fa-circle-info me-1"></i>Notiert nur den Tachostand, z. B. beim Parken. Er hilft beim Schätzen fehlender Kilometerstände,
+                bei der Plausibilitätsprüfung und bei der Fahrleistung – ohne Kosten.
+            </p>
+            <div class="mb-3">
+                <label for="km_notiz" class="form-label">Notiz (optional)</label>
+                <input type="text" id="km_notiz" name="beschreibung" class="form-control" placeholder="z. B. Parkhaus Bahnhof">
+            </div>
+        </div>
+
+        <!-- Mobil unten fest über der App-Leiste -->
+        <div class="formular-aktionen">
+            <button type="submit" class="btn btn-primary btn-lg flex-grow-1" id="btnSpeichern"><i class="fas fa-check me-1"></i>Speichern</button>
+            <a href="fahrzeug_detail.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?>#eintraege" class="btn btn-outline-secondary btn-lg">Abbrechen</a>
+        </div>
     </form>
 </div>
 
 <script src="<?= htmlspecialchars(assetUrl($baseUrl, 'js/mengen-rechner.js')) ?>"></script>
 <script>
-const typeSelect = document.getElementById('entryType');
-const commonSection = document.getElementById('fields_common');
-const sections = {
-    'Tankfuellung': document.getElementById('fields_tank'),
-    'Andere Ausgabe': document.getElementById('fields_other'),
-    'Fahrt': document.getElementById('fields_trip')
-};
-
-// PHP-Variable für JS bereitstellen
-const fahrzeugKraftstoff = <?php echo json_encode($fahrzeugKraftstoff); ?>;
+const fahrzeugKraftstoff = <?= json_encode($fahrzeugKraftstoff) ?>;
 let stationsArt = <?= json_encode($stationsArt) ?>;
 // Zuletzt bezahlter Strompreis je Ort (E-Auto und Plug-in-Hybrid: ändert sich selten, an der Wallbox praktisch nie)
-const letztePreise = <?= json_encode($stationsArt === 'lade' || $istPhev ? $letztePreise : new stdClass(), JSON_UNESCAPED_UNICODE) ?>;
+const letztePreise = <?= json_encode($letztePreise ?: new stdClass(), JSON_UNESCAPED_UNICODE) ?>;
+const letzteOrte = <?= json_encode($letzteOrte ?: new stdClass(), JSON_UNESCAPED_UNICODE) ?>;
 const texteJeEinheit = <?= json_encode($texteJeEinheit, JSON_UNESCAPED_UNICODE) ?>;
-
-// Wenn eine Kategorie vorgegeben ist, zeige direkt die "Andere Ausgabe" Felder
-<?php if ($vorgegebeneKategorie): ?>
-window.addEventListener('DOMContentLoaded', () => {
-    toggleFields();
-    document.getElementById('fields_common').style.display = 'block';
-    document.getElementById('fields_other').style.display = 'block';
-    enableSection(document.getElementById('fields_common'));
-    enableSection(document.getElementById('fields_other'));
-});
-<?php else: ?>
-window.addEventListener('DOMContentLoaded', () => toggleFields());
-<?php endif; ?>
-
-function toggleFields() {
-    // Verstecke alle Sektionen
-    commonSection.style.display = 'none';
-    disableSection(commonSection);
-    Object.values(sections).forEach(sec => {
-        sec.style.display = 'none';
-        disableSection(sec);
-    });
-
-    const val = typeSelect.value;
-    if (!val) return;
-    // Zeige gemeinsame Felder
-    commonSection.style.display = 'block';
-    enableSection(commonSection);
-    // Zeige spezifische Felder
-    const sec = sections[val];
-    if (sec) {
-        sec.style.display = 'block';
-        enableSection(sec);
-    }
-}
-
-function disableSection(section) {
-    section.querySelectorAll('input, select, textarea').forEach(el => el.disabled = true);
-}
-function enableSection(section) {
-    section.querySelectorAll('input, select, textarea').forEach(el => el.disabled = false);
-}
-
-document.getElementById('btnHeute').addEventListener('click', () => {
-    const heute = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-    document.getElementById('datum').value = heute;
-});
-
-// Menge × Preis = Gesamtpreis: das dritte Feld wird berechnet und direkt eingetragen (js/mengen-rechner.js).
-// Erst nach dem Laden starten, weil Bootstrap (für die Erklärung am Info-Knopf) im Footer geladen wird.
+const abschnitte = {
+    'Tankfuellung': document.getElementById('fields_tank'),
+    'Andere Ausgabe': document.getElementById('fields_other'),
+    'Fahrt': document.getElementById('fields_trip'),
+    'Kilometerstand': document.getElementById('fields_km')
+};
+const eintragstyp = document.getElementById('eintragstyp');
+const einheitFeld = document.getElementById('einheit');
+const tachoFeld = document.getElementById('tachostand');
 let mengenEinheit = <?= json_encode(einheitKurz($einheit)) ?>;
 let rechner = null;
-window.addEventListener('DOMContentLoaded', () => { rechner = mengenRechner({ einheit: () => mengenEinheit }); });
 
-typeSelect.addEventListener('change', toggleFields);
+// Nur der sichtbare Abschnitt wird mitgeschickt und geprüft (gleiche Feldnamen wie "kosten" kommen mehrfach vor)
+function zeigeAbschnitt(typ) {
+    Object.entries(abschnitte).forEach(([name, el]) => {
+        const aktiv = name === typ;
+        el.hidden = !aktiv;
+        el.querySelectorAll('input, select, textarea, button').forEach(f => { f.disabled = !aktiv; });
+    });
+}
 
-// Tachostand (#41): bei Tankfüllungen optional, bei Fahrten Pflicht. Schätzung aus letztem Tachostand und Ø Verbrauch:
-// letzter Tachostand + Menge ÷ Ø Verbrauch × 100. Übernommene Schätzungen werden markiert und zählen nicht für den Verbrauch.
-const tachoFeld = document.getElementById('tachostand');
+// Texte und Stationssuche je Einheit (Plug-in-Hybrid: Tanken oder Laden)
+function setzeEinheit(u) {
+    const t = texteJeEinheit[u];
+    if (!t) return;
+    einheitFeld.value = u;
+    document.getElementById('mengeLabel').textContent = t.menge;
+    document.getElementById('preisLabel').textContent = t.preis;
+    document.getElementById('vollLabel').textContent = t.voll;
+    document.getElementById('lueckeLabel').textContent = t.luecke;
+    document.getElementById('standortLabel').textContent = t.station;
+    document.getElementById('standort').placeholder = t.beispiel;
+    mengenEinheit = t.kurz;
+    if (rechner) rechner.aktualisiere();
+    stationsArt = t.stationsArt;
+    const suche = document.getElementById('btnTankstellenSuche');
+    suche.title = t.stationen;
+    suche.setAttribute('aria-label', t.stationen);
+    const sorte = document.getElementById('kraftstoffSorte');
+    if (sorte) sorte.hidden = u === 'kwh';
+    zeigeOrtChips(u);
+    document.getElementById('tankstellenVorschlaege').replaceChildren();
+}
+
+// Zuletzt genutzte Orte als Chips; Antippen übernimmt den Ort (und beim Laden den letzten Preis)
+function zeigeOrtChips(u) {
+    const box = document.getElementById('ortChips');
+    box.replaceChildren();
+    (letzteOrte[u] || []).forEach(ort => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'btn btn-sm btn-outline-secondary rounded-pill ort-chip';
+        chip.textContent = ort;
+        chip.addEventListener('click', () => {
+            const feld = document.getElementById('standort');
+            feld.value = ort;
+            preisAusHistorie(ort);
+            box.querySelectorAll('.ort-chip').forEach(c => c.classList.toggle('active', c === chip));
+        });
+        box.append(chip);
+    });
+}
+
+// Kachel gewählt: Abschnitt, Pflichtfelder und Texte umschalten
+function waehleArt(radio, fokus) {
+    const typ = radio.dataset.typ;
+    eintragstyp.value = typ;
+    zeigeAbschnitt(typ);
+    if (radio.dataset.einheit) setzeEinheit(radio.dataset.einheit);
+    tachoPflicht();
+    if (fokus) tachoFeld.focus();
+}
+document.querySelectorAll('input[name="art"]').forEach(radio => radio.addEventListener('change', () => { if (radio.checked) waehleArt(radio, true); }));
+
+// Datum: Heute / Gestern
+document.querySelectorAll('.datum-chip').forEach(chip => chip.addEventListener('click', () => {
+    const d = new Date();
+    d.setDate(d.getDate() - Number(chip.dataset.tage));
+    document.getElementById('datum').value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}));
+
+// Tachostand (#41): beim Tanken/Laden und bei Ausgaben optional, bei Fahrt und "km notieren" Pflicht.
+// Schätzung: letzter Tachostand + Menge ÷ Ø Verbrauch × 100; übernommene Schätzungen werden markiert.
 const tachoGeschaetzt = document.getElementById('tachostand_geschaetzt');
 const tachoHinweis = document.getElementById('tachoHinweis');
 const btnSchaetzung = document.getElementById('btnTachoSchaetzung');
@@ -385,44 +367,34 @@ const letzterTacho = <?= json_encode($aktuellerTacho !== null ? (int)$aktuellerT
 const schnittVerbrauch = <?= json_encode($schnittVerbrauch !== null ? (float)$schnittVerbrauch : null) ?>;
 let schaetzung = null;
 function tachoPflicht() {
-    const tank = typeSelect.value === 'Tankfuellung';
-    tachoFeld.required = typeSelect.value === 'Fahrt';
-    tachoHinweis.classList.toggle('d-none', !tank);
+    const typ = eintragstyp.value;
+    tachoFeld.required = typ === 'Fahrt' || typ === 'Kilometerstand';
+    tachoHinweis.classList.toggle('d-none', typ !== 'Tankfuellung');
     aktualisiereSchaetzung();
 }
 function aktualisiereSchaetzung() {
     const mengeFeld = document.getElementById('menge');
-    const menge = mengeFeld ? parseFloat(String(mengeFeld.value).replace(',', '.')) : NaN;
-    schaetzung = typeSelect.value === 'Tankfuellung' && letzterTacho !== null && schnittVerbrauch > 0 && menge > 0
+    const menge = parseFloat(String(mengeFeld.value).replace(',', '.'));
+    schaetzung = eintragstyp.value === 'Tankfuellung' && letzterTacho !== null && schnittVerbrauch > 0 && menge > 0
         ? Math.round(letzterTacho + menge / schnittVerbrauch * 100) : null;
     btnSchaetzung.classList.toggle('d-none', schaetzung === null || tachoFeld.value !== '');
-    if (schaetzung !== null) {
-        btnSchaetzung.textContent = 'Schätzung übernehmen: ca. ' + schaetzung.toLocaleString('de-DE') + ' km';
-    }
+    if (schaetzung !== null) btnSchaetzung.textContent = 'Schätzung übernehmen: ca. ' + schaetzung.toLocaleString('de-DE') + ' km';
 }
 btnSchaetzung.addEventListener('click', () => {
     if (schaetzung === null) return;
     tachoFeld.value = schaetzung;
     tachoGeschaetzt.value = '1';
-    tachoHinweis.firstChild.textContent = 'Geschätzter Wert – bitte später durch den echten Tachostand ersetzen. ';
+    document.getElementById('tachoHinweisText').textContent = 'Geschätzt – bitte später durch den echten Tachostand ersetzen.';
     aktualisiereSchaetzung();
 });
-// Eigene Eingabe ersetzt die Schätzung
 tachoFeld.addEventListener('input', () => { tachoGeschaetzt.value = ''; aktualisiereSchaetzung(); });
-document.addEventListener('input', (e) => { if (e.target && e.target.id === 'menge') aktualisiereSchaetzung(); });
-typeSelect.addEventListener('change', tachoPflicht);
-window.addEventListener('DOMContentLoaded', tachoPflicht);
+document.getElementById('menge').addEventListener('input', aktualisiereSchaetzung);
 
-// Tankstellen-Suche (nur bei Tankfuellung sichtbar)
-function toggleTankstellenButton() {
-    const show = typeSelect.value === 'Tankfuellung';
-    const btn = document.getElementById('btnTankstellenSuche');
-    const vorschlaege = document.getElementById('tankstellenVorschlaege');
-    if (btn) btn.style.display = show ? '' : 'none';
-    if (vorschlaege) vorschlaege.style.display = show ? '' : 'none';
-}
-typeSelect.addEventListener('change', toggleTankstellenButton);
-window.addEventListener('DOMContentLoaded', toggleTankstellenButton);
+window.addEventListener('DOMContentLoaded', () => {
+    // Bootstrap (Erklärung am Info-Knopf) wird erst im Footer geladen
+    rechner = mengenRechner({ einheit: () => mengenEinheit });
+    waehleArt(document.querySelector('input[name="art"]:checked'), false);
+});
 
 // Hilfsfunktion: aktuellen Kraftstofftyp auslesen
 function getSelectedKraftstoff() {
@@ -513,22 +485,6 @@ function sucheTankstellen(lat, lng, radius, ortHinweis) {
         .finally(sucheBeenden);
 }
 
-// Plug-in-Hybrid: Beschriftungen, Stationssuche und Kraftstoffauswahl je nach Tanken oder Laden
-document.querySelectorAll('input[name="einheit"]').forEach(radio => radio.addEventListener('change', () => {
-    const t = texteJeEinheit[radio.value];
-    if (!radio.checked || !t) return;
-    document.getElementById('mengeLabel').textContent = t.menge;
-    document.getElementById('preisLabel').textContent = t.preis;
-    document.getElementById('vollLabel').textContent = t.voll;
-    document.getElementById('lueckeLabel').textContent = t.luecke;
-    document.getElementById('standort').placeholder = t.beispiel;
-    mengenEinheit = t.kurz;
-    if (rechner) rechner.aktualisiere();
-    stationsArt = t.stationsArt;
-    if (btnSuche) { btnSuche.title = t.stationen; btnSuche.setAttribute('aria-label', t.stationen); }
-    document.getElementById('kraftstoffSorte').hidden = radio.value === 'kwh';
-    vorschlaege.replaceChildren();
-}));
 
 // Preis vom letzten Ladevorgang an diesem Ort übernehmen, wenn noch keiner eingetragen ist
 function preisAusHistorie(ort) {

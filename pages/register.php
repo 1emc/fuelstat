@@ -18,7 +18,6 @@ try {
         } elseif (strlen($password) < 8) {
             $error = "Das Passwort muss mindestens 8 Zeichen lang sein.";
         } else {
-            include '../includes/db_connect.php';
             try {
                 $apiRegister = getApiClient(null);
                 $response = $apiRegister->postAuthRegister($email, $password);
