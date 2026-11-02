@@ -3,19 +3,20 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile
-      target: dev
-    # Der Port 3000 wird an 127.0.0.1 gebunden, damit er nur lokal (für Nginx) 
+      # Betrieb: Code und Pakete stecken im Image (läuft als Benutzer "node").
+      # Nach "git pull" genügt "docker compose up -d --build". Lokale Entwicklung: docker-compose.dev.yml
+      target: prod
+    # Der Port 3000 wird an 127.0.0.1 gebunden, damit er nur lokal (für Nginx)
     # und nicht direkt aus dem Internet erreichbar ist.
     ports:
       - "127.0.0.1:${API_PORT:-3000}:3000"
     volumes:
-      - ../backend:/usr/src/app
-      - api_node_modules:/usr/src/app/node_modules
+      # Hochgeladene Bilder bleiben außerhalb des Images; der Ordner muss dem Benutzer node (UID 1000) gehören
       - ../uploads:/usr/src/app/uploads
     env_file:
       - .env
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     depends_on:
       db:
@@ -60,4 +61,3 @@ services:
 
 volumes:
   postgres_data:
-  api_node_modules:

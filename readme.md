@@ -47,7 +47,7 @@ Browser ──> PHP-Frontend (Wurzelverzeichnis) ──> Node-API (backend/) ─
 ```
 
 - **Frontend**: PHP 8 mit Bootstrap 5.3 und Chart.js. Es speichert selbst keine Daten, sondern ruft die API auf (`includes/fuelstat_api.php`). Der Login-Token liegt in der PHP-Session und zusätzlich in einem HttpOnly-Cookie (`fuelstat_auth`, 7 Tage), damit man angemeldet bleibt.
-- **API**: Node.js 20 mit Express (`backend/src/server.js`), Authentifizierung per JWT. Doku: `docs/api.md` und `docs/openapi.1.0.0.yaml`.
+- **API**: Node.js 24 (LTS) mit Express (`backend/src/server.js`), Authentifizierung per JWT. Doku: `docs/api.md` und `docs/openapi.1.0.0.yaml`.
 - **Datenbank**: PostgreSQL 15. Vollständiges Schema in `backend/database/postgres_init.sql`, Migrationen daneben.
 - **Infrastruktur**: `infra/docker-compose.yml` startet API, Datenbank und Adminer.
 
@@ -64,10 +64,11 @@ Browser ──> PHP-Frontend (Wurzelverzeichnis) ──> Node-API (backend/) ─
 ```bash
 git clone https://github.com/1emc/fuelstat.git && cd fuelstat/infra
 cp .env.example .env    # Passwort, JWT_SECRET usw. eintragen, alle Optionen sind dort beschrieben
-docker compose up -d
+mkdir -p ../uploads && sudo chown 1000:1000 ../uploads   # die API läuft als Benutzer "node" (UID 1000)
+docker compose up -d --build
 ```
 
-Die API läuft danach auf `127.0.0.1:3000`, Adminer auf `127.0.0.1:8080` (beides nur lokal erreichbar). Beim allerersten Start legt Postgres das komplette Schema aus `backend/database/postgres_init.sql` automatisch an.
+Die API läuft danach auf `127.0.0.1:3000`, Adminer auf `127.0.0.1:8080` (beides nur lokal erreichbar). Die API läuft im `prod`-Container: Code und Pakete stecken im Image, ohne Root-Rechte. Beim allerersten Start legt Postgres das komplette Schema aus `backend/database/postgres_init.sql` automatisch an.
 
 Wird `JWT_SECRET` später ohne eigenen `MAIL_ENCRYPTION_KEY` geändert, müssen die Benutzer ihr SMTP-Passwort neu eingeben.
 
@@ -102,8 +103,17 @@ Wird `JWT_SECRET` später ohne eigenen `MAIL_ENCRYPTION_KEY` geändert, müssen 
 
 ```bash
 git pull
-cd infra && docker compose up -d --build   # API (startet im Dev-Container bei Codeänderungen auch selbst neu)
+cd infra && docker compose up -d --build   # API: neues Image mit aktuellem Code und aktuellen Paketen
 sudo systemctl reload php8.4-fpm            # Frontend
+```
+
+**Einmalig beim Umstieg auf den `prod`-Container (November 2026):** Bis dahin lief die API im Entwicklungs-Container mit eingebundenem Code und eigenem `node_modules`-Volume. Dadurch kamen Paket-Updates nicht an. Umstellen:
+
+```bash
+cd infra
+sudo chown -R 1000:1000 ../uploads          # Uploads gehören jetzt dem Benutzer "node"
+sudo docker compose up -d --build api
+sudo docker volume rm infra_api_node_modules # altes Paket-Volume wird nicht mehr gebraucht
 ```
 
 Neue Datenbank-Migrationen (siehe unten) **vor** dem Neustart der API einspielen, z. B.:
@@ -142,6 +152,8 @@ Alle Migrationen laufen in einer Transaktion und lassen sich gefahrlos ein zweit
 
 ```bash
 cd backend && npm install && npm run dev   # API mit Auto-Reload (braucht DATABASE_URL und JWT_SECRET)
+# oder per Docker mit eingebundenem Code und nodemon (nur lokal, nie auf dem Server):
+# cd infra && docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 php -S 127.0.0.1:8088                      # Frontend, dazu FUELSTAT_API_BASE_URL=http://127.0.0.1:3000/api/v1 setzen
 for t in tests/*.php; do php -d zend.assertions=1 $t; done   # PHP-Tests
 ```
