@@ -52,7 +52,7 @@ $email = ($b['email'] ?? '') !== '' ? htmlspecialchars(str_replace('@', '[at]', 
   <h2 class="h5 mt-4">8. Cookies und Speicher im Browser</h2>
   <ul>
     <li><strong>Sitzungs-Cookie (PHPSESSID):</strong> technisch notwendig für die Anmeldung und den Schutz der Formulare; es gilt höchstens 28 Tage und wird beim Abmelden gelöscht.</li>
-    <li><strong>Anmelde-Cookie (fuelstat_auth):</strong> hält dich angemeldet, auch wenn der Server die Sitzung zwischendurch aufräumt. Es ist für Skripte nicht lesbar, läuft nach 7 Tagen ab und wird beim Abmelden gelöscht.</li>
+    <li><strong>Anmelde-Cookie (fuelstat_auth):</strong> hält dich angemeldet, auch wenn der Server die Sitzung zwischendurch aufräumt. Es ist für Skripte nicht lesbar und wird beim Abmelden gelöscht. Es gilt 7 Tage; wer Fuelstat in dieser Zeit nutzt, bekommt höchstens einmal täglich ein neues, damit man nicht mitten in der Nutzung abgemeldet wird. Spätestens 90 Tage nach der letzten Anmeldung mit Passwort ist eine neue Anmeldung nötig.</li>
     <li><strong>Lokaler Speicher (fuelstat-theme):</strong> merkt sich, ob du die helle oder dunkle Darstellung gewählt hast.</li>
     <li><strong>Service Worker:</strong> speichert Programmdateien und Bilder der App (z. B. Stylesheets, Symbole) im Browser, damit sie schneller laden. Persönliche Daten werden dort nicht abgelegt.</li>
   </ul>

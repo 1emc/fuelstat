@@ -110,3 +110,35 @@ if (!function_exists('clearApiToken')) {
         setAuthCookie('', time() - 3600);
     }
 }
+
+if (!function_exists('verlaengereAnmeldung')) {
+    /**
+     * Anmeldung bei aktiver Nutzung verlängern (#56): Ist das Token älter als einen Tag, wird es gegen ein neues
+     * mit wieder 7 Tagen Laufzeit getauscht (Session und Cookie). Höchstens ein Versuch pro Stunde und Session;
+     * schlägt er fehl, bleibt das alte Token einfach gültig, bis es abläuft.
+     * @return bool true, wenn ein neues Token gesetzt wurde
+     */
+    function verlaengereAnmeldung(FuelstatApi $api): bool
+    {
+        $token = getApiToken();
+        $payload = $token ? apiTokenPayload($token) : null;
+        if ($payload === null || (int)($payload['iat'] ?? 0) > time() - 24 * 3600) {
+            return false;
+        }
+        if ((int)($_SESSION['anmeldung_verlaengert_versuch'] ?? 0) > time() - 3600) {
+            return false;
+        }
+        $_SESSION['anmeldung_verlaengert_versuch'] = time();
+        try {
+            $neu = (string)($api->postAuthRefresh()['token'] ?? '');
+        } catch (Throwable $e) {
+            error_log('[Anmeldung] Verlängern nicht möglich: ' . $e->getMessage());
+            return false;
+        }
+        if ($neu === '') {
+            return false;
+        }
+        setApiToken($neu, ['id' => $_SESSION['user_id'] ?? null, 'email' => $_SESSION['user_email'] ?? '']);
+        return true;
+    }
+}

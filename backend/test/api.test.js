@@ -361,6 +361,32 @@ test('Ungültige IDs liefern 404 statt 500', async () => {
   }
 });
 
+test('Anmeldung verlängern (#56)', async () => {
+  const jwt = require('jsonwebtoken');
+  const u = await newUser();
+  const alt = jwt.decode(u.token);
+  assert.ok(alt.auth_time, 'Login setzt auth_time');
+  const r = await api('POST', '/auth/refresh', { token: u.token });
+  assert.equal(r.status, 200);
+  const neu = jwt.decode(r.body.token);
+  assert.notEqual(neu.jti, alt.jti);
+  assert.equal(neu.auth_time, alt.auth_time, 'auth_time bleibt beim Verlängern');
+  assert.equal((await api('GET', '/whoami', { token: r.body.token })).status, 200);
+  assert.equal((await api('POST', '/auth/refresh')).status, 401, 'ohne Token');
+
+  // Letzter echter Login vor mehr als 90 Tagen: neu anmelden
+  const uralt = jwt.sign({ sub: u.id, email: u.email, jti: crypto.randomUUID(), auth_time: Math.floor(Date.now() / 1000) - 91 * 86400 },
+    process.env.JWT_SECRET, { expiresIn: '7d' });
+  const r2 = await api('POST', '/auth/refresh', { token: uralt });
+  assert.equal(r2.status, 401);
+  assert.equal(r2.body.error, 'reauth_required');
+
+  // "Auf allen Geräten abmelden" gilt auch für das Verlängern
+  await new Promise((res) => setTimeout(res, 1100));
+  assert.equal((await api('POST', `/auth/users/${u.id}/revoke-all`, { token: r.body.token })).status, 201);
+  assert.equal((await api('POST', '/auth/refresh', { token: r.body.token })).status, 401);
+});
+
 test('CORS ist ohne CORS_ORIGINS aus', async () => {
   const r = await api('GET', '/health', { headers: { origin: 'https://boese.example' } });
   assert.equal(r.headers.get('access-control-allow-origin'), null);
