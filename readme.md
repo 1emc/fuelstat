@@ -12,12 +12,15 @@ Fuelstat ist eine Web-App, mit der du Tankfüllungen, Ladevorgänge und alle and
 **Einträge**
 - Tankfüllungen bzw. Ladevorgänge mit Menge (l, kWh oder kg je nach Kraftstoff), Preis, Tankstelle, voll/teilweise getankt; alle Texte passen sich der Antriebsart an (Tankstelle/Ladestation, vollgetankt/vollgeladen …)
 - Warnung bei unplausiblem Tachostand (kleiner als der vorige oder ungewöhnlich großer Sprung)
+- Tachostand vergessen? Tank- und Ladevorgänge lassen sich ohne Tachostand (oder mit einer Schätzung aus Menge und Ø Verbrauch) speichern und später nachtragen – auch nach 14 Tagen. Hinweis in der Übersicht und in der Eintragsliste; der Verbrauch bleibt korrekt
+- Menge, Preis pro Einheit und Gesamtpreis: aus zwei Angaben wird die dritte berechnet und gespeichert; Info-Knöpfe zeigen, was eingetragen und was berechnet ist
 - Plug-in-Hybride: Tanken und Laden im selben Fahrzeug, Verbrauch getrennt in l/100 km und kWh/100 km, gemeinsame Energiekosten und Stromanteil; Tank und Akku als eigene Angaben
 - Tankstellen in der Nähe samt aktuellem Preis (Tankerkönig), beim Laden Ladestationen mit Leistung und Steckertypen (Open Charge Map); der zuletzt bezahlte kWh-Preis an einer Station wird vorgeschlagen
 - Andere Ausgaben (Versicherung, Werkstatt, Inspektion, Steuer, Reparatur, Reifen, TÜV, Wartung, Dekor) und Fahrten
 - Alle Einträge bearbeiten und löschen (Tankfüllungen innerhalb von 14 Tagen)
 
 **Auswertungen**
+- Ø Verbrauch über alle Abschnitte in Übersicht und Fahrzeugseite, dazu der letzte Abschnitt als Trend
 - Verbrauch pro Tankfüllung und Monat, bester/schlechtester Monat, Trend
 - Jahresübersicht mit Menge, Kosten, Verbrauch und CO₂
 - Ausgaben nach Kategorie und Kostengruppe, Kosten pro Monat und km, Wartungskosten je 10.000 km, Jahresvergleich
@@ -30,13 +33,15 @@ Fuelstat ist eine Web-App, mit der du Tankfüllungen, Ladevorgänge und alle and
 - Ohne eigene Angaben verschickt Fuelstat über den Mailserver des Betreibers (SMTP-Zugang des Admins) an die Konto-Adresse
 - Optional hinterlegt jeder Benutzer seinen eigenen Mailserver (SMTP) in den Einstellungen
 - Erinnerung, wenn TÜV, Wartung, Versicherung oder Steuer bald fällig sind (Vorlaufzeit einstellbar) und noch einmal, wenn sie überfällig sind
+- Erinnerung „Kilometerstand nachtragen“ einige Stunden nach einem Tank- oder Ladevorgang ohne Tachostand (genau einmal)
 - Monatsbericht mit Kosten, Strecke, Verbrauch und anstehenden Terminen je Fahrzeug
 
 **Konto**
 - Registrierung und Login, optional mit Zwei-Faktor-Authentifizierung (Authenticator-App)
 - Profil mit Benutzername und Profilbild, Passwort ändern
 - Abmelden auf allen Geräten, Konto löschen
-- Benutzerverwaltung für Admins: Fahrzeuge je Benutzer, zuletzt aktiv, letzter Login, letzter Eintrag, Beta-Tester-Kennzeichen und Feedback-Eingang
+- Benutzerverwaltung für Admins: Fahrzeuge je Benutzer, zuletzt aktiv, letzter Login, letzter Eintrag, Beta-Tester-Kennzeichen, Tarif (Free/Plus/Flotte, optional befristet) und Feedback-Eingang
+- Tarif-Grundgerüst für ein späteres Premium-Modell; Grenzen erst mit `PLAN_LIMITS_ENABLED=true` aktiv, bis dahin haben alle den vollen Umfang
 - „Feedback senden“ für angemeldete Benutzer (Fehler, Idee, Lob, Sonstiges): wird gespeichert und per Mail an den Betreiber geschickt
 - Hell- und Dunkelmodus, als App installierbar (PWA), auf dem Handy mit App-Navigation (untere Leiste, Profil- und Fahrzeugauswahl von unten)
 
@@ -47,7 +52,7 @@ Browser ──> PHP-Frontend (Wurzelverzeichnis) ──> Node-API (backend/) ─
 ```
 
 - **Frontend**: PHP 8 mit Bootstrap 5.3 und Chart.js. Es speichert selbst keine Daten, sondern ruft die API auf (`includes/fuelstat_api.php`). Der Login-Token liegt in der PHP-Session und zusätzlich in einem HttpOnly-Cookie (`fuelstat_auth`, 7 Tage), damit man angemeldet bleibt.
-- **API**: Node.js 20 mit Express (`backend/src/server.js`), Authentifizierung per JWT. Doku: `docs/api.md` und `docs/openapi.1.0.0.yaml`.
+- **API**: Node.js 24 (LTS) mit Express (`backend/src/server.js`), Authentifizierung per JWT. Doku: `docs/api.md` und `docs/openapi.1.0.0.yaml`.
 - **Datenbank**: PostgreSQL 15. Vollständiges Schema in `backend/database/postgres_init.sql`, Migrationen daneben.
 - **Infrastruktur**: `infra/docker-compose.yml` startet API, Datenbank und Adminer.
 
@@ -64,12 +69,13 @@ Browser ──> PHP-Frontend (Wurzelverzeichnis) ──> Node-API (backend/) ─
 ```bash
 git clone https://github.com/1emc/fuelstat.git && cd fuelstat/infra
 cp .env.example .env    # Passwort, JWT_SECRET usw. eintragen, alle Optionen sind dort beschrieben
-docker compose up -d
+mkdir -p ../uploads && sudo chown 1000:1000 ../uploads   # die API läuft als Benutzer "node" (UID 1000)
+docker compose up -d --build
 ```
 
-Die API läuft danach auf `127.0.0.1:3000`, Adminer auf `127.0.0.1:8080` (beides nur lokal erreichbar). Beim allerersten Start legt Postgres das komplette Schema aus `backend/database/postgres_init.sql` automatisch an.
+Die API läuft danach auf `127.0.0.1:3000`, Adminer auf `127.0.0.1:8080` (beides nur lokal erreichbar). Die API läuft im `prod`-Container: Code und Pakete stecken im Image, ohne Root-Rechte. Beim allerersten Start legt Postgres das komplette Schema aus `backend/database/postgres_init.sql` automatisch an.
 
-Wird `JWT_SECRET` später ohne eigenen `MAIL_ENCRYPTION_KEY` geändert, müssen die Benutzer ihr SMTP-Passwort neu eingeben.
+Wird `JWT_SECRET` später ohne eigenen `MAIL_ENCRYPTION_KEY` geändert, lassen sich gespeicherte SMTP-Passwörter und 2FA-Schlüssel nicht mehr entschlüsseln: Benutzer müssen ihr SMTP-Passwort neu eingeben, und 2FA muss für betroffene Konten zurückgesetzt werden. Deshalb `MAIL_ENCRYPTION_KEY` am besten von Anfang an fest setzen.
 
 ### 2. Frontend (PHP)
 
@@ -83,8 +89,18 @@ Wird `JWT_SECRET` später ohne eigenen `MAIL_ENCRYPTION_KEY` geändert, müssen 
 
 ### 3. Webserver (nginx)
 
-- `/api/` an die Node-API weiterleiten (`proxy_pass http://127.0.0.1:3000;`), `/uploads/` aus dem Upload-Verzeichnis ausliefern.
-- Die Regeln aus `infra/nginx-sicherheit.conf.example` übernehmen. Sie sperren interne Verzeichnisse (`backend/`, `infra/`, `tests/`, `docs/` …), versteckte Dateien wie `.env` und `.git`, alle `*.key`-Dateien und verhindern, dass im Upload-Ordner jemals PHP ausgeführt wird. **Ohne diese Regeln sind `.env`-Dateien und API-Schlüssel abrufbar.**
+Eine vollständige Konfiguration liegt in `infra/nginx/fuelstat.conf.example` (HTTPS-Weiterleitung, Sicherheits-Header, `/api/v1/` → Node-API auf `127.0.0.1:3000`, PHP-FPM, Caching). Domain, Webroot und FPM-Socket anpassen:
+
+```bash
+sudo cp infra/nginx-sicherheit.conf.example /etc/nginx/snippets/fuelstat-sicherheit.conf
+sudo cp infra/nginx/fuelstat.conf.example /etc/nginx/sites-available/fuelstat.conf   # danach Platzhalter ersetzen
+sudo ln -s /etc/nginx/sites-available/fuelstat.conf /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+- Wer eine eigene Konfiguration hat, bindet nur das Snippet **ganz oben** im `server`-Block ein: `include snippets/fuelstat-sicherheit.conf;`. Es sperrt interne Verzeichnisse (`backend/`, `infra/`, `tests/`, `docs/` …), versteckte Dateien wie `.env` und `.git`, alle `*.key`-Dateien, Doku-/Konfigurationsdateien (`*.md`, `*.yml`, `*.sql`, `*.sh` …), liefert aus `uploads/` nur Bilder aus und `/.well-known/security.txt` als Text. **Ohne diese Regeln sind `.env`-Dateien und API-Schlüssel abrufbar.**
+- Nach Updates prüfen, ob sich das Snippet geändert hat (`git diff` auf `infra/nginx-sicherheit.conf.example`), und es erneut kopieren.
+- Schnelltest: `curl -I https://<domain>/readme.md` und `curl -I https://<domain>/api/ocm.key` müssen `404` liefern.
 - Bei OPcache mit `opcache.validate_timestamps=0` nach jedem Deploy PHP-FPM neu laden (z. B. `systemctl reload php8.4-fpm`).
 
 ### 4. Erstes Konto und Admin
@@ -102,20 +118,52 @@ Wird `JWT_SECRET` später ohne eigenen `MAIL_ENCRYPTION_KEY` geändert, müssen 
 
 ```bash
 git pull
-cd infra && docker compose up -d --build   # API (startet im Dev-Container bei Codeänderungen auch selbst neu)
+cd infra && docker compose up -d --build   # API: neues Image mit aktuellem Code und aktuellen Paketen
 sudo systemctl reload php8.4-fpm            # Frontend
+```
+
+**Einmalig beim Umstieg auf den `prod`-Container (November 2026):** Bis dahin lief die API im Entwicklungs-Container mit eingebundenem Code und eigenem `node_modules`-Volume. Dadurch kamen Paket-Updates nicht an. Umstellen:
+
+```bash
+cd infra
+sudo chown -R 1000:1000 ../uploads          # Uploads gehören jetzt dem Benutzer "node"
+sudo docker compose up -d --build api
+sudo docker volume rm infra_api_node_modules # altes Paket-Volume wird nicht mehr gebraucht
 ```
 
 Neue Datenbank-Migrationen (siehe unten) **vor** dem Neustart der API einspielen, z. B.:
 
 ```bash
 cd infra
-docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ../backend/database/postgres_010_plugin_hybrid.sql
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ../backend/database/postgres_012_missing_odometer.sql
 ```
+
+### Datensicherung
+
+`infra/backup/` enthält Sicherung und Wiederherstellung (Datenbank per `pg_dump` und hochgeladene Bilder):
+
+1. `cp infra/backup/backup.env.example infra/backup/backup.env` und Pfade eintragen
+2. Verschlüsselung (empfohlen): `age-keygen -o fuelstat-backup-key.txt`. Den **privaten** Schlüssel offline aufbewahren (z. B. im Passwortmanager), auf dem Server nur den öffentlichen Schlüssel als `BACKUP_AGE_RECIPIENT` eintragen.
+3. Optional externe Kopie per `rsync`, z. B. auf eine Hetzner Storage Box (`BACKUP_REMOTE`)
+4. Täglich automatisch:
+
+   ```bash
+   sudo cp infra/backup/fuelstat-backup.service infra/backup/fuelstat-backup.timer /etc/systemd/system/
+   sudo systemctl daemon-reload && sudo systemctl enable --now fuelstat-backup.timer
+   ```
+
+   Aufbewahrung: 14 tägliche und 12 wöchentliche Sicherungen (einstellbar). Danach sind gelöschte Daten auch aus den Sicherungen verschwunden; die Datenschutzerklärung nennt dafür 90 Tage (`backup_tage` in `includes/betreiber.php`).
+5. **Wiederherstellung regelmäßig testen** (spielt in eine eigene Testdatenbank ein und zählt Zeilen, ohne die echten Daten anzufassen):
+
+   ```bash
+   sudo AGE_IDENTITY=/pfad/zu/fuelstat-backup-key.txt infra/backup/fuelstat-restore.sh --test /var/backups/fuelstat/daily/fuelstat-db-….dump.age
+   ```
+
+   Im Ernstfall `--echt` statt `--test` (überschreibt die Datenbank nach Rückfrage, optional mit dem Uploads-Archiv als drittem Argument).
 
 ### Datenbank-Migrationen
 
-Neue Installationen brauchen keine Migrationen: `postgres_init.sql` enthält bereits alles bis einschließlich 010. Bestehende Installationen spielen alle noch fehlenden Migrationen der Reihe nach ein:
+Neue Installationen brauchen keine Migrationen: `postgres_init.sql` enthält bereits alles bis einschließlich 012. Bestehende Installationen spielen alle noch fehlenden Migrationen der Reihe nach ein:
 
 | Datei | Inhalt |
 |---|---|
@@ -125,6 +173,8 @@ Neue Installationen brauchen keine Migrationen: `postgres_init.sql` enthält ber
 | `postgres_008_beta_feedback.sql` | Beta-Tester-Kennzeichen und Feedback |
 | `postgres_009_user_activity.sql` | Letzter Login und zuletzt aktiv |
 | `postgres_010_plugin_hybrid.sql` | Antriebsart Plug-in-Hybrid (`phev`) und Akkugröße |
+| `postgres_011_plans.sql` | Tarif je Konto (`plan`, `plan_until`), siehe `PLAN_LIMITS_ENABLED` |
+| `postgres_012_missing_odometer.sql` | Tank-/Ladevorgänge ohne Tachostand, Markierung „geschätzt“, Erinnerung „Kilometerstand nachtragen“ |
 
 Alle Migrationen laufen in einer Transaktion und lassen sich gefahrlos ein zweites Mal ausführen.
 
@@ -142,6 +192,8 @@ Alle Migrationen laufen in einer Transaktion und lassen sich gefahrlos ein zweit
 
 ```bash
 cd backend && npm install && npm run dev   # API mit Auto-Reload (braucht DATABASE_URL und JWT_SECRET)
+# oder per Docker mit eingebundenem Code und nodemon (nur lokal, nie auf dem Server):
+# cd infra && docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 php -S 127.0.0.1:8088                      # Frontend, dazu FUELSTAT_API_BASE_URL=http://127.0.0.1:3000/api/v1 setzen
 for t in tests/*.php; do php -d zend.assertions=1 $t; done   # PHP-Tests
 ```

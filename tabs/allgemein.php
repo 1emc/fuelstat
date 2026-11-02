@@ -34,8 +34,10 @@ uksort($verbrauchJeEinheit, fn($a, $b) => array_search($a, ['l', 'kwh', 'kg']) <
 $statusReihenfolge = ['ueberfaellig' => 0, 'bald' => 1, 'ok' => 2, 'unbekannt' => 3];
 usort($faelligkeiten, fn($a, $b) => [$statusReihenfolge[$a['status']] ?? 9, $a['tage'] ?? PHP_INT_MAX] <=> [$statusReihenfolge[$b['status']] ?? 9, $b['tage'] ?? PHP_INT_MAX]);
 $letzteEintraege = ['Wartung' => $letzteWartung, 'TUV' => $letzterTUV];
+// Kachel "Ø Verbrauch": Durchschnitt über alle Abschnitte, darunter der letzte Abschnitt im Vergleich dazu
+$schnitt = $stats['avgConsumption'] ?? null;
 $aktuell = $trend['current'] ?? null;
-$diff = $trend['diff'] ?? null;
+$diff = $aktuell !== null && $schnitt !== null ? round($aktuell - $schnitt, 2) : null;
 $eintragUrl = '../pages/eintrag_hinzufuegen.php?fahrzeug_id=' . urlencode($fahrzeug_id);
 ?>
 
@@ -82,10 +84,11 @@ $eintragUrl = '../pages/eintrag_hinzufuegen.php?fahrzeug_id=' . urlencode($fahrz
                 <?php if (!$verbrauchJeEinheit): ?>
                 <div class="col-6 col-lg-3">
                     <div class="kennzahl">
-                        <div class="small text-body-secondary">Verbrauch</div>
-                        <div class="kennzahl-wert"><?= $aktuell !== null ? number_format($aktuell, 2, ',', '.') . ' <small class="fw-normal">' . $einheitKurz . '/100 km</small>' : '—' ?></div>
-                        <?php if ($aktuell !== null && $diff !== null && abs($diff) >= 0.01): ?>
-                            <div class="small text-<?= $diff > 0 ? 'danger' : 'success' ?>"><?= ($diff > 0 ? '+' : '') . number_format($diff, 2, ',', '.') ?> ggü. Ø</div>
+                        <div class="small text-body-secondary">Ø Verbrauch</div>
+                        <div class="kennzahl-wert"><?= $schnitt !== null ? number_format($schnitt, 2, ',', '.') . ' <small class="fw-normal">' . $einheitKurz . '/100 km</small>' : '—' ?></div>
+                        <?php if ($aktuell !== null): ?>
+                            <div class="small text-body-secondary">zuletzt <?= number_format($aktuell, 2, ',', '.') ?><?php if ($diff !== null && abs($diff) >= 0.01): ?>
+                                <span class="text-<?= $diff > 0 ? 'danger' : 'success' ?>">(<?= ($diff > 0 ? '+' : '') . number_format($diff, 2, ',', '.') ?>)</span><?php endif; ?></div>
                         <?php endif; ?>
                     </div>
                 </div>

@@ -98,10 +98,17 @@ body.dark .badge { background-color: #444; color: #fff; }
               </div>
               <div class="text-muted small text-break">
                 <?= implode(' · ', array_filter([
-                    !empty($e['tachostand']) ? number_format((int)$e['tachostand'], 0, ',', '.') . ' km' : '',
+                    !empty($e['tachostand']) ? (!empty($e['tachostand_geschaetzt']) ? 'ca. ' : '') . number_format((int)$e['tachostand'], 0, ',', '.') . ' km' : '',
                     !empty($e['standort']) ? htmlspecialchars($e['standort']) : '',
                 ])) ?>
               </div>
+              <?php if ($type === 'fillup' && !hatEchtenTachostand($e)): ?>
+              <!-- Tachostand fehlt oder ist nur geschätzt (#41): jederzeit nachtragbar, auch nach 14 Tagen -->
+              <div class="small mt-1">
+                <span class="badge text-bg-warning"><i class="fas fa-gauge-high me-1"></i><?= empty($e['tachostand']) ? 'Tachostand fehlt' : 'Tachostand geschätzt' ?></span>
+                <a class="ms-1" href="../pages/tachostand_nachtragen.php?id=<?= htmlspecialchars(urlencode($e['id'])) ?>&amp;fahrzeug_id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?>">Nachtragen</a>
+              </div>
+              <?php endif; ?>
               <?php if (!empty($e['beschreibung'])): ?>
               <div class="small mt-1"><?= htmlspecialchars($e['beschreibung']) ?></div>
               <?php endif; ?>

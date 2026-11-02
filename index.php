@@ -43,24 +43,33 @@ try {
                 $einheit = einheitKurz(getEinheitFuerKraftstoff($row['fuel_type'] ?? null));
 
                 $currentOdo = null;
-                $verbrauch = null;
-                $verbrauchText = null;
+                $tachoFehlt = 0;
+                $verbrauchHtml = '';
                 try {
                     $stats = $api->getVehicleStats($vehicleId);
                     $currentOdo = $stats['currentOdo'] ?? null;
-                    $verbrauch = $stats['trend']['current'] ?? null;
+                    $tachoFehlt = (int)($stats['missingOdometer'] ?? 0);
+                    // Ø über alle Abschnitte (der letzte Abschnitt allein schwankt zu stark);
                     // Plug-in-Hybrid: Kraftstoff und Strom nebeneinander, z. B. "Ø 2,7 l + 20,0 kWh/100 km"
-                    if (count($stats['units'] ?? []) > 1) {
-                        $teile = [];
-                        foreach (['l', 'kwh'] as $u) {
-                            // Durchschnitt über alle Abschnitte, der letzte schwankt beim Plug-in-Hybrid zu stark
-                            $wert = $stats['units'][$u]['avgConsumption'] ?? $stats['units'][$u]['trend']['current'] ?? null;
-                            if ($wert !== null) {
-                                $teile[] = number_format($wert, 1, ',', '.') . ' ' . einheitKurz($u);
-                            }
+                    $teile = [];
+                    $einheiten = count($stats['units'] ?? []) > 1 ? ['l', 'kwh'] : [null];
+                    foreach ($einheiten as $u) {
+                        $wert = $u === null ? ($stats['avgConsumption'] ?? null) : ($stats['units'][$u]['avgConsumption'] ?? null);
+                        if ($wert !== null) {
+                            $teile[] = number_format($wert, 1, ',', '.') . ' ' . ($u === null ? $einheit : einheitKurz($u));
                         }
-                        $verbrauch = null;
-                        $verbrauchText = $teile ? 'Ø ' . implode(' + ', $teile) . '/100 km' : '';
+                    }
+                    if ($teile) {
+                        $verbrauchHtml = htmlspecialchars('Ø ' . implode(' + ', $teile) . '/100 km');
+                        // Trend-Pfeil: letzter Abschnitt mind. 5 % über bzw. unter dem Durchschnitt (nur bei einer Einheit)
+                        $zuletzt = $stats['trend']['current'] ?? null;
+                        $schnitt = $stats['avgConsumption'] ?? null;
+                        if ($einheiten === [null] && $zuletzt !== null && $schnitt > 0 && abs($zuletzt - $schnitt) / $schnitt >= 0.05) {
+                            $hoeher = $zuletzt > $schnitt;
+                            $text = 'Zuletzt ' . number_format($zuletzt, 1, ',', '.') . ' ' . $einheit . '/100 km, ' . ($hoeher ? 'mehr' : 'weniger') . ' als im Durchschnitt';
+                            $verbrauchHtml .= ' <i class="fas fa-arrow-trend-' . ($hoeher ? 'up text-danger' : 'down text-success') . '" title="' . htmlspecialchars($text) . '" aria-hidden="true"></i>'
+                                . '<span class="visually-hidden">' . htmlspecialchars($text) . '</span>';
+                        }
                     }
                 } catch (Throwable $e) {
                 }
@@ -76,9 +85,10 @@ try {
                 } elseif ($faellig) {
                     $hinweis = count($faellig) . ' Termine ' . ($ueberfaellig ? 'fällig' : 'bald fällig');
                 }
+                // Bereits als HTML (Werte escaped, Trend-Pfeil als Icon)
                 $kennzahlen = array_filter([
-                    $currentOdo !== null ? number_format($currentOdo, 0, ',', '.') . ' km' : '',
-                    $verbrauchText ?? ($verbrauch !== null ? 'Ø ' . number_format($verbrauch, 1, ',', '.') . ' ' . $einheit . '/100 km' : ''),
+                    $currentOdo !== null ? htmlspecialchars(number_format($currentOdo, 0, ',', '.') . ' km') : '',
+                    $verbrauchHtml,
                 ]);
                 $detailLink = 'pages/fahrzeug_detail.php?id=' . urlencode($vehicleId);
             ?>
@@ -95,9 +105,13 @@ try {
                                 <a href="<?= htmlspecialchars($detailLink) ?>" class="stretched-link text-reset text-decoration-none"><?= htmlspecialchars($displayName) ?></a>
                             <?php endif; ?>
                         </h2>
-                        <div class="small text-body-secondary text-truncate"><?= $kennzahlen ? htmlspecialchars(implode(' · ', $kennzahlen)) : 'Noch keine Einträge' ?></div>
+                        <div class="small text-body-secondary text-truncate"><?= $kennzahlen ? implode(' · ', $kennzahlen) : 'Noch keine Einträge' ?></div>
                         <?php if ($hinweis): ?>
                             <span class="badge text-bg-<?= $ueberfaellig ? 'danger' : 'warning' ?> mt-2"><i class="fas fa-bell me-1"></i><?= htmlspecialchars($hinweis) ?></span>
+                        <?php endif; ?>
+                        <?php if ($tachoFehlt > 0): ?>
+                            <!-- Tachostand vergessen (#41): führt zur Eintragsliste mit "Nachtragen" -->
+                            <span class="badge text-bg-warning mt-2"><i class="fas fa-gauge-high me-1"></i><?= $tachoFehlt === 1 ? '1 Tachostand fehlt' : $tachoFehlt . ' Tachostände fehlen' ?></span>
                         <?php endif; ?>
                     </div>
                     <div class="fahrzeug-aktionen">

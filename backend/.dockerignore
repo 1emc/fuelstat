@@ -1,10 +1,12 @@
 node_modules
 .git
 .env
+.env.*
 npm-debug.log
 Dockerfile
-docker-compose.yml
+docker-compose*.yml
 tests
 docs
 *.md
-
+# Hochgeladene Bilder gehören nicht ins Image (werden als Volume eingebunden)
+uploads

@@ -39,11 +39,15 @@ async function getVehicleStats(pool, userId, vehicleId) {
   if (v.rowCount === 0) return { error: 'vehicle_not_found' };
   const primaryUnit = unitForFuelType(v.rows[0].fuel_type);
 
+  // Geschätzte Tachostände (#41) sind nur Platzhalter und zählen nirgends mit
   const odo = await pool.query(
-    'SELECT MAX(odometer_km) AS max_odo FROM fillups WHERE user_id=$1 AND vehicle_id=$2',
+    `SELECT MAX(odometer_km) FILTER (WHERE NOT odometer_estimated) AS max_odo,
+            COUNT(*) FILTER (WHERE odometer_km IS NULL OR odometer_estimated)::int AS missing
+     FROM fillups WHERE user_id=$1 AND vehicle_id=$2`,
     [userId, vehicleId]
   );
   const currentOdo = odo.rows[0]?.max_odo ?? null;
+  const missingOdometer = odo.rows[0]?.missing ?? 0;
 
   // Ø Preis je Einheit (bei Plug-in-Hybriden getrennt für Liter und kWh)
   const ppl = await pool.query(
@@ -62,9 +66,12 @@ async function getVehicleStats(pool, userId, vehicleId) {
   const segments = await pool.query(
     `
     WITH ordered AS (
-      -- Reihenfolge: Zeitpunkt, bei gleichem Zeitpunkt (z. B. importierte Ladungen eines Tages) der Tachostand
+      -- Reihenfolge: Zeitpunkt, bei gleichem Zeitpunkt (z. B. importierte Ladungen eines Tages) der Tachostand.
+      -- Einträge ohne (echten) Tachostand stehen bei gleichem Zeitpunkt hinter denen mit Tachostand, ihre Menge
+      -- zählt also zum nächsten Abschnitt; untereinander entscheidet die Erfassungsreihenfolge.
       SELECT id, filled_at, odometer_km, amount, unit, is_full, skip_previous,
-        ROW_NUMBER() OVER (ORDER BY filled_at, odometer_km, created_at) AS rn
+        (odometer_km IS NOT NULL AND NOT odometer_estimated) AS has_km,
+        ROW_NUMBER() OVER (ORDER BY filled_at, odometer_km NULLS LAST, created_at) AS rn
       FROM fillups
       WHERE user_id=$1 AND vehicle_id=$2
     ),
@@ -73,7 +80,9 @@ async function getVehicleStats(pool, userId, vehicleId) {
         LAG(odometer_km) OVER (PARTITION BY unit ORDER BY rn) AS prev_full_odo,
         LAG(rn) OVER (PARTITION BY unit ORDER BY rn) AS prev_full_rn
       FROM ordered
-      WHERE is_full = true
+      -- Ohne echten Tachostand schließt auch eine Vollbetankung keinen Abschnitt ab (#41): Sie zählt wie eine
+      -- Teilbetankung, ihre Menge fließt in den nächsten vollen Abschnitt mit Tachostand ein.
+      WHERE is_full = true AND has_km
     ),
     seg AS (
       SELECT
@@ -119,8 +128,12 @@ async function getVehicleStats(pool, userId, vehicleId) {
 
   return {
     currentOdo,
+    // Tank- und Ladevorgänge ohne echten Tachostand (fehlt oder nur geschätzt) – zum Nachtragen
+    missingOdometer,
     // Für Fahrzeuge mit einer Einheit wie bisher; Plug-in-Hybride: Werte des Kraftstoffs, alles Weitere in units
     avgPricePerLiter: main?.avgPrice ?? null,
+    // Ø Verbrauch über alle Abschnitte (gewichtet nach km); trend.current ist nur der letzte Abschnitt
+    avgConsumption: main?.avgConsumption ?? null,
     segments: segRows,
     trend: main?.trend ?? null,
     units

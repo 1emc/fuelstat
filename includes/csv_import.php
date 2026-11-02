@@ -232,8 +232,6 @@ function importWandleUm(array $zeilen, array $zuordnung, string $standardKategor
         $fehler = null;
         if ($datum === null) {
             $fehler = 'Datum fehlt oder ist ungültig';
-        } elseif ($art['typ'] === 'fillup' && $tacho === null) {
-            $fehler = 'Tank-/Ladevorgang ohne Tachostand';
         } elseif ($art['typ'] === 'fillup' && ($menge === null || $menge < 0)) {
             $fehler = 'Tank-/Ladevorgang ohne gültige Menge';
         } elseif ($kosten === null || $kosten < 0) {

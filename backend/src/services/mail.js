@@ -7,23 +7,25 @@ const nodemailer = require('nodemailer');
 
 const ALLOWED_PORTS = [25, 465, 587, 2525];
 
-// Schlüssel für das SMTP-Passwort: MAIL_ENCRYPTION_KEY, sonst aus JWT_SECRET abgeleitet
-function encryptionKey() {
-  const source = process.env.MAIL_ENCRYPTION_KEY || `fuelstat-mail:${process.env.JWT_SECRET}`;
+// Schlüssel für gespeicherte Geheimnisse: MAIL_ENCRYPTION_KEY, sonst aus JWT_SECRET abgeleitet.
+// purpose trennt die Schlüssel je Verwendung ('mail' für SMTP-Passwörter, 'mfa' für 2FA-Secrets).
+function encryptionKey(purpose = 'mail') {
+  const base = process.env.MAIL_ENCRYPTION_KEY || `fuelstat-mail:${process.env.JWT_SECRET}`;
+  const source = purpose === 'mail' ? base : `${purpose}:${base}`;
   return crypto.createHash('sha256').update(source).digest();
 }
 
-function encryptSecret(plain) {
+function encryptSecret(plain, purpose = 'mail') {
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', encryptionKey(), iv);
+  const cipher = crypto.createCipheriv('aes-256-gcm', encryptionKey(purpose), iv);
   const data = Buffer.concat([cipher.update(String(plain), 'utf8'), cipher.final()]);
   return 'v1:' + Buffer.concat([iv, cipher.getAuthTag(), data]).toString('base64');
 }
 
-function decryptSecret(enc) {
+function decryptSecret(enc, purpose = 'mail') {
   if (!enc) return null;
   const raw = Buffer.from(String(enc).replace(/^v1:/, ''), 'base64');
-  const decipher = crypto.createDecipheriv('aes-256-gcm', encryptionKey(), raw.subarray(0, 12));
+  const decipher = crypto.createDecipheriv('aes-256-gcm', encryptionKey(purpose), raw.subarray(0, 12));
   decipher.setAuthTag(raw.subarray(12, 28));
   return Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString('utf8');
 }

@@ -1,32 +1,25 @@
-# Base Stage
-FROM node:20-alpine AS base
+# Node-Version zentral; Hauptversionen bewusst umstellen (Dependabot schlägt sie nicht vor, siehe .github/dependabot.yml)
+ARG NODE_VERSION=24
+
+# Gemeinsame Basis
+FROM node:${NODE_VERSION}-alpine AS base
 WORKDIR /usr/src/app
-
-# Optional, aber oft praktisch für native deps (bcrypt etc.)
-# RUN apk add --no-cache libc6-compat
-
 COPY package*.json ./
 
-# Development Stage
+# Entwicklung (nur lokal, siehe infra/docker-compose.dev.yml): Code wird eingebunden, nodemon lädt neu
 FROM base AS dev
 ENV NODE_ENV=development
-RUN npm install
-RUN npm install -g nodemon@3
+RUN npm ci && npm install -g nodemon@3
 COPY . .
 EXPOSE 3000
 CMD ["nodemon", "--legacy-watch", "src/server.js"]
 
-# Production Stage
-FROM node:20-alpine AS prod
-WORKDIR /usr/src/app
+# Betrieb: Code und Pakete stecken im Image, läuft ohne Root-Rechte
+FROM base AS prod
 ENV NODE_ENV=production
-
-COPY package*.json ./
-RUN npm ci --omit=dev
-
+RUN npm ci --omit=dev && npm cache clean --force
 COPY --chown=node:node . .
+RUN mkdir -p uploads && chown node:node uploads
 USER node
-
 EXPOSE 3000
 CMD ["node", "src/server.js"]
-

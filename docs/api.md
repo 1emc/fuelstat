@@ -14,7 +14,7 @@ Pfade relativ zu `/api/v1`. „Auth“: ohne = öffentlich, ✓ = angemeldet, Ad
 |---|---|---|---|
 | GET | `/health` | – | Healthcheck, enthält `registration_enabled` und `beta_phase` |
 | GET | `/db-ping` | – | Datenbank erreichbar? |
-| GET | `/whoami` | ✓ | Eigenes Konto inkl. `is_admin`, `beta_tester` |
+| GET | `/whoami` | ✓ | Eigenes Konto inkl. `is_admin`, `beta_tester`, Tarif und Rechte |
 | POST | `/auth/register` | – | Konto anlegen, liefert Token |
 | POST | `/auth/login` | – | Anmelden (bei 2FA: `mfa_required` + `mfaToken`) |
 | POST | `/auth/login/mfa` | – | Zweiter Schritt mit 2FA-Code |
@@ -23,6 +23,7 @@ Pfade relativ zu `/api/v1`. „Auth“: ohne = öffentlich, ✓ = angemeldet, Ad
 | GET | `/auth/users` | Admin | Alle Benutzer mit Aktivität |
 | GET · PATCH · DELETE | `/auth/users/:userId` | Selbst/Admin | Konto lesen, `email`/`username`/`profileImageUrl` ändern, löschen |
 | PUT | `/auth/users/:userId/beta` | Admin | Beta-Tester setzen |
+| PUT | `/auth/users/:userId/plan` | Admin | Tarif setzen (`plan`, optional `planUntil`) |
 | POST | `/auth/users/:userId/revoke-all` | Selbst/Admin | Auf allen Geräten abmelden |
 | GET | `/auth/tokens` | ✓ | Gesperrte Tokens (Admin: alle) |
 | POST | `/auth/tokens/revoke` | ✓ | Ein Token sperren (Abmelden) |
@@ -113,6 +114,16 @@ Die Endpunkte unter `/auth/users` und `/auth/tokens` sind auf den eigenen Accoun
 Admins werden über die Umgebungsvariable `ADMIN_USER_IDS` (kommagetrennte User-UUIDs) in der `.env` des Backends festgelegt. Ohne diese Variable gibt es keine Admins.
 
 Fehlende Rechte: **403** `{ "error": "forbidden" }`
+
+### Tarife (Free / Plus / Flotte)
+
+Grundgerüst für ein späteres Premium-Modell. Was ein Tarif darf, steht an einer Stelle: `backend/src/services/plans.js`.
+
+* `users.plan` (`free`, `plus`, `fleet`) und `users.plan_until` (Ende, `null` = unbefristet; danach gilt `free`). Admins setzen beides mit `PUT /auth/users/:userId/plan` bzw. in der Benutzerverwaltung.
+* `PLAN_LIMITS_ENABLED=true` in der `.env` schaltet die Grenzen ein. **Standard: aus**, dann haben alle Konten mindestens die Rechte von `plus`.
+* `GET /whoami` liefert `plan`, `planUntil`, `effectivePlan` (gerade geltender Tarif), `limitsEnabled` und `features` (z. B. `maxVehicles: 1`, `sharing: false`; `null` = unbegrenzt).
+* Verbietet der Tarif etwas, antwortet die API mit **403** `{ "error": "plan_required", "feature": "maxVehicles", "limit": 1, "plan": "free" }`. Derzeit geprüft: Anzahl Fahrzeuge beim Anlegen. Herabstufen löscht nichts.
+* Datenexport ist nie an einen Tarif gebunden (DSGVO Art. 20).
 
 ## Health & Diagnostics
 
@@ -234,9 +245,11 @@ Authorization: Bearer <jwt>
 * `unit` optional: Ohne Angabe gilt die Einheit des Fahrzeugs (`electric` → `kwh`, `cng`/`hydrogen` → `kg`, sonst `l`). Plug-in-Hybride (`phev`) erlauben `l` (getankt) und `kwh` (geladen), Standard `l`.
 * `liters` und `priceTotalEur` werden als alte Namen für `amount` und `totalCostEur` weiter angenommen.
 * `station` optional, `filledAt` optional (Standard `now()`).
+* `odometerKm` optional: Wer den Tachostand an der Tankstelle vergessen hat, lässt ihn weg und trägt ihn später per `PATCH` nach. `odometerEstimated: true` markiert einen nur geschätzten Wert.
+* Einträge ohne echten Tachostand (fehlt oder geschätzt) zählen bei Kosten und Menge, schließen aber keinen Verbrauchsabschnitt ab: Ihre Menge fließt wie bei einer Teilbetankung in den nächsten vollen Abschnitt mit Tachostand. Bei gleichem Zeitpunkt stehen sie hinter den Einträgen mit Tachostand.
 * `price_per_unit` berechnet die API selbst.
 
-**Response 201**: der angelegte Eintrag mit `amount`, `unit`, `total_cost_eur`, `price_per_unit`, `is_full`, `skip_previous` (Felder wie bei der Liste unten).
+**Response 201**: der angelegte Eintrag mit `amount`, `unit`, `total_cost_eur`, `price_per_unit`, `is_full`, `skip_previous`, `odometer_estimated` (Felder wie bei der Liste unten).
 
 **Errors**
 
@@ -272,6 +285,7 @@ Authorization: Bearer <jwt>
     "created_at": "2025-12-23T09:16:08.998Z",
     "is_full": true,
     "skip_previous": false,
+    "odometer_estimated": false,
     "liters": "47.200",
     "price_total_eur": "86.30",
     "price_per_liter": "1.8284"
@@ -288,7 +302,7 @@ Authorization: Bearer <jwt>
 ### GET · PATCH · DELETE /fillups/:fillupId
 
 * `GET` liefert einen Eintrag.
-* `PATCH` nimmt `odometerKm`, `amount`, `unit`, `totalCostEur`, `station`, `filledAt`, `isFull`, `skipPrevious` (alle optional). Nur innerhalb von 14 Tagen nach `filled_at`, sonst 409 `fillup_edit_window_expired`.
+* `PATCH` nimmt `odometerKm` (`null` = fehlt), `odometerEstimated`, `amount`, `unit`, `totalCostEur`, `station`, `filledAt`, `isFull`, `skipPrevious` (alle optional). Nur innerhalb von 14 Tagen nach `filled_at`, sonst 409 `fillup_edit_window_expired`. **Ausnahme:** Enthält der Body nur `odometerKm` (und ggf. `odometerEstimated`), geht es immer – so lässt sich der Tachostand nachtragen. Ein neu gesetzter Tachostand gilt als echt, wenn `odometerEstimated` fehlt.
 * `DELETE` löscht immer. War der Eintrag älter als 14 Tage, bekommt der nächste Eintrag `skip_previous = true`, damit über die Lücke kein falscher Verbrauch entsteht. Antwort: `{ "deletedId", "olderThan14Days", "nextUpdated", "message" }`.
 
 Fremde oder ungültige IDs liefern 404 `fillup_not_found`.
@@ -308,6 +322,7 @@ Authorization: Bearer <jwt>
 {
   "currentOdo": 68831,
   "avgPricePerLiter": "1.774",
+  "avgConsumption": 2.7,
   "segments": [
     {
       "full_id": "<fillup-uuid>",
@@ -326,8 +341,9 @@ Authorization: Bearer <jwt>
 }
 ```
 
-* `avgPricePerLiter` und `trend` gelten für die Einheit des Fahrzeugs (beim Plug-in-Hybrid Liter); `units` enthält die Werte für jede vorhandene Einheit.
-* `avgConsumption`: Ø Verbrauch pro 100 km über alle Abschnitte, nach km gewichtet. Abschnitte ohne Strecke (zwei volle Einträge beim selben Tachostand) zählen nicht.
+* `avgPricePerLiter`, `avgConsumption` und `trend` gelten für die Einheit des Fahrzeugs (beim Plug-in-Hybrid Liter); `units` enthält die Werte für jede vorhandene Einheit.
+* `missingOdometer`: Anzahl Tank-/Ladevorgänge ohne echten Tachostand (fehlt oder geschätzt). `currentOdo` berücksichtigt nur echte Werte.
+* `avgConsumption`: Ø Verbrauch pro 100 km über alle Abschnitte, nach km gewichtet. Abschnitte ohne Strecke (zwei volle Einträge beim selben Tachostand) zählen nicht. `trend.current` ist nur der letzte Abschnitt.
 * `l_per_100km` ist je nach Einheit l, kWh oder kg pro 100 km.
 
 **Errors**
@@ -383,7 +399,8 @@ Bei aktivem 2FA antwortet `POST /auth/login` ohne `code` mit 401 `{ "error": "mf
 * max. 1000 Zeilen pro Anfrage, alles in einer Transaktion
 * bei ungültigen Zeilen 400 `invalid_rows` mit `rows: [{ type, index, error }]`, es wird nichts importiert
 * `unit` je Zeile gilt nur bei Plug-in-Hybriden (`l` oder `kwh`), sonst immer die Einheit des Fahrzeugs
-* Duplikate werden übersprungen: Tank- bzw. Ladevorgang mit gleichem Datum, Tachostand und gleicher Einheit, Ausgabe mit gleichem Datum, Kategorie und Betrag
+* `odometerKm` darf bei Tank- und Ladevorgängen fehlen (später nachtragen)
+* Duplikate werden übersprungen: Tank- bzw. Ladevorgang mit gleichem Datum, Tachostand und gleicher Einheit (ohne Tachostand: zusätzlich gleiche Menge), Ausgabe mit gleichem Datum, Kategorie und Betrag
 * Antwort 201: `{ "imported": { "fillups", "entries" }, "skipped": { "fillups", "entries" } }`
 
 ## Fälligkeiten (Auth required)
@@ -396,6 +413,8 @@ Bei aktivem 2FA antwortet `POST /auth/login` ohne `code` mit 401 `{ "error": "mf
 * `PUT /auth/mail-settings` – `smtpHost`, `smtpPort` (25, 465, 587, 2525), `smtpSecurity` (`tls`, `starttls`, `none`), `smtpUser`, `smtpPassword` (nur senden, wenn es sich ändert), `clearPassword`, `fromAddress`, `toAddress`, `remindersEnabled`, `reminderDays` (1–180), `monthlyReport`
 * `POST /auth/mail-settings/test` – Test-Mail
 * `POST /auth/mail-settings/send-now` `{ "type": "reminders" | "report" }` – sofort senden (Bericht für den Vormonat)
+
+Mit `remindersEnabled` kommt außerdem einmal je Eintrag die Erinnerung „Kilometerstand nachtragen“: für Tank- und Ladevorgänge der letzten 14 Tage ohne echten Tachostand, frühestens 3 Stunden nach dem Erfassen (`mail_log.kind = 'odometer'`). Ist `APP_URL` gesetzt, enthält sie einen Link direkt zum Nachtragen.
 
 Ohne eigenen `smtpHost` wird der Standard-Mailserver verwendet (SMTP-Zugang von `MAIL_DEFAULT_USER_ID` bzw. des ersten Admins). Die Mails gehen dann immer an die Konto-Adresse; `to_address` wird ignoriert. `GET` liefert dazu `default_available`, `default_from` und `uses_default`. Test-Mail und Sofortversand über den Standard-Server: höchstens 5 in 15 Minuten (`429 too_many_attempts`).
 

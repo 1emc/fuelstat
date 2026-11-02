@@ -1,0 +1,12 @@
+# /etc/systemd/system/fuelstat-backup.timer
+# Aktivieren: sudo systemctl daemon-reload && sudo systemctl enable --now fuelstat-backup.timer
+[Unit]
+Description=Fuelstat Datensicherung täglich
+
+[Timer]
+OnCalendar=*-*-* 03:17:00
+RandomizedDelaySec=10m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

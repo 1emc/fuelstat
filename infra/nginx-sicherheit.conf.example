@@ -1,6 +1,8 @@
-# Sicherheitsregeln für den Fuelstat-Webroot (nginx), in den server { … }-Block der Seite übernehmen.
-# Hintergrund: Liegt das ganze Repository im Webroot, wären sonst .env-Dateien, das .git-Verzeichnis,
-# die API-Schlüssel (Tankerkönig, Open Charge Map) und das Backend direkt abrufbar.
+# Sicherheitsregeln für den Fuelstat-Webroot (nginx). Als /etc/nginx/snippets/fuelstat-sicherheit.conf ablegen
+# und im server { … }-Block der Seite GANZ OBEN einbinden (include snippets/fuelstat-sicherheit.conf;),
+# also vor den Regeln für *.php und statische Dateien. Vollständiges Beispiel: infra/nginx/fuelstat.conf.example
+# Hintergrund: Das Repository ist der Webroot. Ohne diese Regeln wären .env-Dateien, .git, API-Schlüssel,
+# Backend-Code, Konfiguration und Dokumentation direkt abrufbar.
 
 # security.txt (RFC 9116) als Text mit UTF-8 ausliefern; /.well-known/ ist von der Sperre unten ausgenommen
 location = /.well-known/security.txt {
@@ -8,32 +10,34 @@ location = /.well-known/security.txt {
     charset utf-8;
 }
 
-# Versteckte Dateien und Verzeichnisse (.git, .env, .htaccess …)
-location ~ /\.(?!well-known/) {
-    deny all;
-}
+# Interne Verzeichnisse (Präfix mit ^~ greift vor allen Regex-Regeln, auch vor *.php)
+location ^~ /backend/  { return 404; }
+location ^~ /infra/    { return 404; }
+location ^~ /database/ { return 404; }
+location ^~ /tests/    { return 404; }
+location ^~ /docs/     { return 404; }
+location ^~ /vendor/node_modules/ { return 404; }
 
-# Interne Verzeichnisse
-location ~ ^/(backend|infra|database|tests|docs)/ {
-    deny all;
-}
+# Versteckte Dateien und Verzeichnisse (.git, .env, .github, .htaccess …)
+location ~ /\.(?!well-known/) { return 404; }
 
 # API-Schlüssel (api/key.key für Tankerkönig, api/ocm.key für Open Charge Map und künftige *.key-Dateien)
-location ~* \.key$ {
-    deny all;
-}
+location ~* \.key$ { return 404; }
+
+# Doku-, Konfigurations- und Skriptdateien aus dem Repository (readme.md, SECURITY.md, *.yml, Backups, Logs …)
+location ~* \.(?:md|ya?ml|example|sql|sh|lock|bak|log|dist|service|timer|env)$ { return 404; }
+location ~* /(?:package(?:-lock)?|composer)\.json$ { return 404; }
 
 # includes/ enthält nur eingebundene Dateien – bis auf das Sortier-Formular
-location ~ ^/includes/(?!fahrzeug_sortieren\.php$) {
-    deny all;
-}
+location ~ ^/includes/(?!fahrzeug_sortieren\.php$) { return 404; }
 
 # Hochgeladene Bilder: nie als PHP ausführen, nur Bildformate ausliefern
 location ^~ /uploads/ {
-    location ~* \.(jpe?g|png|gif|webp)$ {
-        add_header X-Content-Type-Options nosniff;
-        add_header Content-Security-Policy "default-src 'none'; img-src 'self'; sandbox";
+    location ~* \.(?:jpe?g|png|gif|webp)$ {
+        expires 30d;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Content-Security-Policy "default-src 'none'; img-src 'self'; sandbox" always;
         try_files $uri =404;
     }
-    deny all;
+    return 404;
 }

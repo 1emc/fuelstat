@@ -406,6 +406,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: "plan_required: Fahrzeuggrenze des Tarifs erreicht (nur mit PLAN_LIMITS_ENABLED=true), z. B. { error: plan_required, feature: maxVehicles, limit: 1, plan: free }"
         "500":
           $ref: "#/components/responses/ServerError"
 
@@ -677,6 +679,7 @@ paths:
               example:
                 currentOdo: 12845
                 avgPricePerLiter: 1.828
+                avgConsumption: 19.5
                 segments:
                   - full_id: "5546f0ac-b9f7-4d31-92c1-7886aba01701"
                     full_at: "2025-12-23T09:11:23.890Z"
@@ -1088,6 +1091,46 @@ paths:
           description: "OK ({ id, email, beta_tester })"
         "400":
           description: invalid_betaTester
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: forbidden
+        "404":
+          description: user_not_found
+
+  /api/v1/auth/users/{userId}/plan:
+    put:
+      tags: [Users]
+      summary: Set plan (admin only)
+      operationId: putUserPlan
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                plan:
+                  type: string
+                  enum: [free, plus, fleet]
+                planUntil:
+                  type: string
+                  format: date-time
+                  nullable: true
+                  description: Ende des Tarifs, leer/null = unbefristet (bei free immer null)
+              required: [plan]
+      responses:
+        "200":
+          description: "OK ({ id, email, plan, planUntil, effectivePlan, limitsEnabled, features })"
+        "400":
+          description: invalid_plan, invalid_planUntil
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1519,6 +1562,26 @@ components:
         is_admin:
           type: boolean
           description: true, wenn die User-ID in ADMIN_USER_IDS steht
+        plan:
+          type: string
+          enum: [free, plus, fleet]
+          description: Gebuchter Tarif
+        planUntil:
+          type: string
+          format: date-time
+          nullable: true
+          description: Ende des Tarifs, null = unbefristet. Danach gilt free.
+        effectivePlan:
+          type: string
+          enum: [free, plus, fleet]
+          description: Tarif, dessen Rechte gerade gelten (ohne PLAN_LIMITS_ENABLED mindestens plus)
+        limitsEnabled:
+          type: boolean
+          description: Werden Tarifgrenzen durchgesetzt (PLAN_LIMITS_ENABLED)?
+        features:
+          type: object
+          description: "Rechte des geltenden Tarifs: maxVehicles und tripCategories (Zahl oder null = unbegrenzt), sharing, comparison, pdfReport, pushReminders, fleet (boolean)"
+          additionalProperties: true
         token:
           type: object
           additionalProperties: false
@@ -1680,6 +1743,12 @@ components:
         odometerKm:
           type: integer
           minimum: 0
+          nullable: true
+          description: Optional – fehlt er, kann er später per PATCH nachgetragen werden (auch nach 14 Tagen)
+        odometerEstimated:
+          type: boolean
+          default: false
+          description: Wert ist nur geschätzt (Platzhalter); zählt nicht für Verbrauch und Tachostand
         unit:
           $ref: "#/components/schemas/FillupUnit"
           description: Optional, wird aus vehicle.fuel_type abgeleitet wenn nicht gesetzt (Plug-in-Hybrid ohne Angabe = l)
@@ -1713,15 +1782,21 @@ components:
         skipPrevious:
           type: boolean
           default: false
-      required: [vehicleId, odometerKm]
+      required: [vehicleId]
 
     FillupPatchRequest:
       type: object
       additionalProperties: false
+      description: Nur innerhalb von 14 Tagen nach filled_at – außer der Body enthält ausschließlich odometerKm und odometerEstimated (Tachostand nachtragen)
       properties:
         odometerKm:
           type: integer
           minimum: 0
+          nullable: true
+          description: null entfernt den Tachostand
+        odometerEstimated:
+          type: boolean
+          description: Ohne Angabe gilt ein neu gesetzter Tachostand als echt
         unit:
           $ref: "#/components/schemas/FillupUnit"
         amount:
@@ -1767,6 +1842,11 @@ components:
           format: uuid
         odometer_km:
           type: integer
+          nullable: true
+          description: null = Tachostand fehlt
+        odometer_estimated:
+          type: boolean
+          description: Tachostand ist nur geschätzt
         unit:
           $ref: "#/components/schemas/FillupUnit"
         amount:
@@ -1858,6 +1938,13 @@ components:
           type: number
           nullable: true
           description: Durchschnittlicher Preis pro Einheit des Fahrzeugs (Liter/kWh/kg; Plug-in-Hybrid Liter)
+        missingOdometer:
+          type: integer
+          description: Anzahl Tank-/Ladevorgänge ohne echten Tachostand (fehlt oder geschätzt)
+        avgConsumption:
+          type: number
+          nullable: true
+          description: Ø Verbrauch pro 100 km über alle Abschnitte (nach km gewichtet) in der Einheit des Fahrzeugs; trend.current ist nur der letzte Abschnitt
         segments:
           type: array
           items:

@@ -1,0 +1,16 @@
+# Nur für die lokale Entwicklung, NICHT auf dem Server verwenden:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+# Bindet den Code ein und startet die API mit nodemon (lädt bei Änderungen neu).
+services:
+  api:
+    build:
+      target: dev
+    volumes:
+      - ../backend:/usr/src/app
+      - api_node_modules:/usr/src/app/node_modules
+      - ../uploads:/usr/src/app/uploads
+    environment:
+      - NODE_ENV=development
+
+volumes:
+  api_node_modules:

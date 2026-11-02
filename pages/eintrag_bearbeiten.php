@@ -92,7 +92,8 @@ try {
 // Plug-in-Hybrid: Begriffe nach der Einheit dieses Eintrags (Tankfüllung oder Ladevorgang)
 $begriffe = begriffeFuerEinheit($fuelType, $eintrag['unit'] ?? null);
 $istPhev = $fuelType === 'phev';
-$tachostand = $eintrag['odometer_km'] ?? 0;
+$tachostand = $eintrag['odometer_km'] ?? null; // null = fehlt (#41)
+$tachoGeschaetzt = !empty($eintrag['odometer_estimated']);
 $menge = $eintrag['amount'] ?? 0;
 $kosten = $eintrag['total_cost_eur'] ?? 0;
 $preis_pro_einheit = $eintrag['price_per_unit'] ?? ($menge > 0 ? $kosten / $menge : 0);
@@ -109,6 +110,9 @@ $bearbeitbar = isset($eintrag['filled_at']) && strtotime($eintrag['filled_at']) 
         <div class="alert alert-info mt-3">
             Dieser Eintrag ist älter als 14 Tage und kann nicht mehr geändert werden.
             Bei Bedarf kannst du ihn löschen und neu anlegen.
+            <?php if ($tachostand === null || $tachoGeschaetzt): ?>
+                Den Tachostand kannst du trotzdem <a href="tachostand_nachtragen.php?id=<?= urlencode($eintrag_id) ?>&amp;fahrzeug_id=<?= urlencode($fahrzeug_id) ?>">nachtragen</a>.
+            <?php endif; ?>
         </div>
     <?php endif; ?>
     <form method="post" action="eintrag_update.php" class="mt-4">
@@ -131,24 +135,39 @@ $bearbeitbar = isset($eintrag['filled_at']) && strtotime($eintrag['filled_at']) 
             <input type="date" class="form-control" name="datum" value="<?= htmlspecialchars($datum) ?>" required>
         </div>
         <div class="mb-3">
-            <label class="form-label">Tachostand (km)</label>
-            <input type="number" class="form-control" name="tachostand" value="<?= (int)$tachostand ?>" required>
+            <label class="form-label" for="tachostand">Tachostand (km)</label>
+            <input type="number" class="form-control" id="tachostand" name="tachostand" min="0" step="1" inputmode="numeric"
+                   value="<?= $tachostand !== null ? (int)$tachostand : '' ?>" placeholder="fehlt – kann leer bleiben">
+            <?php if ($tachoGeschaetzt): ?>
+                <!-- Bleibt der Wert unverändert, bleibt er als Schätzung markiert -->
+                <input type="hidden" name="tachostand_geschaetzt_wert" value="<?= (int)$tachostand ?>">
+                <div class="form-text text-warning-emphasis">Geschätzter Wert – bitte durch den echten Tachostand ersetzen.</div>
+            <?php endif; ?>
         </div>
         <div class="mb-3">
             <label class="form-label"><?= $begriffe['station'] ?></label>
             <input type="text" class="form-control" name="standort" value="<?= htmlspecialchars($standort) ?>">
         </div>
         <div class="mb-3">
-            <label class="form-label">Menge (<?= einheitLang($einheit) ?>)</label>
-            <input type="number" step="0.01" id="menge" name="menge" class="form-control" value="<?= (float)$menge ?>" min="0">
+            <label class="form-label" for="menge" id="mengeLabel">Menge (<?= einheitLang($einheit) ?>)</label>
+            <div class="input-group">
+                <input type="number" inputmode="decimal" step="0.01" id="menge" name="menge" class="form-control" value="<?= (float)$menge ?>" min="0">
+                <button type="button" class="btn btn-outline-secondary" id="info_menge" aria-label="Herkunft des Werts anzeigen"><i class="fas fa-circle-info"></i></button>
+            </div>
         </div>
         <div class="mb-3">
-            <label class="form-label">Preis pro <?= einheitLang($einheit) ?> (€)</label>
-            <input type="number" step="0.001" id="preis_pro_einheit" name="preis_pro_einheit" class="form-control" value="<?= (float)$preis_pro_einheit ?>" min="0">
+            <label class="form-label" for="preis_pro_einheit" id="preisLabel">Preis pro <?= einheitLang($einheit) ?> (€)</label>
+            <div class="input-group">
+                <input type="number" inputmode="decimal" step="0.001" id="preis_pro_einheit" name="preis_pro_einheit" class="form-control" value="<?= round((float)$preis_pro_einheit, 3) ?>" min="0">
+                <button type="button" class="btn btn-outline-secondary" id="info_preis_pro_einheit" aria-label="Herkunft des Werts anzeigen"><i class="fas fa-circle-info"></i></button>
+            </div>
         </div>
         <div class="mb-3">
-            <label class="form-label">Gesamtpreis (€)</label>
-            <input type="number" step="0.01" id="kosten" name="kosten" class="form-control" value="<?= (float)$kosten ?>" min="0">
+            <label class="form-label" for="kosten" id="kostenLabel">Gesamtpreis (€)</label>
+            <div class="input-group">
+                <input type="number" inputmode="decimal" step="0.01" id="kosten" name="kosten" class="form-control" value="<?= (float)$kosten ?>" min="0">
+                <button type="button" class="btn btn-outline-secondary" id="info_kosten" aria-label="Herkunft des Werts anzeigen"><i class="fas fa-circle-info"></i></button>
+            </div>
         </div>
         <div class="form-check mb-3">
             <input type="checkbox" class="form-check-input" name="vollgetankt" value="1" <?= $vollgetankt ? 'checked' : '' ?>>
@@ -171,6 +190,24 @@ $bearbeitbar = isset($eintrag['filled_at']) && strtotime($eintrag['filled_at']) 
     </form>
 </div>
 
+<script src="<?= htmlspecialchars(assetUrl($baseUrl, 'js/mengen-rechner.js')) ?>"></script>
+<script>
+// Menge × Preis = Gesamtpreis: beim Bearbeiten gelten alle drei Werte als eingetragen. Ändert man einen,
+// wird der am längsten nicht geänderte neu berechnet (zuerst der Preis pro Einheit).
+window.addEventListener('DOMContentLoaded', () => {
+    const einheiten = { l: ['l', 'Liter'], kwh: ['kWh', 'kWh'], kg: ['kg', 'kg'] };
+    let kurz = <?= json_encode(einheitKurz($einheit)) ?>;
+    const rechner = mengenRechner({ einheit: () => kurz, eingetragen: ['kosten', 'menge', 'preis'] });
+    // Plug-in-Hybrid: Umschalter Tanken/Laden ändert die Einheit
+    document.querySelectorAll('input[name="einheit"]').forEach(radio => radio.addEventListener('change', () => {
+        if (!radio.checked || !einheiten[radio.value]) return;
+        kurz = einheiten[radio.value][0];
+        document.getElementById('mengeLabel').textContent = 'Menge (' + einheiten[radio.value][1] + ')';
+        document.getElementById('preisLabel').textContent = 'Preis pro ' + einheiten[radio.value][1] + ' (€)';
+        rechner.aktualisiere();
+    }));
+});
+</script>
 <?php
 $tachoAusnahmeId = $eintrag_id;
 include '../includes/tacho_pruefung.php';

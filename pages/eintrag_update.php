@@ -36,9 +36,20 @@ if ($type === 'entry') {
 }
 
 $datum = $_POST['datum'] ?? '';
-$tachostand = (int)($_POST['tachostand'] ?? 0);
-$menge = (float)($_POST['menge'] ?? 0);
-$kosten = (float)($_POST['kosten'] ?? 0);
+// Leer = Tachostand fehlt (#41); ein unveränderter geschätzter Wert bleibt als Schätzung markiert
+$tachoEingabe = trim((string)($_POST['tachostand'] ?? ''));
+$tachostand = $tachoEingabe !== '' ? (int)$tachoEingabe : null;
+$tachoGeschaetzt = $tachostand !== null && isset($_POST['tachostand_geschaetzt_wert'])
+    && (int)$_POST['tachostand_geschaetzt_wert'] === $tachostand;
+// Fehlt Menge oder Gesamtpreis, aus dem Preis pro Einheit berechnen; leer wird nie still zu 0
+$werte = mengeUndKostenAusFormular($_POST);
+if ($werte['fehler'] !== null) {
+    $_SESSION['error_message'] = $werte['fehler'];
+    header('Location: eintrag_bearbeiten.php?id=' . rawurlencode($eintrag_id) . '&fahrzeug_id=' . rawurlencode($fahrzeug_id) . '&type=fillup');
+    exit;
+}
+$menge = $werte['menge'];
+$kosten = $werte['kosten'];
 $standort = trim($_POST['standort'] ?? '');
 $vollgetankt = isset($_POST['vollgetankt']);
 $skipPrevious = isset($_POST['skip_previous']);
@@ -52,6 +63,7 @@ try {
     $einheit = in_array($_POST['einheit'] ?? '', $einheiten, true) ? $_POST['einheit'] : $einheiten[0];
     $api->patchFillup($eintrag_id, [
         'odometerKm' => $tachostand,
+        'odometerEstimated' => $tachoGeschaetzt,
         'unit' => $einheit,
         'amount' => $menge,
         'totalCostEur' => $kosten,

@@ -7,10 +7,13 @@ $api = getApiClient();
 $fahrzeug_id = trim($_POST['fahrzeug_id'] ?? '');
 $eintragstyp = $_POST['eintragstyp'] ?? '';
 $datum = $_POST['datum'] ?? null;
-$tachostand = isset($_POST['tachostand']) ? (int)$_POST['tachostand'] : null;
+// Leer = Tachostand fehlt (#41): bei Tank-/Ladevorgängen und Ausgaben erlaubt, bei Fahrten nicht
+$tachoEingabe = trim((string)($_POST['tachostand'] ?? ''));
+$tachostand = $tachoEingabe !== '' ? (int)$tachoEingabe : null;
+$tachoGeschaetzt = $tachostand !== null && !empty($_POST['tachostand_geschaetzt']);
 
-if (!$fahrzeug_id || !$datum || $tachostand === null) {
-    $_SESSION['error_message'] = 'Fahrzeug, Datum und Tachostand sind erforderlich.';
+if (!$fahrzeug_id || !$datum || ($tachostand === null && $eintragstyp === 'Fahrt')) {
+    $_SESSION['error_message'] = $eintragstyp === 'Fahrt' ? 'Datum und Tachostand sind erforderlich.' : 'Fahrzeug und Datum sind erforderlich.';
     header('Location: eintrag_hinzufuegen.php?fahrzeug_id=' . rawurlencode($fahrzeug_id));
     exit;
 }
@@ -19,8 +22,15 @@ $dateTime = $datum . 'T12:00:00.000Z'; // ISO für API
 
 try {
     if ($eintragstyp === 'Tankfuellung') {
-        $menge = (float)($_POST['menge'] ?? 0);
-        $kosten = (float)($_POST['kosten'] ?? 0);
+        // Fehlt Menge oder Gesamtpreis, aus dem Preis pro Einheit berechnen; leer wird nie still zu 0
+        $werte = mengeUndKostenAusFormular($_POST);
+        if ($werte['fehler'] !== null) {
+            $_SESSION['error_message'] = $werte['fehler'];
+            header('Location: eintrag_hinzufuegen.php?fahrzeug_id=' . rawurlencode($fahrzeug_id));
+            exit;
+        }
+        $menge = $werte['menge'];
+        $kosten = $werte['kosten'];
         $station = trim($_POST['standort'] ?? '');
         $vollgetankt = isset($_POST['vollgetankt']);
         $skipPrevious = isset($_POST['skip_previous']);
@@ -29,6 +39,7 @@ try {
         $api->postFillup([
             'vehicleId' => $fahrzeug_id,
             'odometerKm' => $tachostand,
+            'odometerEstimated' => $tachoGeschaetzt,
             'amount' => $menge,
             'totalCostEur' => $kosten,
             'station' => $station !== '' ? $station : null,
@@ -60,14 +71,16 @@ try {
             'amountEur' => 0,
             'odometerKm' => $tachostand,
             'occurredAt' => $dateTime,
-            'description' => trim($_POST['startort'] ?? '') . ' → ' . trim($_POST['zielort'] ?? '') . ' – ' . trim($_POST['zweck'] ?? ''),
+            'description' => fahrtBeschreibung($_POST),
         ]);
     } else {
         $_SESSION['error_message'] = 'Ungültiger Eintragstyp.';
         header('Location: eintrag_hinzufuegen.php?fahrzeug_id=' . rawurlencode($fahrzeug_id));
         exit;
     }
-    $_SESSION['success_message'] = 'Eintrag gespeichert.';
+    $_SESSION['success_message'] = $eintragstyp === 'Tankfuellung' && ($tachostand === null || $tachoGeschaetzt)
+        ? 'Eintrag gespeichert. Den Tachostand kannst du in der Eintragsliste nachtragen.'
+        : 'Eintrag gespeichert.';
     header('Location: fahrzeug_detail.php?id=' . rawurlencode($fahrzeug_id));
     exit;
 } catch (Throwable $e) {

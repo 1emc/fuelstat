@@ -86,7 +86,9 @@ function getMergedEintraegeFromApi($api, string $vehicleId): array
             'kategorie' => 'Tankfuellung',
             'menge' => $f['amount'] ?? $f['liters'] ?? 0,
             'kosten' => $f['total_cost_eur'] ?? $f['price_total_eur'] ?? 0,
-            'tachostand' => $f['odometer_km'] ?? 0,
+            // null = Tachostand fehlt (#41), kann nachgetragen werden
+            'tachostand' => isset($f['odometer_km']) ? (int)$f['odometer_km'] : null,
+            'tachostand_geschaetzt' => !empty($f['odometer_estimated']),
             'vollgetankt' => $f['is_full'] ?? true,
             'skip_previous' => $f['skip_previous'] ?? false,
             'standort' => $f['station'] ?? '',
@@ -114,9 +116,10 @@ function getMergedEintraegeFromApi($api, string $vehicleId): array
     usort($list, function ($a, $b) {
         $d = strcmp($b['datum'], $a['datum']);
         if ($d !== 0) return $d;
-        $ta = $a['tachostand'] ?? 0;
-        $tb = $b['tachostand'] ?? 0;
-        return $tb - $ta;
+        // Ohne Tachostand bei gleichem Datum oben (= nach den Einträgen mit Tachostand, wie in der Statistik)
+        $ta = $a['tachostand'] ?? PHP_INT_MAX;
+        $tb = $b['tachostand'] ?? PHP_INT_MAX;
+        return $tb <=> $ta;
     });
 
     $eintraege = [];
@@ -170,7 +173,8 @@ function getFahrleistungFromApi($api, string $vehicleId, array $fahrzeug, $curre
     } catch (Throwable $e) {
         return null;
     }
-    $odos = array_filter(array_map(fn($f) => $f['odometer_km'] ?? null, $fillups), fn($o) => $o !== null);
+    // Nur echte Tachostände (fehlende und geschätzte zählen nicht, #41)
+    $odos = array_filter(array_map(fn($f) => empty($f['odometer_estimated']) ? ($f['odometer_km'] ?? null) : null, $fillups), fn($o) => $o !== null);
     if (!$odos) {
         return null;
     }
@@ -199,6 +203,12 @@ function getLetzterEintragApi($api, string $vehicleId, string $category): ?array
     return null;
 }
 
+/** Tachostand vorhanden und nicht nur geschätzt (#41)? */
+function hatEchtenTachostand(array $row): bool
+{
+    return isset($row['tachostand']) && $row['tachostand'] !== '' && empty($row['tachostand_geschaetzt']);
+}
+
 /**
  * Statistik- und Ausgabendaten aus API (Fillups + Entries) für Statistiken-/Ausgaben-Tabs.
  */
@@ -223,8 +233,9 @@ function getStatistikDatenFromApi($api, string $vehicleId): array
     $fillupsOnly = array_filter($flat, function ($e) {
         return ($e['kategorie'] ?? '') === 'Tankfuellung' && !empty($e['datum']);
     });
-    // Bei mehreren Tankfüllungen/Ladungen am selben Tag entscheidet der Tachostand
-    usort($fillupsOnly, fn($a, $b) => [$a['datum'], (float)($a['tachostand'] ?? 0)] <=> [$b['datum'], (float)($b['tachostand'] ?? 0)]);
+    // Bei mehreren Tankfüllungen/Ladungen am selben Tag entscheidet der Tachostand; Einträge ohne Tachostand
+    // kommen danach (wie in backend/src/services/stats.js), ihre Menge zählt zum nächsten Abschnitt
+    usort($fillupsOnly, fn($a, $b) => [$a['datum'], $a['tachostand'] ?? PHP_INT_MAX] <=> [$b['datum'], $b['tachostand'] ?? PHP_INT_MAX]);
     // Je Einheit getrennt rechnen: beim Plug-in-Hybrid Liter von Tankfüllung zu Tankfüllung, kWh von Ladung zu Ladung
     $nachEinheit = [];
     foreach ($fillupsOnly as $row) {
@@ -304,7 +315,8 @@ function verbrauchAusTankfuellungen(array $rows, array $jahre): array
             $jahresdaten[$y]['gekauft_ausgaben'] += (float)($row['kosten'] ?? 0);
         }
         $mengeSeitVoll += (float)($row['menge'] ?? 0);
-        if (!empty($row['vollgetankt'])) {
+        // Ohne echten Tachostand (fehlt oder geschätzt) zählt auch eine Vollbetankung wie eine Teilbetankung (#41)
+        if (!empty($row['vollgetankt']) && hatEchtenTachostand($row)) {
             // skip_previous: nur neuer Startpunkt, kein Verbrauch über die Lücke
             if ($letzteVoll && empty($row['skip_previous']) && ($row['tachostand'] - $letzteVoll['tachostand']) > 0) {
                 $km = $row['tachostand'] - $letzteVoll['tachostand'];
@@ -513,4 +525,82 @@ function getFaelligkeitenFromApi($api, string $vehicleId): array
         'status' => $r['status'],
         'tage' => $r['days'],
     ], $liste);
+}
+
+/**
+ * Menge und Gesamtpreis eines Tank- bzw. Ladevorgangs aus dem Formular. Fehlt einer der beiden Werte,
+ * wird er aus dem Preis pro Einheit berechnet. Leer ist nicht 0: ohne Angabe gibt es eine Fehlermeldung,
+ * eine bewusst eingetragene 0 (z. B. kostenloses Laden) bleibt erlaubt.
+ * @return array ['menge' => float|null, 'kosten' => float|null, 'fehler' => string|null]
+ */
+function mengeUndKostenAusFormular(array $post): array
+{
+    $zahl = function (string $key) use ($post): ?float {
+        $v = trim(str_replace(',', '.', (string)($post[$key] ?? '')));
+        return $v === '' || !is_numeric($v) ? null : (float)$v;
+    };
+    $menge = $zahl('menge');
+    $preis = $zahl('preis_pro_einheit');
+    $kosten = $zahl('kosten');
+
+    if ($kosten === null && $menge !== null && $preis !== null) {
+        $kosten = round($menge * $preis, 2);
+    }
+    if ($menge === null && $kosten !== null && $preis !== null && $preis > 0) {
+        $menge = round($kosten / $preis, 2);
+    }
+
+    $fehler = null;
+    if ($menge === null || $menge <= 0) {
+        $fehler = 'Bitte die Menge angeben (oder Gesamtpreis und Preis pro Einheit).';
+    } elseif ($kosten === null || $kosten < 0) {
+        $fehler = 'Bitte den Gesamtpreis angeben (oder den Preis pro Einheit). Für kostenloses Laden 0 eintragen.';
+    }
+    return ['menge' => $menge, 'kosten' => $kosten, 'fehler' => $fehler];
+}
+
+/**
+ * Beschreibung einer Fahrt aus dem Formular, z. B. "Bolbingen → Aalen – Arbeit (42 km)".
+ * Bis zum neuen Fahrtenbuch (#52) stehen die gefahrenen Kilometer in der Beschreibung (#43).
+ */
+function fahrtBeschreibung(array $post): string
+{
+    $start = trim((string)($post['startort'] ?? ''));
+    $ziel = trim((string)($post['zielort'] ?? ''));
+    $zweck = trim((string)($post['zweck'] ?? ''));
+    $km = trim(str_replace(',', '.', (string)($post['gefahrene_km'] ?? '')));
+
+    $strecke = implode(' → ', array_filter([$start, $ziel], fn($t) => $t !== ''));
+    $text = implode(' – ', array_filter([$strecke, $zweck], fn($t) => $t !== ''));
+    if (is_numeric($km) && (float)$km > 0) {
+        $text .= ($text !== '' ? ' ' : '') . '(' . number_format((float)$km, fmod((float)$km, 1) ? 1 : 0, ',', '.') . ' km)';
+    }
+    return $text !== '' ? $text : 'Fahrt';
+}
+
+/**
+ * Tarife (Issue #44): Text für die API-Antwort 403 plan_required, sonst null.
+ * Solange PLAN_LIMITS_ENABLED in der API aus ist, kommt diese Antwort nie.
+ */
+function tarifHinweis(Throwable $e): ?string
+{
+    if (!($e instanceof FuelstatApiException) || $e->getMessage() !== 'plan_required') {
+        return null;
+    }
+    $texte = [
+        'maxVehicles' => 'Dein Tarif umfasst %s. Weitere Fahrzeuge sind eine Premium-Funktion.',
+        'sharing' => 'Fahrzeuge teilen ist eine Premium-Funktion.',
+        'comparison' => 'Der Fahrzeugvergleich ist eine Premium-Funktion.',
+        'pdfReport' => 'Der PDF-Bericht ist eine Premium-Funktion.',
+        'tripCategories' => 'Weitere Fahrtenbuch-Kategorien sind eine Premium-Funktion.',
+    ];
+    $feature = (string)($e->data['feature'] ?? '');
+    $limit = (int)($e->data['limit'] ?? 1);
+    return sprintf($texte[$feature] ?? 'Das ist eine Premium-Funktion.', $limit === 1 ? 'ein Fahrzeug' : $limit . ' Fahrzeuge');
+}
+
+/** Anzeigenamen der Tarife */
+function tarifNamen(): array
+{
+    return ['free' => 'Free', 'plus' => 'Plus', 'fleet' => 'Flotte'];
 }

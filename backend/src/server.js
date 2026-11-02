@@ -1,6 +1,5 @@
 const express = require('express');
 const helmet = require('helmet');
-const cors = require('cors');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
@@ -11,8 +10,9 @@ const path = require('path');
 const fs = require('fs');
 const { getVehicleStats, FUEL_TYPES, unitForFuelType, unitsForFuelType } = require('./services/stats');
 const { getVehicleReminders } = require('./services/reminders');
-const { encryptSecret, sendUserMail, resolveSmtpHost, ALLOWED_PORTS, loadDefaultSmtp, withDefaultSmtp } = require('./services/mail');
+const { encryptSecret, decryptSecret, sendUserMail, resolveSmtpHost, ALLOWED_PORTS, loadDefaultSmtp, withDefaultSmtp } = require('./services/mail');
 const notifier = require('./services/notifier');
+const plans = require('./services/plans');
 
 // Media Upload Konfiguration
 // Standard-Uploadpfad: im Backend-Projektordner unter ../uploads (z. B. /srv/www/.../uploads)
@@ -59,7 +59,20 @@ const importLimiter = limiter(10 * 60 * 1000, 60, 60);
 
 app.use(helmet());
 app.use(apiLimiter);
-app.use(cors());
+// CORS: Das PHP-Frontend ruft die API nur serverseitig auf, Browser anderer Seiten brauchen keinen Zugriff.
+// Nur ausdrücklich erlaubte Ursprünge (CORS_ORIGINS, kommagetrennt) bekommen CORS-Header.
+const CORS_ORIGINS = String(process.env.CORS_ORIGINS || '').split(',').map((o) => o.trim()).filter(Boolean);
+app.use((req, res, next) => {
+  const origin = req.header('Origin');
+  if (!origin || !CORS_ORIGINS.includes(origin)) return next();
+  res.set({
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE',
+    Vary: 'Origin'
+  });
+  return req.method === 'OPTIONS' ? res.status(204).end() : next();
+});
 // 2 MB erlaubt größere CSV-Importe (Frontend sendet max. 500 Zeilen pro Anfrage)
 app.use(express.json({ limit: '2mb' }));
 
@@ -290,6 +303,32 @@ function totpCode(secretBase32, counter) {
 }
 
 // Erlaubt ±1 Zeitfenster (je 30 s) für leicht abweichende Uhren
+// 2FA-Secrets liegen verschlüsselt in der Datenbank (AES-256-GCM, eigener Schlüssel 'mfa').
+// Ältere, noch unverschlüsselte Werte werden beim Start umgewandelt (encryptLegacyMfaSecrets).
+function storeMfaSecret(secretBase32) {
+  return encryptSecret(secretBase32, 'mfa');
+}
+
+function readMfaSecret(stored) {
+  if (!stored) return null;
+  if (!String(stored).startsWith('v1:')) return String(stored);
+  try {
+    return decryptSecret(stored, 'mfa');
+  } catch (e) {
+    // Falscher Schlüssel (z. B. JWT_SECRET ohne MAIL_ENCRYPTION_KEY geändert): 2FA-Codes gelten als falsch
+    console.error('[mfa] Secret nicht entschlüsselbar:', e.message);
+    return null;
+  }
+}
+
+async function encryptLegacyMfaSecrets() {
+  const r = await pool.query("SELECT id, mfa_secret FROM users WHERE mfa_secret IS NOT NULL AND mfa_secret NOT LIKE 'v1:%'");
+  for (const row of r.rows) {
+    await pool.query('UPDATE users SET mfa_secret = $1 WHERE id = $2 AND mfa_secret = $3', [storeMfaSecret(row.mfa_secret), row.id, row.mfa_secret]);
+  }
+  if (r.rowCount) console.log(`[mfa] ${r.rowCount} 2FA-Secret(s) verschlüsselt`);
+}
+
 function verifyTotp(secretBase32, code) {
   const given = String(code || '').replace(/\s/g, '');
   if (!secretBase32 || !/^\d{6}$/.test(given)) return false;
@@ -402,7 +441,7 @@ app.get('/api/v1/whoami', auth, async (req, res) => {
   try {
     // Zusätzlich User-Daten aus DB holen für vollständige Info
     const r = await pool.query(
-      `SELECT id, email, username, mfa_enabled, profile_image_url, beta_tester, created_at, updated_at
+      `SELECT id, email, username, mfa_enabled, profile_image_url, beta_tester, plan, plan_until, created_at, updated_at
        FROM users WHERE id = $1`,
       [req.user.sub]
     );
@@ -421,6 +460,8 @@ app.get('/api/v1/whoami', auth, async (req, res) => {
       created_at: r.rows[0].created_at,
       updated_at: r.rows[0].updated_at,
       is_admin: isAdmin(req),
+      // Tarif und Rechte (plan, planUntil, effectivePlan, limitsEnabled, features)
+      ...plans.planInfo(r.rows[0]),
       token: {
         jti: req.user.jti || null,
         iat: req.user.iat ? new Date(req.user.iat * 1000).toISOString() : null,
@@ -501,14 +542,14 @@ app.post('/api/v1/auth/login', async (req, res) => {
 
     // 2FA: erst nach korrektem Passwort nach dem Code fragen
     if (user.mfa_enabled) {
-      if (req.body?.code === undefined || req.body?.code === '') {
-        // mfaToken erlaubt den zweiten Schritt (POST /auth/login/mfa), ohne das Passwort erneut zu senden
-        const mfaToken = jwt.sign({ sub: user.id }, MFA_TOKEN_SECRET, { expiresIn: '5m' });
-        return res.status(401).json({ error: 'mfa_required', mfaToken });
-      }
+      // Ohne Code: 401 mfa_required mit mfaToken. Das Token erlaubt nur den zweiten Schritt (POST /auth/login/mfa)
+      // mit gültigem TOTP-Code und hängt nicht von der Eingabe ab – es wird deshalb immer erzeugt.
+      const mfaToken = jwt.sign({ sub: user.id }, MFA_TOKEN_SECRET, { expiresIn: '5m' });
+      const code = typeof req.body?.code === 'string' || typeof req.body?.code === 'number' ? String(req.body.code).trim() : '';
+      if (!code) return res.status(401).json({ error: 'mfa_required', mfaToken });
       const mfaKey = `mfa:${user.id}`;
       if (isLockedOut(mfaKey, MFA_MAX_FAILURES)) return tooManyAttempts(res);
-      if (!verifyTotp(user.mfa_secret, req.body.code)) {
+      if (!verifyTotp(readMfaSecret(user.mfa_secret), code)) {
         recordFailure(mfaKey);
         return res.status(401).json({ error: 'invalid_mfa_code' });
       }
@@ -542,7 +583,7 @@ app.post('/api/v1/auth/login/mfa', async (req, res) => {
     );
     if (r.rowCount === 0 || !r.rows[0].mfa_enabled) return res.status(401).json({ error: 'invalid_mfa_token' });
     const user = r.rows[0];
-    if (!verifyTotp(user.mfa_secret, req.body?.code)) {
+    if (!verifyTotp(readMfaSecret(user.mfa_secret), req.body?.code)) {
       recordFailure(mfaKey);
       return res.status(401).json({ error: 'invalid_mfa_code' });
     }
@@ -598,7 +639,7 @@ app.post('/api/v1/auth/mfa/setup', auth, async (req, res) => {
     if (r.rows[0].mfa_enabled) return res.status(409).json({ error: 'mfa_already_enabled' });
 
     const secret = base32Encode(randomBytes(20));
-    await pool.query('UPDATE users SET mfa_secret = $1, updated_at = now() WHERE id = $2', [secret, req.user.sub]);
+    await pool.query('UPDATE users SET mfa_secret = $1, updated_at = now() WHERE id = $2', [storeMfaSecret(secret), req.user.sub]);
     const label = encodeURIComponent(`Fuelstat:${r.rows[0].email}`);
     res.json({
       secret,
@@ -618,7 +659,7 @@ app.post('/api/v1/auth/mfa/enable', auth, async (req, res) => {
     if (!r.rows[0].mfa_secret) return res.status(400).json({ error: 'mfa_not_set_up' });
     const mfaKey = `mfa:${req.user.sub}`;
     if (isLockedOut(mfaKey, MFA_MAX_FAILURES)) return tooManyAttempts(res);
-    if (!verifyTotp(r.rows[0].mfa_secret, req.body?.code)) {
+    if (!verifyTotp(readMfaSecret(r.rows[0].mfa_secret), req.body?.code)) {
       recordFailure(mfaKey);
       return res.status(400).json({ error: 'invalid_mfa_code' });
     }
@@ -640,7 +681,7 @@ app.post('/api/v1/auth/mfa/disable', auth, async (req, res) => {
     const mfaKey = `mfa:${req.user.sub}`;
     if (isLockedOut(mfaKey, MFA_MAX_FAILURES)) return tooManyAttempts(res);
     const ok = await bcrypt.compare(String(req.body?.password || ''), r.rows[0].password_hash);
-    if (!ok || !verifyTotp(r.rows[0].mfa_secret, req.body?.code)) {
+    if (!ok || !verifyTotp(readMfaSecret(r.rows[0].mfa_secret), req.body?.code)) {
       recordFailure(mfaKey);
       return res.status(ok ? 400 : 401).json({ error: ok ? 'invalid_mfa_code' : 'invalid_current_password' });
     }
@@ -664,6 +705,8 @@ app.get('/api/v1/auth/users', auth, requireAdmin, async (req, res) => {
          mfa_enabled,
          profile_image_url,
          beta_tester,
+         plan,
+         plan_until,
          created_at,
          updated_at,
          last_login_at,
@@ -693,6 +736,30 @@ app.put('/api/v1/auth/users/:userId/beta', auth, requireAdmin, async (req, res) 
     );
     if (r.rowCount === 0) return res.status(404).json({ error: 'user_not_found' });
     res.json(r.rows[0]);
+  } catch (e) {
+    if (e.code === '22P02') return res.status(404).json({ error: 'user_not_found' });
+    serverError(res, e);
+  }
+});
+
+// Tarif setzen (nur Admin), z. B. Plus für Tester und Freunde. planUntil: ISO-Datum oder null (unbefristet)
+app.put('/api/v1/auth/users/:userId/plan', auth, requireAdmin, async (req, res) => {
+  const plan = String(req.body?.plan || '').trim();
+  if (!plans.PLAN_NAMES.includes(plan)) return res.status(400).json({ error: 'invalid_plan', allowed: plans.PLAN_NAMES });
+  let planUntil = null;
+  if (req.body?.planUntil !== undefined && req.body?.planUntil !== null && req.body?.planUntil !== '') {
+    const d = new Date(String(req.body.planUntil));
+    if (Number.isNaN(d.getTime())) return res.status(400).json({ error: 'invalid_planUntil' });
+    planUntil = d.toISOString();
+  }
+  try {
+    const r = await pool.query(
+      `UPDATE users SET plan = $2, plan_until = $3, updated_at = now() WHERE id = $1
+       RETURNING id, email, plan, plan_until`,
+      [String(req.params.userId || '').trim(), plan, plan === 'free' ? null : planUntil]
+    );
+    if (r.rowCount === 0) return res.status(404).json({ error: 'user_not_found' });
+    res.json({ id: r.rows[0].id, email: r.rows[0].email, ...plans.planInfo(r.rows[0]) });
   } catch (e) {
     if (e.code === '22P02') return res.status(404).json({ error: 'user_not_found' });
     serverError(res, e);
@@ -989,6 +1056,18 @@ app.post('/api/v1/vehicles', auth, async (req, res) => {
   }
 
   try {
+    // Tarifgrenze (nur aktiv mit PLAN_LIMITS_ENABLED=true). Herabstufen löscht nichts, es verhindert nur neue Fahrzeuge.
+    const u = await pool.query(
+      `SELECT plan, plan_until, (SELECT COUNT(*)::int FROM vehicles WHERE user_id = $1) AS vehicle_count
+       FROM users WHERE id = $1`,
+      [req.user.sub]
+    );
+    const konto = u.rows[0] || { plan: 'free', vehicle_count: 0 };
+    const maxVehicles = plans.limitOf(konto, 'maxVehicles');
+    if (maxVehicles !== null && konto.vehicle_count >= maxVehicles) {
+      return plans.planRequired(res, 'maxVehicles', { limit: maxVehicles, plan: plans.effectivePlan(konto) });
+    }
+
     const r = await pool.query(
       `INSERT INTO vehicles (
          user_id, name, fuel_type, brand, model, year, image_url,
@@ -1230,7 +1309,9 @@ app.delete('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
 // Add fillup (generalisiert: amount + unit)
 app.post('/api/v1/fillups', auth, async (req, res) => {
   const vehicleId = String(req.body?.vehicleId || '').trim();
-  const odometerKm = Number(req.body?.odometerKm);
+  // Tachostand darf fehlen (#41) und später nachgetragen werden; geschätzte Werte sind nur Platzhalter
+  const odometerKm = optionalNumber(req.body?.odometerKm) ?? null;
+  const odometerEstimated = odometerKm !== null && req.body?.odometerEstimated === true;
 
   // Backward-compatible: akzeptiere liters ODER amount
   const amount = Number(req.body?.amount ?? req.body?.liters);
@@ -1245,7 +1326,7 @@ app.post('/api/v1/fillups', auth, async (req, res) => {
   let unit = req.body?.unit ? String(req.body.unit).trim().toLowerCase() : null;
 
   if (!vehicleId) return res.status(400).json({ error: 'missing_vehicleId' });
-  if (!Number.isFinite(odometerKm) || odometerKm < 0) return res.status(400).json({ error: 'invalid_odometerKm' });
+  if (odometerKm !== null && (!Number.isFinite(odometerKm) || odometerKm < 0)) return res.status(400).json({ error: 'invalid_odometerKm' });
   if (!Number.isFinite(amount) || amount < 0) return res.status(400).json({ error: 'invalid_amount' });
   if (!Number.isFinite(totalCostEur) || totalCostEur < 0) return res.status(400).json({ error: 'invalid_totalCostEur' });
   if (filledAt && Number.isNaN(filledAt.getTime())) return res.status(400).json({ error: 'invalid_filledAt' });
@@ -1279,7 +1360,8 @@ app.post('/api/v1/fillups', auth, async (req, res) => {
          station,
          filled_at,
          is_full,
-         skip_previous
+         skip_previous,
+         odometer_estimated
        )
        VALUES (
          $1,
@@ -1296,10 +1378,11 @@ app.post('/api/v1/fillups', auth, async (req, res) => {
          $7,
          COALESCE($8, now()),
          $9,
-         $10
+         $10,
+         $11
        )
-       RETURNING id, vehicle_id, odometer_km, amount, unit, total_cost_eur, price_per_unit, station, filled_at, created_at, is_full, skip_previous`,
-      [req.user.sub, vehicleId, odometerKm, amount, unit, totalCostEur, station, filledAt, isFull, skipPrevious]
+       RETURNING id, vehicle_id, odometer_km, amount, unit, total_cost_eur, price_per_unit, station, filled_at, created_at, is_full, skip_previous, odometer_estimated`,
+      [req.user.sub, vehicleId, odometerKm === null ? null : Math.round(odometerKm), amount, unit, totalCostEur, station, filledAt, isFull, skipPrevious, odometerEstimated]
     );
 
     res.status(201).json(r.rows[0]);
@@ -1329,7 +1412,8 @@ app.get('/api/v1/fillups/:fillupId', auth, async (req, res) => {
          filled_at,
          created_at,
          is_full,
-         skip_previous
+         skip_previous,
+         odometer_estimated
        FROM fillups
        WHERE id = $1 AND user_id = $2`,
       [fillupId, req.user.sub]
@@ -1376,7 +1460,8 @@ app.patch('/api/v1/fillups/:fillupId', auth, async (req, res) => {
          filled_at,
          created_at,
          is_full,
-         skip_previous
+         skip_previous,
+         odometer_estimated
        FROM fillups
        WHERE id = $1 AND user_id = $2`,
       [fillupId, req.user.sub]
@@ -1388,13 +1473,18 @@ app.patch('/api/v1/fillups/:fillupId', auth, async (req, res) => {
 
     const existing = existingRes.rows[0];
 
-    // 14 Tage Änderungsfenster ab filled_at
+    // Eingehende Änderungen parsen (teilweise, optional)
+    const body = req.body || {};
+
+    // 14 Tage Änderungsfenster ab filled_at. Ausnahme (#41): nur den Tachostand nachtragen ist immer möglich.
+    const nurTachostand = Object.keys(body).length > 0 &&
+      Object.keys(body).every(k => k === 'odometerKm' || k === 'odometerEstimated');
     const now = new Date();
     const filledAtOriginal = new Date(existing.filled_at);
     const diffMs = now.getTime() - filledAtOriginal.getTime();
     const maxMs = 14 * 24 * 60 * 60 * 1000; // 14 Tage
 
-    if (diffMs > maxMs) {
+    if (diffMs > maxMs && !nurTachostand) {
       return res.status(409).json({
         error: 'fillup_edit_window_expired',
         message:
@@ -1402,11 +1492,10 @@ app.patch('/api/v1/fillups/:fillupId', auth, async (req, res) => {
       });
     }
 
-    // Eingehende Änderungen parsen (teilweise, optional)
-    const body = req.body || {};
-
-    const patchOdometerKm =
-      body.odometerKm !== undefined ? Number(body.odometerKm) : undefined;
+    // null bzw. leer: Tachostand entfernen (fehlt)
+    const patchOdometerKm = optionalNumber(body.odometerKm);
+    const patchOdometerEstimated =
+      body.odometerEstimated !== undefined ? body.odometerEstimated === true : undefined;
 
     // Backward-kompatibel: amount oder liters
     const rawAmount =
@@ -1448,7 +1537,8 @@ app.patch('/api/v1/fillups/:fillupId', auth, async (req, res) => {
       patchStation === undefined &&
       patchFilledAt === undefined &&
       patchIsFull === undefined &&
-      patchSkipPrevious === undefined
+      patchSkipPrevious === undefined &&
+      patchOdometerEstimated === undefined
     ) {
       return res.status(400).json({ error: 'nothing_to_update' });
     }
@@ -1456,10 +1546,11 @@ app.patch('/api/v1/fillups/:fillupId', auth, async (req, res) => {
     // Zielwerte (bestehend oder gepatcht)
     const newOdometerKm =
       patchOdometerKm !== undefined ? patchOdometerKm : existing.odometer_km;
+    // numeric-Spalten kommen von pg als Text ("30.000"); für die Prüfung unten in Zahlen umwandeln
     const newAmount =
-      patchAmount !== undefined ? patchAmount : existing.amount;
+      patchAmount !== undefined ? patchAmount : Number(existing.amount);
     const newTotalCostEur =
-      patchTotalCostEur !== undefined ? patchTotalCostEur : existing.total_cost_eur;
+      patchTotalCostEur !== undefined ? patchTotalCostEur : Number(existing.total_cost_eur);
     const newUnit =
       patchUnit !== undefined ? patchUnit : existing.unit;
     const newStation =
@@ -1470,9 +1561,14 @@ app.patch('/api/v1/fillups/:fillupId', auth, async (req, res) => {
       patchIsFull !== undefined ? patchIsFull : existing.is_full;
     const newSkipPrevious =
       patchSkipPrevious !== undefined ? patchSkipPrevious : existing.skip_previous;
+    // Ein neu eingetragener Tachostand gilt als echt, außer es wird ausdrücklich "geschätzt" mitgeschickt
+    const newOdometerEstimated = newOdometerKm === null ? false
+      : patchOdometerEstimated !== undefined ? patchOdometerEstimated
+      : patchOdometerKm !== undefined ? false
+      : existing.odometer_estimated;
 
     // Validierungen auf Zielwerten
-    if (!Number.isFinite(newOdometerKm) || newOdometerKm < 0) {
+    if (newOdometerKm !== null && (!Number.isFinite(newOdometerKm) || newOdometerKm < 0)) {
       return res.status(400).json({ error: 'invalid_odometerKm' });
     }
     if (!Number.isFinite(newAmount) || newAmount < 0) {
@@ -1505,7 +1601,8 @@ app.patch('/api/v1/fillups/:fillupId', auth, async (req, res) => {
          station       = $5,
          filled_at     = $6,
          is_full       = $7,
-         skip_previous = $8
+         skip_previous = $8,
+         odometer_estimated = $11
        WHERE id = $9 AND user_id = $10
        RETURNING
          id,
@@ -1520,9 +1617,10 @@ app.patch('/api/v1/fillups/:fillupId', auth, async (req, res) => {
          filled_at,
          created_at,
          is_full,
-         skip_previous`,
+         skip_previous,
+         odometer_estimated`,
       [
-        newOdometerKm,
+        newOdometerKm === null ? null : Math.round(newOdometerKm),
         newAmount,
         newUnit,
         newTotalCostEur,
@@ -1531,7 +1629,8 @@ app.patch('/api/v1/fillups/:fillupId', auth, async (req, res) => {
         newIsFull,
         newSkipPrevious,
         fillupId,
-        req.user.sub
+        req.user.sub,
+        newOdometerEstimated
       ]
     );
 
@@ -1657,7 +1756,8 @@ app.get('/api/v1/vehicles/:vehicleId/fillups', auth, async (req, res) => {
          filled_at,
          created_at,
          is_full,
-         skip_previous
+         skip_previous,
+         odometer_estimated
        FROM fillups
        WHERE user_id = $1 AND vehicle_id = $2
        ORDER BY filled_at DESC, created_at DESC
@@ -1909,7 +2009,10 @@ app.post('/api/v1/vehicles/:vehicleId/import', auth, importLimiter, async (req, 
   const nonNegative = (v) => Number.isFinite(Number(v)) && Number(v) >= 0;
   fillups.forEach((f, index) => {
     if (!validDate(f?.filledAt)) errors.push({ type: 'fillup', index, error: 'invalid_filledAt' });
-    else if (!nonNegative(f?.odometerKm)) errors.push({ type: 'fillup', index, error: 'invalid_odometerKm' });
+    // Tachostand darf fehlen (#41)
+    else if (f?.odometerKm !== undefined && f?.odometerKm !== null && f?.odometerKm !== '' && !nonNegative(f.odometerKm)) {
+      errors.push({ type: 'fillup', index, error: 'invalid_odometerKm' });
+    }
     else if (!nonNegative(f?.amount)) errors.push({ type: 'fillup', index, error: 'invalid_amount' });
     else if (!nonNegative(f?.totalCostEur)) errors.push({ type: 'fillup', index, error: 'invalid_totalCostEur' });
   });
@@ -1940,11 +2043,14 @@ app.post('/api/v1/vehicles/:vehicleId/import', auth, importLimiter, async (req, 
     for (const f of fillups) {
       const filledAt = new Date(f.filledAt);
       const unit = unitOf(f);
-      // Duplikat: gleicher Tag, gleicher Tachostand und gleiche Einheit (Tanken und Laden am selben Abend sind zwei Einträge)
+      const odo = f.odometerKm === undefined || f.odometerKm === null || f.odometerKm === '' ? null : Math.round(Number(f.odometerKm));
+      // Duplikat: gleicher Tag, gleicher Tachostand und gleiche Einheit (Tanken und Laden am selben Abend sind zwei Einträge);
+      // ohne Tachostand zusätzlich gleiche Menge
       const dup = await client.query(
         `SELECT 1 FROM fillups
-         WHERE vehicle_id = $1 AND user_id = $2 AND odometer_km = $3 AND filled_at::date = $4::date AND unit = $5`,
-        [vehicleId, req.user.sub, Math.round(Number(f.odometerKm)), filledAt, unit]
+         WHERE vehicle_id = $1 AND user_id = $2 AND odometer_km IS NOT DISTINCT FROM $3::int AND filled_at::date = $4::date AND unit = $5
+           AND ($3::int IS NOT NULL OR amount = $6::numeric)`,
+        [vehicleId, req.user.sub, odo, filledAt, unit, Number(f.amount)]
       );
       if (dup.rowCount > 0) { result.skipped.fillups++; continue; }
       await client.query(
@@ -1953,7 +2059,7 @@ app.post('/api/v1/vehicles/:vehicleId/import', auth, importLimiter, async (req, 
                  CASE WHEN $4::numeric > 0 THEN ROUND($6::numeric / $4::numeric, 4) ELSE NULL END,
                  $7, $8, $9, $10)`,
         [
-          req.user.sub, vehicleId, Math.round(Number(f.odometerKm)), Number(f.amount), unit, Number(f.totalCostEur),
+          req.user.sub, vehicleId, odo, Number(f.amount), unit, Number(f.totalCostEur),
           f.station ? String(f.station).trim() : null, filledAt,
           f.isFull !== undefined ? Boolean(f.isFull) : true,
           f.skipPrevious !== undefined ? Boolean(f.skipPrevious) : false
@@ -2475,5 +2581,6 @@ app.use((error, req, res, next) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Backend V2 läuft auf Port ${PORT}`);
+  encryptLegacyMfaSecrets().catch((e) => console.error('[mfa] Verschlüsseln fehlgeschlagen:', e.message));
   notifier.startNotifier(pool);
 });

@@ -60,3 +60,6 @@ yarn-error.log*
 
 # Docker / local
 infra/*.local.yml
+
+# Datensicherung: lokale Einstellungen (Pfade, Zugang zur Storage Box)
+infra/backup/backup.env
