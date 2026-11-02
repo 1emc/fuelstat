@@ -542,14 +542,14 @@ app.post('/api/v1/auth/login', async (req, res) => {
 
     // 2FA: erst nach korrektem Passwort nach dem Code fragen
     if (user.mfa_enabled) {
-      if (req.body?.code === undefined || req.body?.code === '') {
-        // mfaToken erlaubt den zweiten Schritt (POST /auth/login/mfa), ohne das Passwort erneut zu senden
-        const mfaToken = jwt.sign({ sub: user.id }, MFA_TOKEN_SECRET, { expiresIn: '5m' });
-        return res.status(401).json({ error: 'mfa_required', mfaToken });
-      }
+      // Ohne Code: 401 mfa_required mit mfaToken. Das Token erlaubt nur den zweiten Schritt (POST /auth/login/mfa)
+      // mit gültigem TOTP-Code und hängt nicht von der Eingabe ab – es wird deshalb immer erzeugt.
+      const mfaToken = jwt.sign({ sub: user.id }, MFA_TOKEN_SECRET, { expiresIn: '5m' });
+      const code = typeof req.body?.code === 'string' || typeof req.body?.code === 'number' ? String(req.body.code).trim() : '';
+      if (!code) return res.status(401).json({ error: 'mfa_required', mfaToken });
       const mfaKey = `mfa:${user.id}`;
       if (isLockedOut(mfaKey, MFA_MAX_FAILURES)) return tooManyAttempts(res);
-      if (!verifyTotp(readMfaSecret(user.mfa_secret), req.body.code)) {
+      if (!verifyTotp(readMfaSecret(user.mfa_secret), code)) {
         recordFailure(mfaKey);
         return res.status(401).json({ error: 'invalid_mfa_code' });
       }
