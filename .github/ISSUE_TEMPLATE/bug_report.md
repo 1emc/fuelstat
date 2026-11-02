@@ -1,13 +1,4 @@
 ---
-name: Bug report
-about: Create a report to help us improve
-title: ''
-labels: ''
-assignees: ''
-
----
-
----
 name: Bug Report
 about: Report a bug to help improve Fuelstat
 title: "[Bug]: "
