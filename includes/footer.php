@@ -5,9 +5,43 @@
   <small>
     &copy; <?php echo date('Y'); ?> Mario Caraggiu — 
     <a href="<?php echo htmlspecialchars($baseUrl); ?>pages/impressum.php" class="text-decoration-none">Impressum</a> | 
-    <a href="<?php echo htmlspecialchars($baseUrl); ?>pages/datenschutz.php" class="text-decoration-none">Datenschutz</a>
+    <a href="<?php echo htmlspecialchars($baseUrl); ?>pages/datenschutz.php" class="text-decoration-none">Datenschutz</a> |
+    <button type="button" class="btn btn-link btn-sm p-0 align-baseline text-decoration-none" id="cookieHinweisOeffnen" style="font-size: inherit;">Cookie-Hinweis</button>
   </small>
 </footer>
+
+<!-- Cookie-Hinweis (#33): Fuelstat nutzt nur technisch notwendige Speicherungen, daher ein Hinweis statt einer
+     Einwilligungsabfrage. Kommen optionale Dienste dazu (Statistik, Karten …), braucht es hier eine echte Auswahl
+     mit gleichwertigem "Ablehnen"; solche Skripte dürfen erst laden, wenn fuelstatEinwilligung.erlaubt(...) true ist. -->
+<div class="cookie-hinweis" id="cookieHinweis" role="region" aria-label="Hinweis zu Cookies" hidden>
+  <p class="mb-2 mb-sm-0 small">
+    <i class="fas fa-cookie-bite me-1" aria-hidden="true"></i>
+    Fuelstat verwendet nur technisch notwendige Cookies und Browser-Speicher, z. B. für die Anmeldung und die gewählte Darstellung – kein Tracking, keine Werbung.
+    <a href="<?php echo htmlspecialchars($baseUrl); ?>pages/datenschutz.php#cookies">Mehr erfahren</a>
+  </p>
+  <button type="button" class="btn btn-primary btn-sm flex-shrink-0" id="cookieHinweisOk">Verstanden</button>
+</div>
+<script>
+  window.fuelstatEinwilligung = {
+    // Bisher gibt es keine optionalen Dienste: alles außer "notwendig" ist nicht erlaubt
+    erlaubt: function (kategorie) { return kategorie === 'notwendig'; }
+  };
+  (function () {
+    var KEY = 'fuelstat-cookie-hinweis';
+    var leiste = document.getElementById('cookieHinweis');
+    var ok = document.getElementById('cookieHinweisOk');
+    var gesehen = false;
+    try { gesehen = localStorage.getItem(KEY) === '1'; } catch (e) { /* privater Modus: Hinweis zeigen */ }
+    function zeige() { leiste.hidden = false; ok.focus({ preventScroll: true }); }
+    if (!gesehen) leiste.hidden = false;
+    ok.addEventListener('click', function () {
+      leiste.hidden = true;
+      try { localStorage.setItem(KEY, '1'); } catch (e) { /* nicht speicherbar: beim nächsten Aufruf wieder */ }
+    });
+    document.getElementById('cookieHinweisOeffnen').addEventListener('click', zeige);
+    leiste.addEventListener('keydown', function (e) { if (e.key === 'Escape') ok.click(); });
+  })();
+</script>
 
 <!-- Bootstrap JS -->
 <script src="<?= htmlspecialchars(assetUrl($baseUrl, 'vendor/bootstrap/bootstrap.bundle.min.js')) ?>"></script>

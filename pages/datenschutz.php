@@ -49,14 +49,16 @@ $email = ($b['email'] ?? '') !== '' ? htmlspecialchars(str_replace('@', '[at]', 
   <h2 class="h5 mt-4">7. Feedback</h2>
   <p>Wenn du über „Feedback senden“ eine Nachricht schickst, werden die Nachricht, die gewählte Art (z. B. Fehler oder Idee), die Seite, von der du kommst, deine Browserkennung und deine E-Mail-Adresse gespeichert und per E-Mail an mich geschickt, damit ich antworten kann. Feedback bleibt auch nach dem Löschen deines Kontos erhalten, bis es bearbeitet ist; auf Wunsch lösche ich es sofort. Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO (Verbesserung der App und Beantwortung deiner Anfrage).</p>
 
-  <h2 class="h5 mt-4">8. Cookies und Speicher im Browser</h2>
+  <h2 class="h5 mt-4" id="cookies">8. Cookies und Speicher im Browser</h2>
   <ul>
     <li><strong>Sitzungs-Cookie (PHPSESSID):</strong> technisch notwendig für die Anmeldung und den Schutz der Formulare; es gilt höchstens 28 Tage und wird beim Abmelden gelöscht.</li>
     <li><strong>Anmelde-Cookie (fuelstat_auth):</strong> hält dich angemeldet, auch wenn der Server die Sitzung zwischendurch aufräumt. Es ist für Skripte nicht lesbar und wird beim Abmelden gelöscht. Es gilt 7 Tage; wer Fuelstat in dieser Zeit nutzt, bekommt höchstens einmal täglich ein neues, damit man nicht mitten in der Nutzung abgemeldet wird. Spätestens 90 Tage nach der letzten Anmeldung mit Passwort ist eine neue Anmeldung nötig.</li>
+    <li><strong>Fahrzeug-Cookie (fuelstat_fahrzeug):</strong> merkt sich das zuletzt genutzte Fahrzeug, damit es bei der Schnellerfassung über das App-Kürzel oben steht. Es enthält nur die interne Kennung des Fahrzeugs, ist für Skripte nicht lesbar und gilt ein Jahr.</li>
     <li><strong>Lokaler Speicher (fuelstat-theme):</strong> merkt sich, ob du die helle oder dunkle Darstellung gewählt hast.</li>
+    <li><strong>Lokaler Speicher (fuelstat-cookie-hinweis):</strong> merkt sich, dass du den Hinweis zu Cookies gesehen hast, damit er nicht bei jedem Aufruf erscheint. Über „Cookie-Hinweis“ unten auf jeder Seite kannst du ihn wieder anzeigen.</li>
     <li><strong>Service Worker:</strong> speichert Programmdateien und Bilder der App (z. B. Stylesheets, Symbole) im Browser, damit sie schneller laden. Persönliche Daten werden dort nicht abgelegt.</li>
   </ul>
-  <p>Diese Speicherungen sind für die angebotenen Funktionen unbedingt erforderlich (§ 25 Abs. 2 Nr. 2 TDDDG); es gibt keine Tracking- oder Werbe-Cookies.</p>
+  <p>Diese Speicherungen sind für die angebotenen Funktionen unbedingt erforderlich (§ 25 Abs. 2 Nr. 2 TDDDG); es gibt keine Tracking- oder Werbe-Cookies. Deshalb fragt Fuelstat keine Einwilligung ab, sondern weist beim ersten Besuch nur darauf hin. Sollten später optionale Dienste hinzukommen, werden sie erst nach deiner ausdrücklichen Einwilligung geladen.</p>
 
   <h2 class="h5 mt-4">9. Keine Drittanbieter</h2>
   <p>Alle Bestandteile der App (Schriften, Symbole, Bibliotheken) werden vom Fuelstat-Server selbst ausgeliefert. Beim Aufruf werden keine Daten an Content-Delivery-Networks, Google oder andere Dritte übertragen. Einzige Ausnahme ist die Tankstellen- und Ladestationssuche (Abschnitt 5), und auch die nur auf deinen Wunsch.</p>
