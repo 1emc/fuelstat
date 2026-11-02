@@ -1,0 +1,11 @@
+# /etc/systemd/system/fuelstat-backup.service
+[Unit]
+Description=Fuelstat Datensicherung (Datenbank und Uploads)
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/srv/www/tanken.1emc.de/public/infra/backup/fuelstat-backup.sh /srv/www/tanken.1emc.de/public/infra/backup/backup.env
+Nice=10
+IOSchedulingClass=idle
