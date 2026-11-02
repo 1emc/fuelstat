@@ -547,3 +547,22 @@ function mengeUndKostenAusFormular(array $post): array
     return ['menge' => $menge, 'kosten' => $kosten, 'fehler' => $fehler];
 }
 
+/**
+ * Beschreibung einer Fahrt aus dem Formular, z. B. "Bolbingen → Aalen – Arbeit (42 km)".
+ * Bis zum neuen Fahrtenbuch (#52) stehen die gefahrenen Kilometer in der Beschreibung (#43).
+ */
+function fahrtBeschreibung(array $post): string
+{
+    $start = trim((string)($post['startort'] ?? ''));
+    $ziel = trim((string)($post['zielort'] ?? ''));
+    $zweck = trim((string)($post['zweck'] ?? ''));
+    $km = trim(str_replace(',', '.', (string)($post['gefahrene_km'] ?? '')));
+
+    $strecke = implode(' → ', array_filter([$start, $ziel], fn($t) => $t !== ''));
+    $text = implode(' – ', array_filter([$strecke, $zweck], fn($t) => $t !== ''));
+    if (is_numeric($km) && (float)$km > 0) {
+        $text .= ($text !== '' ? ' ' : '') . '(' . number_format((float)$km, fmod((float)$km, 1) ? 1 : 0, ',', '.') . ' km)';
+    }
+    return $text !== '' ? $text : 'Fahrt';
+}
+

@@ -67,7 +67,7 @@ try {
             'amountEur' => 0,
             'odometerKm' => $tachostand,
             'occurredAt' => $dateTime,
-            'description' => trim($_POST['startort'] ?? '') . ' → ' . trim($_POST['zielort'] ?? '') . ' – ' . trim($_POST['zweck'] ?? ''),
+            'description' => fahrtBeschreibung($_POST),
         ]);
     } else {
         $_SESSION['error_message'] = 'Ungültiger Eintragstyp.';
