@@ -84,8 +84,18 @@ Wird `JWT_SECRET` später ohne eigenen `MAIL_ENCRYPTION_KEY` geändert, lassen s
 
 ### 3. Webserver (nginx)
 
-- `/api/` an die Node-API weiterleiten (`proxy_pass http://127.0.0.1:3000;`), `/uploads/` aus dem Upload-Verzeichnis ausliefern.
-- Die Regeln aus `infra/nginx-sicherheit.conf.example` übernehmen. Sie sperren interne Verzeichnisse (`backend/`, `infra/`, `tests/`, `docs/` …), versteckte Dateien wie `.env` und `.git`, alle `*.key`-Dateien und verhindern, dass im Upload-Ordner jemals PHP ausgeführt wird. **Ohne diese Regeln sind `.env`-Dateien und API-Schlüssel abrufbar.**
+Eine vollständige Konfiguration liegt in `infra/nginx/fuelstat.conf.example` (HTTPS-Weiterleitung, Sicherheits-Header, `/api/v1/` → Node-API auf `127.0.0.1:3000`, PHP-FPM, Caching). Domain, Webroot und FPM-Socket anpassen:
+
+```bash
+sudo cp infra/nginx-sicherheit.conf.example /etc/nginx/snippets/fuelstat-sicherheit.conf
+sudo cp infra/nginx/fuelstat.conf.example /etc/nginx/sites-available/fuelstat.conf   # danach Platzhalter ersetzen
+sudo ln -s /etc/nginx/sites-available/fuelstat.conf /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+- Wer eine eigene Konfiguration hat, bindet nur das Snippet **ganz oben** im `server`-Block ein: `include snippets/fuelstat-sicherheit.conf;`. Es sperrt interne Verzeichnisse (`backend/`, `infra/`, `tests/`, `docs/` …), versteckte Dateien wie `.env` und `.git`, alle `*.key`-Dateien, Doku-/Konfigurationsdateien (`*.md`, `*.yml`, `*.sql`, `*.sh` …), liefert aus `uploads/` nur Bilder aus und `/.well-known/security.txt` als Text. **Ohne diese Regeln sind `.env`-Dateien und API-Schlüssel abrufbar.**
+- Nach Updates prüfen, ob sich das Snippet geändert hat (`git diff` auf `infra/nginx-sicherheit.conf.example`), und es erneut kopieren.
+- Schnelltest: `curl -I https://<domain>/readme.md` und `curl -I https://<domain>/api/ocm.key` müssen `404` liefern.
 - Bei OPcache mit `opcache.validate_timestamps=0` nach jedem Deploy PHP-FPM neu laden (z. B. `systemctl reload php8.4-fpm`).
 
 ### 4. Erstes Konto und Admin
