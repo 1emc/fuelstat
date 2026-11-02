@@ -29,7 +29,7 @@ $begriffe = verbrauchsBegriffe($fuelType);
     <h1 class="d-none d-lg-block"><?= htmlspecialchars($fahrzeug['name'] ?? 'Fahrzeug') ?></h1>
 
     <!-- Reiter: am PC Tabs, mobil wischbare Leiste, die unter der Kopfleiste stehen bleibt -->
-    <ul class="nav nav-tabs fahrzeug-reiter" id="fahrzeugTabs" role="tablist">
+    <ul class="nav nav-tabs fahrzeug-reiter no-swipe" id="fahrzeugTabs" role="tablist">
         <li class="nav-item" role="presentation"><a class="nav-link" id="allgemein-tab" data-bs-toggle="tab" href="#allgemein" role="tab">Allgemein</a></li>
         <li class="nav-item" role="presentation"><a class="nav-link" id="eintraege-tab" data-bs-toggle="tab" href="#eintraege" role="tab">Einträge</a></li>
         <li class="nav-item" role="presentation"><a class="nav-link" id="statistiken-tab" data-bs-toggle="tab" href="#statistiken" role="tab">Statistiken</a></li>
@@ -47,6 +47,7 @@ $begriffe = verbrauchsBegriffe($fuelType);
     </div>
 </div>
 
+<script src="<?= htmlspecialchars(assetUrl($baseUrl, 'js/reiter-wischen.js')) ?>"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   var reiter = document.getElementById('fahrzeugTabs');
@@ -56,12 +57,16 @@ document.addEventListener('DOMContentLoaded', function () {
     bootstrap.Tab.getOrCreateInstance(link).show();
   }
 
+  // Reiter öffnen (Antippen und Wischen): kein Springen zum Anker, aber Hash setzen, damit Neuladen und Zurück funktionieren
+  function oeffne(link) {
+    bootstrap.Tab.getOrCreateInstance(link).show();
+    history.replaceState(null, '', link.getAttribute('href'));
+  }
+
   reiter.querySelectorAll('.nav-link').forEach(function (link) {
-    // Kein Springen zum Anker, aber Hash setzen, damit Neuladen und Zurück funktionieren
     link.addEventListener('click', function (e) {
       e.preventDefault();
-      bootstrap.Tab.getOrCreateInstance(link).show();
-      history.replaceState(null, '', link.getAttribute('href'));
+      oeffne(link);
     });
 
     link.addEventListener('shown.bs.tab', function () {
@@ -76,8 +81,22 @@ document.addEventListener('DOMContentLoaded', function () {
       var tabFahrzeuge = document.getElementById('tabbarFahrzeuge');
       if (tabStatistik) tabStatistik.classList.toggle('active', statistik);
       if (tabFahrzeuge) tabFahrzeuge.classList.toggle('active', !statistik);
+      // Nach einem Wischen den neuen Inhalt aus der Wischrichtung einblenden
+      var inhalt = document.querySelector('.hauptinhalt') || document.getElementById('fahrzeugTabsContent');
+      var richtung = inhalt.dataset.wischRichtung;
+      if (richtung) {
+        delete inhalt.dataset.wischRichtung;
+        var pane = document.querySelector(link.getAttribute('href'));
+        pane.classList.remove('wisch-vor', 'wisch-zurueck');
+        void pane.offsetWidth;
+        pane.classList.add(richtung === 'vor' ? 'wisch-vor' : 'wisch-zurueck');
+      }
     });
   });
+
+  // Mobil: zwischen den Reitern wischen (#88), Desktop unverändert
+  // Ganzer Hauptbereich der Seite, damit auch unter kurzen Inhalten gewischt werden kann
+  reiterWischen({ reiter: reiter, bereich: document.querySelector('.hauptinhalt') || document.getElementById('fahrzeugTabsContent'), wechsel: oeffne });
 
   zeige(window.location.hash || '#allgemein');
   // z. B. "Statistik" in der unteren Leiste, während diese Seite schon offen ist

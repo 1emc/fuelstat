@@ -639,3 +639,34 @@ body.mit-tabbar {
 .eintrag-zeile:hover {
     background: var(--bs-tertiary-bg);
 }
+
+/* Fahrzeug-Reiter per Wischen (#88): neuer Inhalt kommt aus der Wischrichtung */
+#fahrzeugTabsContent {
+    overflow-x: clip;          /* Einblenden ohne waagerechten Scrollbalken */
+    overflow-clip-margin: 1rem; /* Schatten der Karten bleiben sichtbar */
+}
+
+@keyframes wisch-von-rechts {
+    from { transform: translateX(24px); opacity: .4; }
+    to { transform: none; opacity: 1; }
+}
+
+@keyframes wisch-von-links {
+    from { transform: translateX(-24px); opacity: .4; }
+    to { transform: none; opacity: 1; }
+}
+
+.tab-pane.wisch-vor {
+    animation: wisch-von-rechts .18s ease-out;
+}
+
+.tab-pane.wisch-zurueck {
+    animation: wisch-von-links .18s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tab-pane.wisch-vor,
+    .tab-pane.wisch-zurueck {
+        animation: none;
+    }
+}
