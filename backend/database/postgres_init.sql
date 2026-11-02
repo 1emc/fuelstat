@@ -1,5 +1,5 @@
 -- backend/database/postgres_init.sql
--- Vollständiges Schema für eine NEUE Installation (Stand: Migration 010).
+-- Vollständiges Schema für eine NEUE Installation (Stand: Migration 011).
 -- Beim ersten Start der Datenbank spielt Docker diese Datei automatisch ein (siehe infra/docker-compose.yml).
 -- Bestehende Installationen nutzen stattdessen die Migrationen postgres_0XX_*.sql.
 BEGIN;
@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS users (
   mfa_enabled boolean NOT NULL DEFAULT false,
   profile_image_url text NULL,
   beta_tester boolean NOT NULL DEFAULT false,
+  plan text NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'plus', 'fleet')), -- siehe backend/src/services/plans.js
+  plan_until timestamptz NULL,             -- Ende des Tarifs, NULL = unbefristet
   last_login_at timestamptz NULL,
   last_seen_at timestamptz NULL,           -- höchstens stündlich aktualisiert
   created_at timestamptz NOT NULL DEFAULT now(),

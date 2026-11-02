@@ -566,3 +566,29 @@ function fahrtBeschreibung(array $post): string
     return $text !== '' ? $text : 'Fahrt';
 }
 
+/**
+ * Tarife (Issue #44): Text für die API-Antwort 403 plan_required, sonst null.
+ * Solange PLAN_LIMITS_ENABLED in der API aus ist, kommt diese Antwort nie.
+ */
+function tarifHinweis(Throwable $e): ?string
+{
+    if (!($e instanceof FuelstatApiException) || $e->getMessage() !== 'plan_required') {
+        return null;
+    }
+    $texte = [
+        'maxVehicles' => 'Dein Tarif umfasst %s. Weitere Fahrzeuge sind eine Premium-Funktion.',
+        'sharing' => 'Fahrzeuge teilen ist eine Premium-Funktion.',
+        'comparison' => 'Der Fahrzeugvergleich ist eine Premium-Funktion.',
+        'pdfReport' => 'Der PDF-Bericht ist eine Premium-Funktion.',
+        'tripCategories' => 'Weitere Fahrtenbuch-Kategorien sind eine Premium-Funktion.',
+    ];
+    $feature = (string)($e->data['feature'] ?? '');
+    $limit = (int)($e->data['limit'] ?? 1);
+    return sprintf($texte[$feature] ?? 'Das ist eine Premium-Funktion.', $limit === 1 ? 'ein Fahrzeug' : $limit . ' Fahrzeuge');
+}
+
+/** Anzeigenamen der Tarife */
+function tarifNamen(): array
+{
+    return ['free' => 'Free', 'plus' => 'Plus', 'fleet' => 'Flotte'];
+}

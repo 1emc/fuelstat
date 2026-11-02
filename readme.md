@@ -130,7 +130,7 @@ Neue Datenbank-Migrationen (siehe unten) **vor** dem Neustart der API einspielen
 
 ```bash
 cd infra
-docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ../backend/database/postgres_010_plugin_hybrid.sql
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ../backend/database/postgres_011_plans.sql
 ```
 
 ### Datensicherung
@@ -158,7 +158,7 @@ docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < .
 
 ### Datenbank-Migrationen
 
-Neue Installationen brauchen keine Migrationen: `postgres_init.sql` enthält bereits alles bis einschließlich 010. Bestehende Installationen spielen alle noch fehlenden Migrationen der Reihe nach ein:
+Neue Installationen brauchen keine Migrationen: `postgres_init.sql` enthält bereits alles bis einschließlich 011. Bestehende Installationen spielen alle noch fehlenden Migrationen der Reihe nach ein:
 
 | Datei | Inhalt |
 |---|---|
@@ -168,6 +168,7 @@ Neue Installationen brauchen keine Migrationen: `postgres_init.sql` enthält ber
 | `postgres_008_beta_feedback.sql` | Beta-Tester-Kennzeichen und Feedback |
 | `postgres_009_user_activity.sql` | Letzter Login und zuletzt aktiv |
 | `postgres_010_plugin_hybrid.sql` | Antriebsart Plug-in-Hybrid (`phev`) und Akkugröße |
+| `postgres_011_plans.sql` | Tarif je Konto (`plan`, `plan_until`), siehe `PLAN_LIMITS_ENABLED` |
 
 Alle Migrationen laufen in einer Transaktion und lassen sich gefahrlos ein zweites Mal ausführen.
 

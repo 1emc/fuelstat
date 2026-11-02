@@ -406,6 +406,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: "plan_required: Fahrzeuggrenze des Tarifs erreicht (nur mit PLAN_LIMITS_ENABLED=true), z. B. { error: plan_required, feature: maxVehicles, limit: 1, plan: free }"
         "500":
           $ref: "#/components/responses/ServerError"
 
@@ -1096,6 +1098,46 @@ paths:
         "404":
           description: user_not_found
 
+  /api/v1/auth/users/{userId}/plan:
+    put:
+      tags: [Users]
+      summary: Set plan (admin only)
+      operationId: putUserPlan
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                plan:
+                  type: string
+                  enum: [free, plus, fleet]
+                planUntil:
+                  type: string
+                  format: date-time
+                  nullable: true
+                  description: Ende des Tarifs, leer/null = unbefristet (bei free immer null)
+              required: [plan]
+      responses:
+        "200":
+          description: "OK ({ id, email, plan, planUntil, effectivePlan, limitsEnabled, features })"
+        "400":
+          description: invalid_plan, invalid_planUntil
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: forbidden
+        "404":
+          description: user_not_found
+
   /api/v1/feedback:
     post:
       tags: [Feedback]
@@ -1520,6 +1562,26 @@ components:
         is_admin:
           type: boolean
           description: true, wenn die User-ID in ADMIN_USER_IDS steht
+        plan:
+          type: string
+          enum: [free, plus, fleet]
+          description: Gebuchter Tarif
+        planUntil:
+          type: string
+          format: date-time
+          nullable: true
+          description: Ende des Tarifs, null = unbefristet. Danach gilt free.
+        effectivePlan:
+          type: string
+          enum: [free, plus, fleet]
+          description: Tarif, dessen Rechte gerade gelten (ohne PLAN_LIMITS_ENABLED mindestens plus)
+        limitsEnabled:
+          type: boolean
+          description: Werden Tarifgrenzen durchgesetzt (PLAN_LIMITS_ENABLED)?
+        features:
+          type: object
+          description: "Rechte des geltenden Tarifs: maxVehicles und tripCategories (Zahl oder null = unbegrenzt), sharing, comparison, pdfReport, pushReminders, fleet (boolean)"
+          additionalProperties: true
         token:
           type: object
           additionalProperties: false

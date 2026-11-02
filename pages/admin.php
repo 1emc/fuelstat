@@ -28,6 +28,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: admin.php');
             exit;
         }
+        if ($aktion === 'tarif') {
+            $bis = trim($_POST['plan_until'] ?? '');
+            $api->putUserPlan($zielId, (string)($_POST['plan'] ?? 'free'), $bis !== '' ? $bis . 'T23:59:59' : null);
+            header('Location: admin.php');
+            exit;
+        }
         if ($aktion === 'feedback') {
             $api->patchFeedback(trim($_POST['feedback_id'] ?? ''), !empty($_POST['wert']));
             header('Location: admin.php#feedback');
@@ -108,7 +114,9 @@ include '../includes/header.php';
                     <th title="Zuletzt die App benutzt (wird höchstens stündlich aktualisiert)">Zuletzt aktiv</th>
                     <th>Letzter Login</th>
                     <th title="Wann zuletzt eine Tankfüllung, Ladung oder Ausgabe erfasst wurde (auch per Import)">Letzter Eintrag</th>
-                    <th>2FA</th><th>Beta-Tester</th><th>Registriert</th><th></th>
+                    <th>2FA</th><th>Beta-Tester</th>
+                    <th title="Tarif und optionales Ablaufdatum<?= empty($ich['limitsEnabled']) ? '. Grenzen sind noch nicht aktiv (PLAN_LIMITS_ENABLED), alle haben den vollen Umfang.' : '' ?>">Tarif</th>
+                    <th>Registriert</th><th></th>
                 </tr>
             </thead>
             <tbody>
@@ -127,6 +135,20 @@ include '../includes/header.php';
                             <input type="hidden" name="user_id" value="<?= htmlspecialchars($u['id']) ?>">
                             <input type="hidden" name="wert" value="<?= empty($u['beta_tester']) ? '1' : '' ?>">
                             <input class="form-check-input" type="checkbox" role="switch" aria-label="Beta-Tester" onchange="this.form.submit()" <?= !empty($u['beta_tester']) ? 'checked' : '' ?>>
+                        </form>
+                    </td>
+                    <td>
+                        <form method="post" class="d-flex gap-1 align-items-center mb-0">
+                            <input type="hidden" name="aktion" value="tarif">
+                            <input type="hidden" name="user_id" value="<?= htmlspecialchars($u['id']) ?>">
+                            <select name="plan" class="form-select form-select-sm w-auto" aria-label="Tarif">
+                                <?php foreach (tarifNamen() as $wert => $name): ?>
+                                    <option value="<?= $wert ?>" <?= ($u['plan'] ?? 'free') === $wert ? 'selected' : '' ?>><?= $name ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <input type="date" name="plan_until" class="form-control form-control-sm w-auto" aria-label="Tarif gültig bis (leer = unbefristet)" title="Gültig bis (leer = unbefristet)"
+                                   value="<?= !empty($u['plan_until']) ? htmlspecialchars(date('Y-m-d', strtotime($u['plan_until']))) : '' ?>">
+                            <button class="btn btn-sm btn-outline-secondary" title="Tarif speichern" aria-label="Tarif speichern"><i class="fas fa-check"></i></button>
                         </form>
                     </td>
                     <td><?= isset($u['created_at']) ? date('d.m.Y', strtotime($u['created_at'])) : '' ?></td>

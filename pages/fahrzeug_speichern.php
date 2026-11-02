@@ -28,7 +28,7 @@ try {
     header('Location: onboarding.php');
     exit;
 } catch (Throwable $e) {
-    $_SESSION['error_message'] = $e->getMessage();
+    $_SESSION['error_message'] = tarifHinweis($e) ?? $e->getMessage();
     header('Location: fahrzeug_hinzufuegen.php');
     exit;
 }

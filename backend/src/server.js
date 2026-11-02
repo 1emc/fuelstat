@@ -12,6 +12,7 @@ const { getVehicleStats, FUEL_TYPES, unitForFuelType, unitsForFuelType } = requi
 const { getVehicleReminders } = require('./services/reminders');
 const { encryptSecret, decryptSecret, sendUserMail, resolveSmtpHost, ALLOWED_PORTS, loadDefaultSmtp, withDefaultSmtp } = require('./services/mail');
 const notifier = require('./services/notifier');
+const plans = require('./services/plans');
 
 // Media Upload Konfiguration
 // Standard-Uploadpfad: im Backend-Projektordner unter ../uploads (z. B. /srv/www/.../uploads)
@@ -440,7 +441,7 @@ app.get('/api/v1/whoami', auth, async (req, res) => {
   try {
     // Zusätzlich User-Daten aus DB holen für vollständige Info
     const r = await pool.query(
-      `SELECT id, email, username, mfa_enabled, profile_image_url, beta_tester, created_at, updated_at
+      `SELECT id, email, username, mfa_enabled, profile_image_url, beta_tester, plan, plan_until, created_at, updated_at
        FROM users WHERE id = $1`,
       [req.user.sub]
     );
@@ -459,6 +460,8 @@ app.get('/api/v1/whoami', auth, async (req, res) => {
       created_at: r.rows[0].created_at,
       updated_at: r.rows[0].updated_at,
       is_admin: isAdmin(req),
+      // Tarif und Rechte (plan, planUntil, effectivePlan, limitsEnabled, features)
+      ...plans.planInfo(r.rows[0]),
       token: {
         jti: req.user.jti || null,
         iat: req.user.iat ? new Date(req.user.iat * 1000).toISOString() : null,
@@ -702,6 +705,8 @@ app.get('/api/v1/auth/users', auth, requireAdmin, async (req, res) => {
          mfa_enabled,
          profile_image_url,
          beta_tester,
+         plan,
+         plan_until,
          created_at,
          updated_at,
          last_login_at,
@@ -731,6 +736,30 @@ app.put('/api/v1/auth/users/:userId/beta', auth, requireAdmin, async (req, res) 
     );
     if (r.rowCount === 0) return res.status(404).json({ error: 'user_not_found' });
     res.json(r.rows[0]);
+  } catch (e) {
+    if (e.code === '22P02') return res.status(404).json({ error: 'user_not_found' });
+    serverError(res, e);
+  }
+});
+
+// Tarif setzen (nur Admin), z. B. Plus für Tester und Freunde. planUntil: ISO-Datum oder null (unbefristet)
+app.put('/api/v1/auth/users/:userId/plan', auth, requireAdmin, async (req, res) => {
+  const plan = String(req.body?.plan || '').trim();
+  if (!plans.PLAN_NAMES.includes(plan)) return res.status(400).json({ error: 'invalid_plan', allowed: plans.PLAN_NAMES });
+  let planUntil = null;
+  if (req.body?.planUntil !== undefined && req.body?.planUntil !== null && req.body?.planUntil !== '') {
+    const d = new Date(String(req.body.planUntil));
+    if (Number.isNaN(d.getTime())) return res.status(400).json({ error: 'invalid_planUntil' });
+    planUntil = d.toISOString();
+  }
+  try {
+    const r = await pool.query(
+      `UPDATE users SET plan = $2, plan_until = $3, updated_at = now() WHERE id = $1
+       RETURNING id, email, plan, plan_until`,
+      [String(req.params.userId || '').trim(), plan, plan === 'free' ? null : planUntil]
+    );
+    if (r.rowCount === 0) return res.status(404).json({ error: 'user_not_found' });
+    res.json({ id: r.rows[0].id, email: r.rows[0].email, ...plans.planInfo(r.rows[0]) });
   } catch (e) {
     if (e.code === '22P02') return res.status(404).json({ error: 'user_not_found' });
     serverError(res, e);
@@ -1027,6 +1056,18 @@ app.post('/api/v1/vehicles', auth, async (req, res) => {
   }
 
   try {
+    // Tarifgrenze (nur aktiv mit PLAN_LIMITS_ENABLED=true). Herabstufen löscht nichts, es verhindert nur neue Fahrzeuge.
+    const u = await pool.query(
+      `SELECT plan, plan_until, (SELECT COUNT(*)::int FROM vehicles WHERE user_id = $1) AS vehicle_count
+       FROM users WHERE id = $1`,
+      [req.user.sub]
+    );
+    const konto = u.rows[0] || { plan: 'free', vehicle_count: 0 };
+    const maxVehicles = plans.limitOf(konto, 'maxVehicles');
+    if (maxVehicles !== null && konto.vehicle_count >= maxVehicles) {
+      return plans.planRequired(res, 'maxVehicles', { limit: maxVehicles, plan: plans.effectivePlan(konto) });
+    }
+
     const r = await pool.query(
       `INSERT INTO vehicles (
          user_id, name, fuel_type, brand, model, year, image_url,

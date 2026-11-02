@@ -122,6 +122,7 @@ class FuelstatApi
     public function postMailTest(): array { return $this->request('POST', '/auth/mail-settings/test', []); }
     public function postMailSendNow(string $type): array { return $this->request('POST', '/auth/mail-settings/send-now', ['type' => $type]); }
     public function putUserBeta(string $userId, bool $betaTester): array { return $this->request('PUT', '/auth/users/' . rawurlencode($userId) . '/beta', ['betaTester' => $betaTester]); }
+    public function putUserPlan(string $userId, string $plan, ?string $planUntil): array { return $this->request('PUT', '/auth/users/' . rawurlencode($userId) . '/plan', ['plan' => $plan, 'planUntil' => $planUntil]); }
     public function postFeedback(string $category, string $message, ?string $page): array { return $this->request('POST', '/feedback', ['category' => $category, 'message' => $message, 'page' => $page]); }
     public function getFeedback(): array { return $this->request('GET', '/feedback'); }
     public function patchFeedback(string $id, bool $done): array { return $this->request('PATCH', '/feedback/' . rawurlencode($id), ['done' => $done]); }

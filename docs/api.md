@@ -14,7 +14,7 @@ Pfade relativ zu `/api/v1`. „Auth“: ohne = öffentlich, ✓ = angemeldet, Ad
 |---|---|---|---|
 | GET | `/health` | – | Healthcheck, enthält `registration_enabled` und `beta_phase` |
 | GET | `/db-ping` | – | Datenbank erreichbar? |
-| GET | `/whoami` | ✓ | Eigenes Konto inkl. `is_admin`, `beta_tester` |
+| GET | `/whoami` | ✓ | Eigenes Konto inkl. `is_admin`, `beta_tester`, Tarif und Rechte |
 | POST | `/auth/register` | – | Konto anlegen, liefert Token |
 | POST | `/auth/login` | – | Anmelden (bei 2FA: `mfa_required` + `mfaToken`) |
 | POST | `/auth/login/mfa` | – | Zweiter Schritt mit 2FA-Code |
@@ -23,6 +23,7 @@ Pfade relativ zu `/api/v1`. „Auth“: ohne = öffentlich, ✓ = angemeldet, Ad
 | GET | `/auth/users` | Admin | Alle Benutzer mit Aktivität |
 | GET · PATCH · DELETE | `/auth/users/:userId` | Selbst/Admin | Konto lesen, `email`/`username`/`profileImageUrl` ändern, löschen |
 | PUT | `/auth/users/:userId/beta` | Admin | Beta-Tester setzen |
+| PUT | `/auth/users/:userId/plan` | Admin | Tarif setzen (`plan`, optional `planUntil`) |
 | POST | `/auth/users/:userId/revoke-all` | Selbst/Admin | Auf allen Geräten abmelden |
 | GET | `/auth/tokens` | ✓ | Gesperrte Tokens (Admin: alle) |
 | POST | `/auth/tokens/revoke` | ✓ | Ein Token sperren (Abmelden) |
@@ -113,6 +114,16 @@ Die Endpunkte unter `/auth/users` und `/auth/tokens` sind auf den eigenen Accoun
 Admins werden über die Umgebungsvariable `ADMIN_USER_IDS` (kommagetrennte User-UUIDs) in der `.env` des Backends festgelegt. Ohne diese Variable gibt es keine Admins.
 
 Fehlende Rechte: **403** `{ "error": "forbidden" }`
+
+### Tarife (Free / Plus / Flotte)
+
+Grundgerüst für ein späteres Premium-Modell. Was ein Tarif darf, steht an einer Stelle: `backend/src/services/plans.js`.
+
+* `users.plan` (`free`, `plus`, `fleet`) und `users.plan_until` (Ende, `null` = unbefristet; danach gilt `free`). Admins setzen beides mit `PUT /auth/users/:userId/plan` bzw. in der Benutzerverwaltung.
+* `PLAN_LIMITS_ENABLED=true` in der `.env` schaltet die Grenzen ein. **Standard: aus**, dann haben alle Konten mindestens die Rechte von `plus`.
+* `GET /whoami` liefert `plan`, `planUntil`, `effectivePlan` (gerade geltender Tarif), `limitsEnabled` und `features` (z. B. `maxVehicles: 1`, `sharing: false`; `null` = unbegrenzt).
+* Verbietet der Tarif etwas, antwortet die API mit **403** `{ "error": "plan_required", "feature": "maxVehicles", "limit": 1, "plan": "free" }`. Derzeit geprüft: Anzahl Fahrzeuge beim Anlegen. Herabstufen löscht nichts.
+* Datenexport ist nie an einen Tarif gebunden (DSGVO Art. 20).
 
 ## Health & Diagnostics
 
