@@ -937,7 +937,12 @@ paths:
                   type: array
                   items:
                     $ref: "#/components/schemas/EntryCreateRequest"
+                dryRun:
+                  type: boolean
+                  description: Nur prüfen, nichts speichern (Antwort 200 mit Duplikaten und Warnungen)
       responses:
+        "200":
+          description: "Probelauf (dryRun): gleiche Felder wie 201 plus dryRun: true"
         "201":
           description: Created
           content:
@@ -955,6 +960,19 @@ paths:
                     properties:
                       fillups: { type: integer }
                       entries: { type: integer }
+                  duplicates:
+                    type: array
+                    description: Übersprungene Zeilen (type fillup|entry, index in der jeweiligen Liste)
+                    items:
+                      type: object
+                      properties:
+                        type: { type: string }
+                        index: { type: integer }
+                  warnings:
+                    type: array
+                    description: Unplausible Tachostände je Zeile (type, index und die Felder von OdometerWarning)
+                    items:
+                      type: object
         "400":
           description: nothing_to_import | too_many_rows | invalid_rows
         "401":
@@ -1864,6 +1882,20 @@ components:
         skipPrevious:
           type: boolean
 
+    OdometerWarning:
+      type: object
+      properties:
+        code:
+          type: string
+          enum: [lower_than_previous, higher_than_next, jump, below_purchase]
+        message:
+          type: string
+        refDate:
+          type: string
+          format: date
+        refKm:
+          type: integer
+
     Fillup:
       type: object
       additionalProperties: false
@@ -1884,6 +1916,11 @@ components:
         odometer_estimated:
           type: boolean
           description: Tachostand ist nur geschätzt
+        warnings:
+          type: array
+          description: Nur bei POST/PATCH – Hinweise auf einen unplausiblen Tachostand (gespeichert wird trotzdem)
+          items:
+            $ref: "#/components/schemas/OdometerWarning"
         unit:
           $ref: "#/components/schemas/FillupUnit"
         amount:

@@ -1,0 +1,113 @@
+# Automatische Prüfungen bei jedem PR und jedem Push auf main (#58).
+# - PHP: Syntax aller Dateien (php -l) und die Tests in tests/
+# - API: node --check und die Tests in backend/test gegen eine frische Postgres-Datenbank
+#   (Schema aus backend/database/postgres_init.sql, wie bei einer Neuinstallation)
+# - YAML: OpenAPI-Datei, docker-compose und Workflows müssen gültiges YAML sein
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  php:
+    name: PHP (Syntax und Tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          tools: none
+          coverage: none
+
+      - name: Syntax (php -l)
+        run: |
+          fehler=0
+          while IFS= read -r -d '' f; do
+            php -l "$f" > /dev/null || fehler=1
+          done < <(find . -name '*.php' -not -path './vendor/*' -not -path './backend/node_modules/*' -print0)
+          exit $fehler
+
+      - name: Tests
+        run: |
+          for t in tests/*.php; do
+            echo "== $t"
+            php -d zend.assertions=1 -d assert.exception=1 "$t"
+          done
+
+  api:
+    name: API (Node und Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: fuelstat
+          POSTGRES_PASSWORD: fuelstat
+          POSTGRES_DB: fuelstat_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fuelstat -d fuelstat_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://fuelstat:fuelstat@localhost:5432/fuelstat_test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Pakete installieren
+        run: npm ci
+
+      - name: Syntax (node --check)
+        run: for f in src/*.js src/services/*.js test/*.js; do node --check "$f"; done
+
+      - name: Schema anlegen
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f database/postgres_init.sql
+
+      - name: Tests
+        run: npm test
+
+  yaml:
+    name: YAML (OpenAPI, Compose, Workflows)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Gültiges YAML
+        run: |
+          python3 -c "import yaml" 2>/dev/null || python3 -m pip install --quiet --break-system-packages pyyaml
+          python3 - <<'EOF'
+          import glob, sys, yaml
+          dateien = ['docs/openapi.1.0.0.yaml', 'infra/docker-compose.yml', 'infra/docker-compose.dev.yml', '.github/dependabot.yml']
+          dateien += glob.glob('.github/workflows/*.yml') + glob.glob('.github/codeql/*.yml')
+          fehler = 0
+          for d in dateien:
+              try:
+                  yaml.safe_load(open(d, encoding='utf-8'))
+                  print('ok  ', d)
+              except Exception as e:
+                  print('FEHLER', d, e)
+                  fehler = 1
+          sys.exit(fehler)
+          EOF

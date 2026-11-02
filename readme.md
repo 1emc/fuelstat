@@ -198,6 +198,22 @@ php -S 127.0.0.1:8088                      # Frontend, dazu FUELSTAT_API_BASE_UR
 for t in tests/*.php; do php -d zend.assertions=1 $t; done   # PHP-Tests
 ```
 
+### Tests
+
+Bei jedem PR und jedem Push auf `main` laufen automatisch (`.github/workflows/tests.yml`):
+- PHP: Syntax aller Dateien und die Tests in `tests/`
+- API: `node --check` und die Tests in `backend/test/` gegen eine frische Postgres-Datenbank
+- YAML: OpenAPI-Datei, Docker-Compose-Dateien und Workflows
+
+Die API-Tests (Node-Testrunner, ohne zusätzliche Pakete) brauchen eine leere Datenbank mit dem Schema aus `postgres_init.sql`. Jeder Lauf legt eigene Testkonten an, die Datenbank muss danach nicht geleert werden. **Nie gegen die echte Datenbank laufen lassen.**
+
+```bash
+createdb fuelstat_test && psql -d fuelstat_test -f backend/database/postgres_init.sql
+cd backend && DATABASE_URL=postgresql://localhost/fuelstat_test npm test
+```
+
+Ohne `DATABASE_URL` laufen nur die Tests ohne Datenbank (z. B. die Tachostand-Prüfung).
+
 API-Doku: `docs/api.md` (Übersicht aller Endpunkte) und `docs/openapi.1.0.0.yaml`.
 
 ## Kontakt

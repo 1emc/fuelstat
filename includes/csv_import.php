@@ -210,7 +210,8 @@ function importArt(?string $wert, ?float $menge, string $standardKategorie): arr
 function importWandleUm(array $zeilen, array $zuordnung, string $standardKategorie): array
 {
     $hole = fn(array $zeile, string $feld) => isset($zuordnung[$feld]) && $zuordnung[$feld] !== '' ? ($zeile[(int)$zuordnung[$feld]] ?? null) : null;
-    $ergebnis = ['fillups' => [], 'entries' => [], 'fehler' => [], 'vorschau' => []];
+    // zeilenNr: Zeilennummer der Datei je Eintrag in fillups bzw. entries (für Hinweise aus der API-Vorschau)
+    $ergebnis = ['fillups' => [], 'entries' => [], 'fehler' => [], 'vorschau' => [], 'zeilenNr' => ['fillup' => [], 'entry' => []]];
 
     foreach ($zeilen as $i => $zeile) {
         $nr = $i + 2; // Zeilennummer in der Datei (1 = Kopfzeile)
@@ -251,6 +252,7 @@ function importWandleUm(array $zeilen, array $zuordnung, string $standardKategor
         }
 
         $zeitpunkt = $datum . 'T12:00:00.000Z';
+        $ergebnis['zeilenNr'][$art['typ']][] = $nr;
         if ($art['typ'] === 'fillup') {
             $ergebnis['fillups'][] = [
                 'filledAt' => $zeitpunkt,
@@ -273,4 +275,32 @@ function importWandleUm(array $zeilen, array $zuordnung, string $standardKategor
         }
     }
     return $ergebnis;
+}
+
+/**
+ * Probelauf des Imports in der API (#51): bereits vorhandene Zeilen und unplausible Tachostände.
+ * @return array [zeilennummer => ['art' => 'doppelt'|'warnung', 'text' => string]]
+ */
+function importPruefeVorab($api, string $vehicleId, array $umgewandelt): array
+{
+    $hinweise = [];
+    foreach (['fillup' => 'fillups', 'entry' => 'entries'] as $typ => $schluessel) {
+        foreach (array_chunk($umgewandelt[$schluessel], 500, true) as $paket) {
+            $offset = (int)array_key_first($paket);
+            $r = $api->postVehicleImport($vehicleId, $typ === 'fillup' ? array_values($paket) : [], $typ === 'entry' ? array_values($paket) : [], true);
+            foreach ($r['duplicates'] ?? [] as $d) {
+                $nr = $umgewandelt['zeilenNr'][$typ][$offset + (int)$d['index']] ?? null;
+                if ($nr !== null) {
+                    $hinweise[$nr] = ['art' => 'doppelt', 'text' => 'Bereits vorhanden, wird übersprungen'];
+                }
+            }
+            foreach ($r['warnings'] ?? [] as $w) {
+                $nr = $umgewandelt['zeilenNr'][$typ][$offset + (int)$w['index']] ?? null;
+                if ($nr !== null && !isset($hinweise[$nr])) {
+                    $hinweise[$nr] = ['art' => 'warnung', 'text' => 'Tachostand prüfen: ' . (string)($w['message'] ?? '')];
+                }
+            }
+        }
+    }
+    return $hinweise;
 }

@@ -250,7 +250,7 @@ Authorization: Bearer <jwt>
 * Einträge ohne echten Tachostand (fehlt oder geschätzt) zählen bei Kosten und Menge, schließen aber keinen Verbrauchsabschnitt ab: Ihre Menge fließt wie bei einer Teilbetankung in den nächsten vollen Abschnitt mit Tachostand. Bei gleichem Zeitpunkt stehen sie hinter den Einträgen mit Tachostand.
 * `price_per_unit` berechnet die API selbst.
 
-**Response 201**: der angelegte Eintrag mit `amount`, `unit`, `total_cost_eur`, `price_per_unit`, `is_full`, `skip_previous`, `odometer_estimated` (Felder wie bei der Liste unten).
+**Response 201**: der angelegte Eintrag mit `amount`, `unit`, `total_cost_eur`, `price_per_unit`, `is_full`, `skip_previous`, `odometer_estimated` und `warnings` (siehe „Tachostand-Prüfung“) (Felder wie bei der Liste unten).
 
 **Errors**
 
@@ -382,6 +382,23 @@ Bei aktivem 2FA antwortet `POST /auth/login` ohne `code` mit 401 `{ "error": "mf
 
 `GET /whoami` liefert zusätzlich `is_admin`.
 
+## Tachostand-Prüfung
+
+`POST`/`PATCH` auf `/fillups` und `/entries` speichern immer, liefern aber `warnings` mit, wenn der Tachostand unplausibel wirkt (z. B. nach einem Tippfehler; ein Tachotausch bleibt möglich):
+
+```json
+"warnings": [{ "code": "lower_than_previous", "refDate": "2026-02-01", "refKm": 11000, "message": "Niedriger als der Tachostand vom 01.02.2026 (11.000 km)." }]
+```
+
+| `code` | Bedeutung |
+|---|---|
+| `lower_than_previous` | kleiner als ein Eintrag an einem früheren Tag |
+| `higher_than_next` | größer als ein Eintrag an einem späteren Tag |
+| `jump` | mehr als 2.000 km und mehr als 800 km pro Tag seit dem letzten Eintrag |
+| `below_purchase` | kleiner als der Tachostand bei Anschaffung (nur ohne früheren Eintrag) |
+
+Verglichen wird mit allen echten Tachoständen des Fahrzeugs (Tankfüllungen, Ladungen, Ausgaben); fehlende und geschätzte Werte zählen nicht. Dieselben Regeln nutzt das Formular (`includes/tacho_pruefung.php`).
+
 ## Tankfüllungen: vollgetankt und Lücken
 
 `POST /fillups` übernimmt `isFull` (Standard `true`) und `skipPrevious` (Standard `false`). Eine Vollbetankung mit `skipPrevious = true` ist ein neuer Startpunkt für die Verbrauchsberechnung: Über die Lücke davor wird kein Verbrauch berechnet.
@@ -402,7 +419,9 @@ Bei aktivem 2FA antwortet `POST /auth/login` ohne `code` mit 401 `{ "error": "mf
 * `unit` je Zeile gilt nur bei Plug-in-Hybriden (`l` oder `kwh`), sonst immer die Einheit des Fahrzeugs
 * `odometerKm` darf bei Tank- und Ladevorgängen fehlen (später nachtragen)
 * Duplikate werden übersprungen: Tank- bzw. Ladevorgang mit gleichem Datum, Tachostand und gleicher Einheit (ohne Tachostand: zusätzlich gleiche Menge), Ausgabe mit gleichem Datum, Kategorie und Betrag
-* Antwort 201: `{ "imported": { "fillups", "entries" }, "skipped": { "fillups", "entries" } }`
+* Antwort 201: `{ "imported": { "fillups", "entries" }, "skipped": { "fillups", "entries" }, "duplicates": [{ type, index }], "warnings": [{ type, index, code, message, … }] }`; `index` bezieht sich auf die Position in `fillups` bzw. `entries`, `warnings` wie bei der Tachostand-Prüfung
+* `"dryRun": true`: alles prüfen, aber nichts speichern (Antwort 200 mit `dryRun: true`); die Import-Vorschau im Frontend markiert damit doppelte Zeilen und unplausible Tachostände
+* Ungültige IDs in der URL (keine UUID) liefern 404 wie unbekannte Einträge
 
 ## Fälligkeiten (Auth required)
 

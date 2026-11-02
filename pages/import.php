@@ -126,6 +126,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $schritt === 'importieren' && $umge
     }
 }
 
+// Vorschau: Probelauf in der API zeigt doppelte Zeilen und unplausible Tachostände (#51)
+$hinweise = [];
+if ($umgewandelt && isset($zuordnung['datum']) && ($umgewandelt['fillups'] || $umgewandelt['entries'])) {
+    try {
+        $hinweise = importPruefeVorab($api, $fahrzeug_id, $umgewandelt);
+    } catch (Throwable $e) {
+        // Vorschau ohne Hinweise; der eigentliche Import meldet Fehler selbst
+    }
+}
+$warnAnzahl = count(array_filter($hinweise, fn($h) => $h['art'] === 'warnung'));
+$doppeltAnzahl = count(array_filter($hinweise, fn($h) => $h['art'] === 'doppelt'));
+
 include '../includes/header.php';
 $f2 = fn($v) => $v === null ? '' : number_format((float)$v, 2, ',', '.');
 ?>
@@ -194,20 +206,24 @@ $f2 = fn($v) => $v === null ? '' : number_format((float)$v, 2, ',', '.');
                 <span class="badge text-bg-primary"><?= count($umgewandelt['fillups']) ?> <?= $begriffe['vorgaenge'] ?></span>
                 <span class="badge text-bg-success"><?= count($umgewandelt['entries']) ?> Ausgaben</span>
                 <?php if ($umgewandelt['fehler']): ?><span class="badge text-bg-danger"><?= count($umgewandelt['fehler']) ?> fehlerhafte Zeilen</span><?php endif; ?>
+                <?php if ($warnAnzahl): ?><span class="badge text-bg-warning"><?= $warnAnzahl ?> mit unplausiblem Tachostand</span><?php endif; ?>
+                <?php if ($doppeltAnzahl): ?><span class="badge text-bg-secondary"><?= $doppeltAnzahl ?> bereits vorhanden</span><?php endif; ?>
             </p>
             <div class="table-responsive mb-3" style="max-height: 420px;">
                 <table class="table table-sm table-striped align-middle">
                     <thead class="sticky-top"><tr><th>Zeile</th><th>Datum</th><th>Art</th><th>km</th><th>Menge<?= $fuelType === 'phev' ? '' : ' (' . $einheit . ')' ?></th><th>Kosten</th><th>Voll</th><th>Ort</th><th>Beschreibung</th></tr></thead>
                     <tbody>
                     <?php
-                    // Fehler zuerst, dann die ersten Zeilen
+                    // Fehler zuerst, dann Warnungen (Tachostand), dann die übrigen Zeilen
                     $vorschau = $umgewandelt['vorschau'];
-                    usort($vorschau, fn($a, $b) => [$a['fehler'] === null, $a['nr']] <=> [$b['fehler'] === null, $b['nr']]);
-                    foreach (array_slice($vorschau, 0, 100) as $z): ?>
-                        <tr class="<?= $z['fehler'] ? 'table-danger' : '' ?>">
+                    $rang = fn($z) => $z['fehler'] !== null ? 0 : (($hinweise[$z['nr']]['art'] ?? '') === 'warnung' ? 1 : 2);
+                    usort($vorschau, fn($a, $b) => [$rang($a), $a['nr']] <=> [$rang($b), $b['nr']]);
+                    foreach (array_slice($vorschau, 0, 100) as $z):
+                        $hinweis = $z['fehler'] === null ? ($hinweise[$z['nr']] ?? null) : null; ?>
+                        <tr class="<?= $z['fehler'] ? 'table-danger' : ($hinweis ? ($hinweis['art'] === 'warnung' ? 'table-warning' : 'table-secondary text-body-secondary') : '') ?>">
                             <td><?= $z['nr'] ?></td>
                             <td><?= $z['datum'] ? date('d.m.Y', strtotime($z['datum'])) : '' ?></td>
-                            <td><?= $z['fehler'] ? '<strong>' . htmlspecialchars($z['fehler']) . '</strong>' : htmlspecialchars(getKategorieName($z['kategorie'], $fuelType, $fuelType === 'phev' ? ($z['einheit'] ?? 'l') : null)) ?></td>
+                            <td><?= $z['fehler'] ? '<strong>' . htmlspecialchars($z['fehler']) . '</strong>' : htmlspecialchars(getKategorieName($z['kategorie'], $fuelType, $fuelType === 'phev' ? ($z['einheit'] ?? 'l') : null)) ?><?= $hinweis ? '<div class="small">' . htmlspecialchars($hinweis['text']) . '</div>' : '' ?></td>
                             <td><?= $z['tachostand'] !== null ? number_format($z['tachostand'], 0, ',', '.') : '' ?></td>
                             <td><?= $f2($z['menge']) ?><?= $fuelType === 'phev' && $z['menge'] !== null ? ' ' . einheitKurz($z['einheit'] ?? 'l') : '' ?></td>
                             <td><?= $z['kosten'] !== null ? $f2($z['kosten']) . ' €' : '' ?></td>
