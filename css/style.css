@@ -392,3 +392,9 @@ body.mit-tabbar {
 .rechtstext h2 {
     margin-top: 1.5rem;
 }
+
+/* Eintragsformular: berechnetes Feld (Menge × Preis = Gesamtpreis), siehe js/mengen-rechner.js */
+.form-control.feld-berechnet {
+  background-color: var(--bs-info-bg-subtle);
+  border-color: var(--bs-info-border-subtle);
+}

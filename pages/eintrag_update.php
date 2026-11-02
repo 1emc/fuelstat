@@ -37,8 +37,15 @@ if ($type === 'entry') {
 
 $datum = $_POST['datum'] ?? '';
 $tachostand = (int)($_POST['tachostand'] ?? 0);
-$menge = (float)($_POST['menge'] ?? 0);
-$kosten = (float)($_POST['kosten'] ?? 0);
+// Fehlt Menge oder Gesamtpreis, aus dem Preis pro Einheit berechnen; leer wird nie still zu 0
+$werte = mengeUndKostenAusFormular($_POST);
+if ($werte['fehler'] !== null) {
+    $_SESSION['error_message'] = $werte['fehler'];
+    header('Location: eintrag_bearbeiten.php?id=' . rawurlencode($eintrag_id) . '&fahrzeug_id=' . rawurlencode($fahrzeug_id) . '&type=fillup');
+    exit;
+}
+$menge = $werte['menge'];
+$kosten = $werte['kosten'];
 $standort = trim($_POST['standort'] ?? '');
 $vollgetankt = isset($_POST['vollgetankt']);
 $skipPrevious = isset($_POST['skip_previous']);

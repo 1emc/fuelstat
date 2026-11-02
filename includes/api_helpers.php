@@ -514,3 +514,36 @@ function getFaelligkeitenFromApi($api, string $vehicleId): array
         'tage' => $r['days'],
     ], $liste);
 }
+
+/**
+ * Menge und Gesamtpreis eines Tank- bzw. Ladevorgangs aus dem Formular. Fehlt einer der beiden Werte,
+ * wird er aus dem Preis pro Einheit berechnet. Leer ist nicht 0: ohne Angabe gibt es eine Fehlermeldung,
+ * eine bewusst eingetragene 0 (z. B. kostenloses Laden) bleibt erlaubt.
+ * @return array ['menge' => float|null, 'kosten' => float|null, 'fehler' => string|null]
+ */
+function mengeUndKostenAusFormular(array $post): array
+{
+    $zahl = function (string $key) use ($post): ?float {
+        $v = trim(str_replace(',', '.', (string)($post[$key] ?? '')));
+        return $v === '' || !is_numeric($v) ? null : (float)$v;
+    };
+    $menge = $zahl('menge');
+    $preis = $zahl('preis_pro_einheit');
+    $kosten = $zahl('kosten');
+
+    if ($kosten === null && $menge !== null && $preis !== null) {
+        $kosten = round($menge * $preis, 2);
+    }
+    if ($menge === null && $kosten !== null && $preis !== null && $preis > 0) {
+        $menge = round($kosten / $preis, 2);
+    }
+
+    $fehler = null;
+    if ($menge === null || $menge <= 0) {
+        $fehler = 'Bitte die Menge angeben (oder Gesamtpreis und Preis pro Einheit).';
+    } elseif ($kosten === null || $kosten < 0) {
+        $fehler = 'Bitte den Gesamtpreis angeben (oder den Preis pro Einheit). Für kostenloses Laden 0 eintragen.';
+    }
+    return ['menge' => $menge, 'kosten' => $kosten, 'fehler' => $fehler];
+}
+

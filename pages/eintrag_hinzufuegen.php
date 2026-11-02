@@ -54,7 +54,7 @@ foreach (einheitenFuerKraftstoff($fahrzeugKraftstoff) as $u) {
     $texteJeEinheit[$u] = [
         'menge' => 'Menge (' . einheitLang($u) . ')',
         'preis' => 'Preis pro ' . einheitLang($u) . ' (€)',
-        'preisHinweis' => 'Preis pro ' . einheitLang($u) . ' automatisch berechnet.',
+        'kurz' => einheitKurz($u),
         'voll' => $b['voll'],
         'luecke' => $b['luecke'],
         'beispiel' => $b['beispiel_ort'],
@@ -192,10 +192,10 @@ $allCategories = [
 						 class="form-control"
 						 min="0" step="0.01">
 				  <button type="button"
-						  class="btn btn-outline-success"
-						  id="btnUseMenge"
-						  title="Wert übernehmen">
-					  <i class="fas fa-circle-check"></i>
+						  class="btn btn-outline-secondary"
+						  id="info_menge"
+						  aria-label="Herkunft des Werts anzeigen">
+					  <i class="fas fa-circle-info"></i>
 				  </button>
 			  </div>
 			</div>
@@ -211,10 +211,10 @@ $allCategories = [
 						 class="form-control"
 						 min="0" step="0.001">
 				  <button type="button"
-						  class="btn btn-outline-success"
-						  id="btnUsePreis"
-						  title="Wert übernehmen">
-					  <i class="fas fa-circle-check"></i>
+						  class="btn btn-outline-secondary"
+						  id="info_preis_pro_einheit"
+						  aria-label="Herkunft des Werts anzeigen">
+					  <i class="fas fa-circle-info"></i>
 				  </button>
 			  </div>
 			</div>
@@ -230,10 +230,10 @@ $allCategories = [
 						 class="form-control"
 						 min="0" step="0.01">
 				  <button type="button"
-						  class="btn btn-outline-success"
-						  id="btnUseKosten"
-						  title="Wert übernehmen">
-					  <i class="fas fa-circle-check"></i>
+						  class="btn btn-outline-secondary"
+						  id="info_kosten"
+						  aria-label="Herkunft des Werts anzeigen">
+					  <i class="fas fa-circle-info"></i>
 				  </button>
 			  </div>
 			  <small class="form-text text-muted" id="calcHint"></small>
@@ -294,6 +294,7 @@ $allCategories = [
     </form>
 </div>
 
+<script src="<?= htmlspecialchars(assetUrl($baseUrl, 'js/mengen-rechner.js')) ?>"></script>
 <script>
 const typeSelect = document.getElementById('entryType');
 const commonSection = document.getElementById('fields_common');
@@ -357,78 +358,11 @@ document.getElementById('btnHeute').addEventListener('click', () => {
     document.getElementById('datum').value = heute;
 });
 
-// Helper – Zahl oder null
-const val = id => {
-    const n = parseFloat(document.getElementById(id).value.replace(',', '.'));
-    return isFinite(n) ? n : null;
-};
-
-// Zugriffskarte auf Felder + Buttons
-const F = {
-    menge  : {input:'menge',  btn:'btnUseMenge',  step:0.01,  hint:'Menge automatisch berechnet.'},
-    preis  : {input:'preis_pro_einheit', btn:'btnUsePreis', step:0.001, hint:<?= json_encode('Preis pro ' . einheitLang($einheit) . ' automatisch berechnet.', JSON_UNESCAPED_UNICODE) ?>},
-    kosten : {input:'kosten', btn:'btnUseKosten', step:0.01,  hint:'Gesamtpreis automatisch berechnet.'}
-};
-
-// Vorschlag in placeholder setzen und Button aktivieren
-function suggest(key, value, hintText) {
-    const {input, btn} = F[key];
-    const inp = document.getElementById(input);
-    inp.placeholder = value;
-    document.getElementById(btn).disabled = false;
-    document.getElementById('calcHint').textContent = hintText;
-}
-
-// Alle Placeholder + Buttons zurücksetzen
-function resetSuggestions() {
-    Object.values(F).forEach(({input, btn}) => {
-        const inp = document.getElementById(input);
-        inp.placeholder = '';
-        document.getElementById(btn).disabled = true;   // Button sperren
-    });
-    document.getElementById('calcHint').textContent = '';
-}
-
-// Übernahme-Buttons
-Object.values(F).forEach(({input, btn}) => {
-    const button = document.getElementById(btn);
-    button.disabled = true;                               // initial gesperrt
-    button.addEventListener('click', () => {
-        const inp = document.getElementById(input);
-        if (inp.placeholder) {
-            inp.value = inp.placeholder;
-            resetSuggestions();                           // nach Übernahme alles zurücksetzen
-            recalc();                                     // prüfen, ob neue Ableitungen möglich sind
-        }
-    });
-});
-
-// Hauptberechnung
-function recalc() {
-    resetSuggestions();
-
-    const menge  = val('menge');
-    const preis  = val('preis_pro_einheit');
-    const kosten = val('kosten');
-
-    // 1) Menge + Preis → Kosten
-    if (menge !== null && preis !== null && kosten === null) {
-        suggest('kosten', (menge * preis).toFixed(2), F.kosten.hint);
-    }
-    // 2) Menge + Kosten → Preis
-    else if (menge !== null && kosten !== null && preis === null) {
-        suggest('preis', (kosten / menge).toFixed(3), F.preis.hint);
-    }
-    // 3) Preis + Kosten → Menge
-    else if (preis !== null && kosten !== null && menge === null) {
-        suggest('menge', (kosten / preis).toFixed(2), F.menge.hint);
-    }
-}
-
-// Listener auf Eingabefelder
-['menge','preis_pro_einheit','kosten'].forEach(id =>
-    document.getElementById(id).addEventListener('input', recalc)
-);
+// Menge × Preis = Gesamtpreis: das dritte Feld wird berechnet und direkt eingetragen (js/mengen-rechner.js).
+// Erst nach dem Laden starten, weil Bootstrap (für die Erklärung am Info-Knopf) im Footer geladen wird.
+let mengenEinheit = <?= json_encode(einheitKurz($einheit)) ?>;
+let rechner = null;
+window.addEventListener('DOMContentLoaded', () => { rechner = mengenRechner({ einheit: () => mengenEinheit }); });
 
 typeSelect.addEventListener('change', toggleFields);
 
@@ -507,7 +441,7 @@ function zeigeTankstellen(stations, mitPreis, ortHinweis) {
         li.addEventListener('click', () => {
             document.getElementById('standort').value = eintrag;
             if (preis) {
-                document.getElementById('preis_pro_einheit').value = preis;
+                if (rechner) rechner.setze('preis', preis);
             }
             setTimeout(() => vorschlaege.replaceChildren(), 2000);
         });
@@ -541,7 +475,8 @@ document.querySelectorAll('input[name="einheit"]').forEach(radio => radio.addEve
     document.getElementById('vollLabel').textContent = t.voll;
     document.getElementById('lueckeLabel').textContent = t.luecke;
     document.getElementById('standort').placeholder = t.beispiel;
-    F.preis.hint = t.preisHinweis;
+    mengenEinheit = t.kurz;
+    if (rechner) rechner.aktualisiere();
     stationsArt = t.stationsArt;
     if (btnSuche) { btnSuche.title = t.stationen; btnSuche.setAttribute('aria-label', t.stationen); }
     document.getElementById('kraftstoffSorte').hidden = radio.value === 'kwh';
