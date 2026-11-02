@@ -671,3 +671,34 @@ body.mit-tabbar {
         animation: none;
     }
 }
+
+/* Allgemein (#48): nächster Termin, Mini-Diagramm */
+.naechster-termin {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .75rem 1rem;
+    border-radius: .75rem;
+    border-left: .3rem solid;
+    background: var(--bs-tertiary-bg);
+}
+
+.naechster-termin > i {
+    font-size: 1.3rem;
+}
+
+.diagramm-mini {
+    position: relative;
+    height: 170px;
+}
+
+/* Einstellungen (#48): Angaben als Karten */
+.angaben-karte dt {
+    font-weight: 400;
+    color: var(--bs-secondary-color);
+    font-size: .875rem;
+}
+
+.angaben-karte dd {
+    margin-bottom: .6rem;
+}

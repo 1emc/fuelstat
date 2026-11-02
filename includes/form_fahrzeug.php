@@ -317,5 +317,20 @@ $abschnittEnde = fn() => $istNeu ? '</section>' : '</div></div></div>';
   });
 
   antrieb();
+
+  // Bearbeiten: Sprung aus "Einstellungen" (#48), z. B. fahrzeug_bearbeiten.php?id=…#termine öffnet diesen Abschnitt
+  if (!schritte.length && location.hash) {
+    var ziel = document.getElementById('abschnitt_' + location.hash.slice(1).replace(/[^a-z]/g, ''));
+    if (ziel) {
+      window.addEventListener('DOMContentLoaded', function () {
+        if (!window.bootstrap) return;
+        document.querySelectorAll('#fahrzeugAbschnitte .accordion-collapse.show').forEach(function (offen) {
+          if (offen !== ziel) bootstrap.Collapse.getOrCreateInstance(offen, { toggle: false }).hide();
+        });
+        bootstrap.Collapse.getOrCreateInstance(ziel, { toggle: false }).show();
+        ziel.closest('.accordion-item').scrollIntoView({ block: 'start' });
+      });
+    }
+  }
 })();
 </script>

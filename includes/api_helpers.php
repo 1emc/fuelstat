@@ -51,6 +51,20 @@ function istBetaPhase(): bool
  */
 function getMergedEintraegeFromApi($api, string $vehicleId): array
 {
+    // Die Fahrzeugseite braucht die Einträge in mehreren Reitern: einmal pro Seitenaufruf laden (#89)
+    // WeakMap: der Zwischenspeicher hängt am API-Objekt und verschwindet mit ihm (keine veralteten Daten)
+    static $zwischenspeicher = null;
+    $zwischenspeicher ??= new WeakMap();
+    $jeFahrzeug = $zwischenspeicher[$api] ?? [];
+    if (!isset($jeFahrzeug[$vehicleId])) {
+        $jeFahrzeug[$vehicleId] = ladeMergedEintraegeFromApi($api, $vehicleId);
+        $zwischenspeicher[$api] = $jeFahrzeug;
+    }
+    return $jeFahrzeug[$vehicleId];
+}
+
+function ladeMergedEintraegeFromApi($api, string $vehicleId): array
+{
     $fillups = [];
     $entries = [];
     try {
