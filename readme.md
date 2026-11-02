@@ -70,7 +70,7 @@ docker compose up -d --build
 
 Die API läuft danach auf `127.0.0.1:3000`, Adminer auf `127.0.0.1:8080` (beides nur lokal erreichbar). Die API läuft im `prod`-Container: Code und Pakete stecken im Image, ohne Root-Rechte. Beim allerersten Start legt Postgres das komplette Schema aus `backend/database/postgres_init.sql` automatisch an.
 
-Wird `JWT_SECRET` später ohne eigenen `MAIL_ENCRYPTION_KEY` geändert, müssen die Benutzer ihr SMTP-Passwort neu eingeben.
+Wird `JWT_SECRET` später ohne eigenen `MAIL_ENCRYPTION_KEY` geändert, lassen sich gespeicherte SMTP-Passwörter und 2FA-Schlüssel nicht mehr entschlüsseln: Benutzer müssen ihr SMTP-Passwort neu eingeben, und 2FA muss für betroffene Konten zurückgesetzt werden. Deshalb `MAIL_ENCRYPTION_KEY` am besten von Anfang an fest setzen.
 
 ### 2. Frontend (PHP)
 

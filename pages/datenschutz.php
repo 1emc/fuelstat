@@ -25,7 +25,7 @@ $email = ($b['email'] ?? '') !== '' ? htmlspecialchars(str_replace('@', '[at]', 
   <p>Für dein Konto speichere ich deine E-Mail-Adresse, optional einen Benutzernamen und ein Profilbild sowie den Zeitpunkt der Registrierung. Rechtsgrundlage ist die Nutzung der App (Art. 6 Abs. 1 lit. b DSGVO).</p>
   <ul>
     <li><strong>Passwort:</strong> wird nie im Klartext gespeichert, sondern nur als bcrypt-Hash. Auch ich als Betreiber kann es nicht auslesen.</li>
-    <li><strong>Zwei-Faktor-Authentifizierung (optional):</strong> der geheime Schlüssel für deine Authenticator-App wird in der Datenbank gespeichert, um die Codes zu prüfen.</li>
+    <li><strong>Zwei-Faktor-Authentifizierung (optional):</strong> der geheime Schlüssel für deine Authenticator-App wird verschlüsselt (AES-256) in der Datenbank gespeichert, um die Codes zu prüfen.</li>
     <li><strong>Anmeldung:</strong> nach dem Login erhält dein Browser ein Sitzungs-Cookie und ein Anmelde-Cookie; die Anmeldung (Token) läuft nach 7 Tagen ab. Beim Abmelden wird das Token in einer Sperrliste vermerkt, die mit deinem Konto gelöscht wird. Fehlgeschlagene Anmeldeversuche werden zum Schutz vor Angriffen kurzzeitig gezählt (nur im Arbeitsspeicher, höchstens 15 Minuten).</li>
     <li><strong>Aktivität:</strong> Zeitpunkt der letzten Anmeldung und der letzten Nutzung (höchstens stündlich aktualisiert), damit ich als Betreiber sehe, ob Konten noch genutzt werden.</li>
     <li><strong>Beta-Phase:</strong> während der Beta wird dein Konto als „Beta-Tester“ gekennzeichnet.</li>
@@ -65,7 +65,7 @@ $email = ($b['email'] ?? '') !== '' ? htmlspecialchars(str_replace('@', '[at]', 
   <p>Deine Daten bleiben gespeichert, solange du dein Konto hast. Unter „Profil bearbeiten“ kannst du dein Konto jederzeit selbst löschen; dabei werden alle Fahrzeuge, Einträge, Einstellungen und hochgeladenen Bilder sofort entfernt<?= !empty($b['backup_tage']) ? '. Aus Datensicherungen verschwinden sie spätestens nach ' . (int)$b['backup_tage'] . ' Tagen' : '' ?>. Vorher kannst du deine Einträge als CSV exportieren.</p>
 
   <h2 class="h5 mt-4">11. Sicherheit</h2>
-  <p>Die Verbindung ist durchgehend per HTTPS verschlüsselt. Passwörter werden nur als Hash gespeichert, Passwörter für eigene Mailserver verschlüsselt. Optional kannst du dein Konto mit einem zweiten Faktor (Authenticator-App) schützen.</p>
+  <p>Die Verbindung ist durchgehend per HTTPS verschlüsselt. Passwörter werden nur als Hash gespeichert, Passwörter für eigene Mailserver und die Schlüssel der Zwei-Faktor-Authentifizierung verschlüsselt. Optional kannst du dein Konto mit einem zweiten Faktor (Authenticator-App) schützen.</p>
 
   <h2 class="h5 mt-4">12. Deine Rechte</h2>
   <p>Du hast das Recht auf Auskunft über deine gespeicherten Daten (Art. 15 DSGVO), auf Berichtigung (Art. 16), Löschung (Art. 17), Einschränkung der Verarbeitung (Art. 18), Datenübertragbarkeit (Art. 20) und Widerspruch gegen Verarbeitungen auf Grundlage berechtigter Interessen (Art. 21). Eine erteilte Einwilligung, etwa für den Standort, kannst du jederzeit in deinem Browser widerrufen. Schreib mir dazu einfach an <?= $email ?>.</p>

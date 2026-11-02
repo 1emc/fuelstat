@@ -10,7 +10,7 @@ const path = require('path');
 const fs = require('fs');
 const { getVehicleStats, FUEL_TYPES, unitForFuelType, unitsForFuelType } = require('./services/stats');
 const { getVehicleReminders } = require('./services/reminders');
-const { encryptSecret, sendUserMail, resolveSmtpHost, ALLOWED_PORTS, loadDefaultSmtp, withDefaultSmtp } = require('./services/mail');
+const { encryptSecret, decryptSecret, sendUserMail, resolveSmtpHost, ALLOWED_PORTS, loadDefaultSmtp, withDefaultSmtp } = require('./services/mail');
 const notifier = require('./services/notifier');
 
 // Media Upload Konfiguration
@@ -302,6 +302,32 @@ function totpCode(secretBase32, counter) {
 }
 
 // Erlaubt ±1 Zeitfenster (je 30 s) für leicht abweichende Uhren
+// 2FA-Secrets liegen verschlüsselt in der Datenbank (AES-256-GCM, eigener Schlüssel 'mfa').
+// Ältere, noch unverschlüsselte Werte werden beim Start umgewandelt (encryptLegacyMfaSecrets).
+function storeMfaSecret(secretBase32) {
+  return encryptSecret(secretBase32, 'mfa');
+}
+
+function readMfaSecret(stored) {
+  if (!stored) return null;
+  if (!String(stored).startsWith('v1:')) return String(stored);
+  try {
+    return decryptSecret(stored, 'mfa');
+  } catch (e) {
+    // Falscher Schlüssel (z. B. JWT_SECRET ohne MAIL_ENCRYPTION_KEY geändert): 2FA-Codes gelten als falsch
+    console.error('[mfa] Secret nicht entschlüsselbar:', e.message);
+    return null;
+  }
+}
+
+async function encryptLegacyMfaSecrets() {
+  const r = await pool.query("SELECT id, mfa_secret FROM users WHERE mfa_secret IS NOT NULL AND mfa_secret NOT LIKE 'v1:%'");
+  for (const row of r.rows) {
+    await pool.query('UPDATE users SET mfa_secret = $1 WHERE id = $2 AND mfa_secret = $3', [storeMfaSecret(row.mfa_secret), row.id, row.mfa_secret]);
+  }
+  if (r.rowCount) console.log(`[mfa] ${r.rowCount} 2FA-Secret(s) verschlüsselt`);
+}
+
 function verifyTotp(secretBase32, code) {
   const given = String(code || '').replace(/\s/g, '');
   if (!secretBase32 || !/^\d{6}$/.test(given)) return false;
@@ -520,7 +546,7 @@ app.post('/api/v1/auth/login', async (req, res) => {
       }
       const mfaKey = `mfa:${user.id}`;
       if (isLockedOut(mfaKey, MFA_MAX_FAILURES)) return tooManyAttempts(res);
-      if (!verifyTotp(user.mfa_secret, req.body.code)) {
+      if (!verifyTotp(readMfaSecret(user.mfa_secret), req.body.code)) {
         recordFailure(mfaKey);
         return res.status(401).json({ error: 'invalid_mfa_code' });
       }
@@ -554,7 +580,7 @@ app.post('/api/v1/auth/login/mfa', async (req, res) => {
     );
     if (r.rowCount === 0 || !r.rows[0].mfa_enabled) return res.status(401).json({ error: 'invalid_mfa_token' });
     const user = r.rows[0];
-    if (!verifyTotp(user.mfa_secret, req.body?.code)) {
+    if (!verifyTotp(readMfaSecret(user.mfa_secret), req.body?.code)) {
       recordFailure(mfaKey);
       return res.status(401).json({ error: 'invalid_mfa_code' });
     }
@@ -610,7 +636,7 @@ app.post('/api/v1/auth/mfa/setup', auth, async (req, res) => {
     if (r.rows[0].mfa_enabled) return res.status(409).json({ error: 'mfa_already_enabled' });
 
     const secret = base32Encode(randomBytes(20));
-    await pool.query('UPDATE users SET mfa_secret = $1, updated_at = now() WHERE id = $2', [secret, req.user.sub]);
+    await pool.query('UPDATE users SET mfa_secret = $1, updated_at = now() WHERE id = $2', [storeMfaSecret(secret), req.user.sub]);
     const label = encodeURIComponent(`Fuelstat:${r.rows[0].email}`);
     res.json({
       secret,
@@ -630,7 +656,7 @@ app.post('/api/v1/auth/mfa/enable', auth, async (req, res) => {
     if (!r.rows[0].mfa_secret) return res.status(400).json({ error: 'mfa_not_set_up' });
     const mfaKey = `mfa:${req.user.sub}`;
     if (isLockedOut(mfaKey, MFA_MAX_FAILURES)) return tooManyAttempts(res);
-    if (!verifyTotp(r.rows[0].mfa_secret, req.body?.code)) {
+    if (!verifyTotp(readMfaSecret(r.rows[0].mfa_secret), req.body?.code)) {
       recordFailure(mfaKey);
       return res.status(400).json({ error: 'invalid_mfa_code' });
     }
@@ -652,7 +678,7 @@ app.post('/api/v1/auth/mfa/disable', auth, async (req, res) => {
     const mfaKey = `mfa:${req.user.sub}`;
     if (isLockedOut(mfaKey, MFA_MAX_FAILURES)) return tooManyAttempts(res);
     const ok = await bcrypt.compare(String(req.body?.password || ''), r.rows[0].password_hash);
-    if (!ok || !verifyTotp(r.rows[0].mfa_secret, req.body?.code)) {
+    if (!ok || !verifyTotp(readMfaSecret(r.rows[0].mfa_secret), req.body?.code)) {
       recordFailure(mfaKey);
       return res.status(ok ? 400 : 401).json({ error: ok ? 'invalid_mfa_code' : 'invalid_current_password' });
     }
@@ -2487,5 +2513,6 @@ app.use((error, req, res, next) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Backend V2 läuft auf Port ${PORT}`);
+  encryptLegacyMfaSecrets().catch((e) => console.error('[mfa] Verschlüsseln fehlgeschlagen:', e.message));
   notifier.startNotifier(pool);
 });
