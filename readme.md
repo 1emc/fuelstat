@@ -21,6 +21,7 @@ Fuelstat ist eine Web-App, mit der du Tankfüllungen, Ladevorgänge und alle and
 - Plug-in-Hybride: Tanken und Laden im selben Fahrzeug, Verbrauch getrennt in l/100 km und kWh/100 km, gemeinsame Energiekosten und Stromanteil; Tank und Akku als eigene Angaben
 - Tankstellen in der Nähe samt aktuellem Preis (Tankerkönig), beim Laden Ladestationen mit Leistung und Steckertypen (Open Charge Map); der zuletzt bezahlte kWh-Preis an einer Station wird vorgeschlagen
 - Andere Ausgaben (Versicherung, Werkstatt, Inspektion, Steuer, Reparatur, Reifen, TÜV, Wartung, Dekor) und Fahrten
+- Eintragsliste je Monat mit Summe, Filter nach Art (Tanken, Laden, Ausgaben, Fahrten, km-Notizen), Suche nach Ort oder Beschreibung, Aktionen im Menü je Eintrag
 - Alle Einträge bearbeiten und löschen (Tankfüllungen innerhalb von 14 Tagen)
 
 **Auswertungen**
