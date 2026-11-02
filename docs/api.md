@@ -212,6 +212,24 @@ Authorization: Bearer <jwt>
 * 401: `missing_token` | `invalid_token`
 * 500: `server_error`
 
+
+**Zusatzangaben (#45, alle optional, auch bei `PATCH /vehicles/:vehicleId`)**
+
+| Feld | Typ | Hinweis |
+|---|---|---|
+| `licensePlate` | Text, max. 15 | wird in Großbuchstaben gespeichert |
+| `vin` | Text, max. 17 | Fahrgestellnummer, ohne Leerzeichen |
+| `firstRegistration` | Datum `YYYY-MM-DD` | ohne TÜV-Eintrag: erster TÜV nach 36 Monaten |
+| `purchaseDate`, `saleDate` | Datum | |
+| `purchasePrice`, `salePrice` | Betrag ≥ 0 | |
+| `serviceIntervalMonths` (1–60), `serviceIntervalKm` (1.000–100.000) | Ganzzahl | ersetzt 12 Monate / 15.000 km bei den Fälligkeiten |
+| `oilIntervalMonths`, `oilIntervalKm` | Ganzzahl | |
+| `insuranceCompany`, `insurancePremium`, `insuranceDueMonth` (1–12) | | mit Monat: Erinnerung auch ohne Eintrag |
+| `taxAmount`, `taxDueMonth` (1–12) | | mit Monat: Erinnerung auch ohne Eintrag |
+| `tireSizeSummer`, `tireSizeWinter` | Text, max. 30 | |
+
+`null` bzw. leer löscht einen Wert; ungültige Werte liefern 400 `invalid_<feld>` (z. B. `invalid_taxDueMonth`). Antworten enthalten die Felder als Spalten (`license_plate`, `first_registration`, …); Datumsfelder als `YYYY-MM-DD`.
+
 ### GET /vehicles
 
 Listet alle Fahrzeuge des Users, sortiert nach `sort_order`, danach neueste zuerst. Felder wie bei `POST /vehicles`.
@@ -425,7 +443,7 @@ Verglichen wird mit allen echten Tachoständen des Fahrzeugs (Tankfüllungen, La
 
 ## Fälligkeiten (Auth required)
 
-`GET /vehicles/:vehicleId/reminders` – Liste mit `title`, `category`, `last`, `due_date`, `due_km`, `status` (`ok`, `bald`, `ueberfaellig`, `unbekannt`) und `days`. Regeln: TÜV alle 24 Monate, Wartung/Inspektion alle 12 Monate oder 15.000 km, Versicherung und Steuer jährlich, jeweils ab dem letzten Eintrag. „bald“ = innerhalb der Vorlaufzeit aus den Mail-Einstellungen (Standard 30 Tage) oder weniger als 1.000 km.
+`GET /vehicles/:vehicleId/reminders` – Liste mit `title`, `category`, `last`, `due_date`, `due_km`, `status` (`ok`, `bald`, `ueberfaellig`, `unbekannt`), `days` und `source` (`eintrag`, `erstzulassung`, `faelligkeitsmonat`). Regeln: TÜV alle 24 Monate, Wartung/Inspektion alle 12 Monate oder 15.000 km (bzw. das Intervall des Fahrzeugs), Versicherung und Steuer jährlich, jeweils ab dem letzten Eintrag. Ohne TÜV-Eintrag zählt die Erstzulassung (+36 Monate, danach +24); ist für Versicherung oder Steuer ein Fälligkeitsmonat hinterlegt, gilt der nächste 1. dieses Monats. „bald“ = innerhalb der Vorlaufzeit aus den Mail-Einstellungen (Standard 30 Tage) oder weniger als 1.000 km.
 
 ## E-Mail-Benachrichtigungen (Auth required)
 

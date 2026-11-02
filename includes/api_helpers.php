@@ -449,7 +449,65 @@ function fahrzeugDatenAusPost(array $post): array
         'odometerKm' => $optionalInt('odometerKm'),
         'tankCapacity' => $tank === '' ? null : (float)$tank,
         'batteryCapacity' => $akku === '' ? null : (float)$akku,
+    ] + fahrzeugZusatzAusPost($post);
+}
+
+/** Zusatzangaben zum Fahrzeug (#45): Formularfeld => [API-Name, Typ, Beschriftung für Fehlermeldungen] */
+function fahrzeugZusatzFelder(): array
+{
+    return [
+        'licensePlate' => ['text', 'Kennzeichen'],
+        'vin' => ['text', 'FIN'],
+        'firstRegistration' => ['datum', 'Erstzulassung'],
+        'purchaseDate' => ['datum', 'Kaufdatum'],
+        'purchasePrice' => ['zahl', 'Kaufpreis'],
+        'saleDate' => ['datum', 'Verkaufsdatum'],
+        'salePrice' => ['zahl', 'Verkaufspreis'],
+        'serviceIntervalMonths' => ['ganzzahl', 'Wartungsintervall (Monate)'],
+        'serviceIntervalKm' => ['ganzzahl', 'Wartungsintervall (km)'],
+        'oilIntervalMonths' => ['ganzzahl', 'Ölwechsel (Monate)'],
+        'oilIntervalKm' => ['ganzzahl', 'Ölwechsel (km)'],
+        'insuranceCompany' => ['text', 'Versicherung'],
+        'insurancePremium' => ['zahl', 'Versicherungsbeitrag'],
+        'insuranceDueMonth' => ['ganzzahl', 'Fälligkeit Versicherung'],
+        'taxAmount' => ['zahl', 'Kfz-Steuer'],
+        'taxDueMonth' => ['ganzzahl', 'Fälligkeit Kfz-Steuer'],
+        'tireSizeSummer' => ['text', 'Reifengröße Sommer'],
+        'tireSizeWinter' => ['text', 'Reifengröße Winter'],
     ];
+}
+
+/** Zusatzangaben aus dem Formular; leere Felder werden als null gesendet (= löschen). */
+function fahrzeugZusatzAusPost(array $post): array
+{
+    $daten = [];
+    foreach (fahrzeugZusatzFelder() as $feld => [$typ]) {
+        $wert = trim((string)($post[$feld] ?? ''));
+        if ($wert === '') {
+            $daten[$feld] = null;
+        } elseif ($typ === 'zahl') {
+            $daten[$feld] = is_numeric(str_replace(',', '.', $wert)) ? (float)str_replace(',', '.', $wert) : $wert;
+        } elseif ($typ === 'ganzzahl') {
+            $daten[$feld] = ctype_digit($wert) ? (int)$wert : $wert;
+        } else {
+            $daten[$feld] = $wert;
+        }
+    }
+    return $daten;
+}
+
+/** Verständliche Meldung für Fehler der Fahrzeug-API (z. B. invalid_taxDueMonth) */
+function fahrzeugFehlerText(Throwable $e): string
+{
+    $code = $e->getMessage();
+    if (str_starts_with($code, 'invalid_')) {
+        $feld = substr($code, 8);
+        $namen = array_map(fn($f) => $f[1], fahrzeugZusatzFelder()) + ['year' => 'Baujahr', 'odometerKm' => 'Tachostand', 'tankCapacity' => 'Tank-/Akkugröße', 'batteryCapacity' => 'Akkugröße', 'name' => 'Name'];
+        if (isset($namen[$feld])) {
+            return 'Bitte prüfen: ' . $namen[$feld] . '.';
+        }
+    }
+    return tarifHinweis($e) ?? $code;
 }
 
 /**
@@ -530,6 +588,7 @@ function getFaelligkeitenFromApi($api, string $vehicleId): array
         'faellig_km' => $r['due_km'],
         'status' => $r['status'],
         'tage' => $r['days'],
+        'quelle' => $r['source'] ?? null, // eintrag | erstzulassung | faelligkeitsmonat (#45)
     ], $liste);
 }
 

@@ -18,6 +18,7 @@ $kraftstoffTexte = getKraftstoffOptionen() + ['petrol' => 'Benzin'];
 
 // Marke, Modell, Baujahr, Kraftstoff und Tank- bzw. Akkugröße als eine Zeile
 $fahrzeugDetails = array_filter([
+    $fahrzeug['license_plate'] ?? '',
     trim(($fahrzeug['brand'] ?? '') . ' ' . ($fahrzeug['model'] ?? '')),
     !empty($fahrzeug['year']) ? 'Baujahr ' . (int)$fahrzeug['year'] : '',
     $kraftstoffTexte[$fuel_type] ?? ucfirst((string)$fuel_type),
@@ -121,8 +122,14 @@ $eintragUrl = '../pages/eintrag_hinzufuegen.php?fahrzeug_id=' . urlencode($fahrz
                             <div class="small text-body-secondary">
                                 <?php if ($f['faellig_datum']): ?>
                                     fällig am <?= date('d.m.Y', strtotime($f['faellig_datum'])) ?><?php if ($f['faellig_km']): ?> oder bei <?= number_format($f['faellig_km'], 0, ',', '.') ?> km<?php endif; ?>
-                                    <br>zuletzt <?= date('d.m.Y', strtotime($f['letzte'])) ?><?php if ($letzter && !empty($letzter['tachostand'])): ?> bei <?= number_format((int)$letzter['tachostand'], 0, ',', '.') ?> km<?php endif; ?>
-                                    <?php if ($letzter && !empty($letzter['beschreibung'])): ?> · <?= htmlspecialchars($letzter['beschreibung']) ?><?php endif; ?>
+                                    <?php if (!empty($f['letzte'])): ?>
+                                        <br>zuletzt <?= date('d.m.Y', strtotime($f['letzte'])) ?><?php if ($letzter && !empty($letzter['tachostand'])): ?> bei <?= number_format((int)$letzter['tachostand'], 0, ',', '.') ?> km<?php endif; ?>
+                                        <?php if ($letzter && !empty($letzter['beschreibung'])): ?> · <?= htmlspecialchars($letzter['beschreibung']) ?><?php endif; ?>
+                                    <?php elseif (($f['quelle'] ?? null) === 'erstzulassung'): ?>
+                                        <br>berechnet aus der Erstzulassung
+                                    <?php elseif (($f['quelle'] ?? null) === 'faelligkeitsmonat'): ?>
+                                        <br>laut Fahrzeugangaben
+                                    <?php endif; ?>
                                 <?php else: ?>
                                     <a href="<?= htmlspecialchars($eintragUrl) ?>&kategorie=<?= urlencode($f['kategorie']) ?>">Letzten Termin erfassen</a>, um erinnert zu werden
                                 <?php endif; ?>

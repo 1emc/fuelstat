@@ -14,6 +14,7 @@ const { encryptSecret, decryptSecret, sendUserMail, resolveSmtpHost, ALLOWED_POR
 const notifier = require('./services/notifier');
 const plans = require('./services/plans');
 const { checkOdometer, loadOdometerPoints, odometerWarnings } = require('./services/odometer');
+const { VEHICLE_EXTRA_COLUMNS, parseVehicleExtras } = require('./services/vehicleFields');
 
 // Media Upload Konfiguration
 // Standard-Uploadpfad: im Backend-Projektordner unter ../uploads (z. B. /srv/www/.../uploads)
@@ -95,6 +96,8 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
   throw new Error('JWT_SECRET fehlt oder ist zu kurz');
 }
 
+// DATE-Spalten (z. B. Erstzulassung) als 'YYYY-MM-DD' liefern, nicht als Date mit Zeitzonenverschiebung
+require('pg').types.setTypeParser(1082, (v) => v);
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 // Upload-Verzeichnis erstellen falls nicht vorhanden
@@ -1085,6 +1088,9 @@ app.post('/api/v1/vehicles', auth, async (req, res) => {
   if (!Number.isFinite(sortOrder)) {
     return res.status(400).json({ error: 'invalid_sortOrder' });
   }
+  // Zusatzangaben (#45): Kennzeichen, Erstzulassung, Kauf, Intervalle, Versicherung, Steuer, Reifen
+  const extras = parseVehicleExtras(req.body);
+  if (extras.error) return res.status(400).json({ error: extras.error });
 
   try {
     // Tarifgrenze (nur aktiv mit PLAN_LIMITS_ENABLED=true). Herabstufen löscht nichts, es verhindert nur neue Fahrzeuge.
@@ -1106,10 +1112,21 @@ app.post('/api/v1/vehicles', auth, async (req, res) => {
        )
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING id, name, fuel_type, brand, model, year, image_url,
-                 odometer_km, mileage_km, tank_capacity, battery_capacity, sort_order,
+                 odometer_km, mileage_km, tank_capacity, battery_capacity, sort_order, ${VEHICLE_EXTRA_COLUMNS},
                  created_at, updated_at`,
       [req.user.sub, name, fuelType, brand, model, year, imageUrl, odometerKm, mileageKm, tankCapacity, batteryCapacity, sortOrder]
     );
+    const cols = Object.keys(extras.values);
+    if (cols.length) {
+      const u2 = await pool.query(
+        `UPDATE vehicles SET ${cols.map((c, i) => `${c} = $${i + 3}`).join(', ')} WHERE id = $1 AND user_id = $2
+         RETURNING id, name, fuel_type, brand, model, year, image_url,
+                   odometer_km, mileage_km, tank_capacity, battery_capacity, sort_order, ${VEHICLE_EXTRA_COLUMNS},
+                   created_at, updated_at`,
+        [r.rows[0].id, req.user.sub, ...cols.map((c) => extras.values[c])]
+      );
+      return res.status(201).json(u2.rows[0]);
+    }
     res.status(201).json(r.rows[0]);
   } catch (e) {
     serverError(res, e);
@@ -1121,7 +1138,7 @@ app.get('/api/v1/vehicles', auth, async (req, res) => {
   try {
     const r = await pool.query(
       `SELECT id, name, fuel_type, brand, model, year, image_url,
-              odometer_km, mileage_km, tank_capacity, battery_capacity, sort_order,
+              odometer_km, mileage_km, tank_capacity, battery_capacity, sort_order, ${VEHICLE_EXTRA_COLUMNS},
               created_at, updated_at
        FROM vehicles
        WHERE user_id = $1
@@ -1155,6 +1172,7 @@ app.get('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
          tank_capacity,
          battery_capacity,
          sort_order,
+         ${VEHICLE_EXTRA_COLUMNS},
          created_at,
          updated_at
        FROM vehicles
@@ -1218,8 +1236,11 @@ app.patch('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
   if (sortOrder !== undefined && !Number.isFinite(sortOrder)) {
     return res.status(400).json({ error: 'invalid_sortOrder' });
   }
+  const extras = parseVehicleExtras(req.body);
+  if (extras.error) return res.status(400).json({ error: extras.error });
 
   if (
+    Object.keys(extras.values).length === 0 &&
     name === undefined &&
     fuelType === undefined &&
     brand === undefined &&
@@ -1294,6 +1315,10 @@ app.patch('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
       fields.push(`sort_order = $${idx++}`);
       values.push(sortOrder);
     }
+    for (const [col, value] of Object.entries(extras.values)) {
+      fields.push(`${col} = $${idx++}`);
+      values.push(value);
+    }
 
     fields.push(`updated_at = now()`);
     values.push(vehicleId);
@@ -1304,7 +1329,7 @@ app.patch('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
        SET ${fields.join(', ')}
        WHERE id = $${idx++} AND user_id = $${idx}
        RETURNING id, name, fuel_type, brand, model, year, image_url,
-                 odometer_km, mileage_km, tank_capacity, battery_capacity, sort_order,
+                 odometer_km, mileage_km, tank_capacity, battery_capacity, sort_order, ${VEHICLE_EXTRA_COLUMNS},
                  created_at, updated_at`,
       values
     );

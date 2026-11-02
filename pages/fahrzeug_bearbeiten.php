@@ -18,8 +18,8 @@ $formAction = 'fahrzeug_update.php';
 $abbrechenUrl = 'fahrzeug_detail.php?id=' . urlencode($fahrzeug_id);
 ?>
 
-<div class="container mt-5">
-    <h2>Fahrzeug bearbeiten</h2>
+<div class="container mt-3 mt-lg-5" style="max-width: 820px;">
+    <h1 class="h3 d-none d-lg-block mb-3">Fahrzeug bearbeiten</h1>
     <?php include '../includes/form_fahrzeug.php'; ?>
 
     <div class="card border-danger mt-5 mb-4">

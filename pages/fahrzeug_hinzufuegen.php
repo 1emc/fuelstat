@@ -8,8 +8,8 @@ $formAction = 'fahrzeug_speichern.php';
 $abbrechenUrl = '../index.php';
 ?>
 
-<div class="container mt-5">
-    <h2>Fahrzeug hinzufügen</h2>
+<div class="container mt-3 mt-lg-5" style="max-width: 1040px;">
+    <h1 class="h3 d-none d-lg-block mb-3">Fahrzeug hinzufügen</h1>
     <?php include '../includes/form_fahrzeug.php'; ?>
 </div>
 

@@ -104,6 +104,7 @@ try {
                                 <a href="<?= htmlspecialchars($detailLink) ?>" class="stretched-link text-reset text-decoration-none"><?= htmlspecialchars($displayName) ?></a>
                             <?php endif; ?>
                         </h2>
+                        <?php if (!empty($row['license_plate'])): ?><span class="kennzeichen small mb-1"><?= htmlspecialchars($row['license_plate']) ?></span><?php endif; ?>
                         <div class="small text-body-secondary text-truncate"><?= $kennzahlen ? implode(' · ', $kennzahlen) : 'Noch keine Einträge' ?></div>
                         <?php if ($hinweis): ?>
                             <span class="badge text-bg-<?= $ueberfaellig ? 'danger' : 'warning' ?> mt-2"><i class="fas fa-bell me-1"></i><?= htmlspecialchars($hinweis) ?></span>

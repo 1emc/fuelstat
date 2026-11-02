@@ -242,6 +242,57 @@ test('Kilometerstand notieren (#42) zählt als aktueller Tachostand, nicht als K
   assert.equal(s.segments.length, 0, 'kein Verbrauchsabschnitt');
 });
 
+test('Fahrzeugangaben (#45): speichern, ändern, prüfen', async () => {
+  const u = await newUser();
+  const anlegen = await api('POST', '/vehicles', { token: u.token, body: {
+    name: 'Detail', fuelType: 'diesel', licensePlate: ' aa-bb 123 ', vin: 'wvw zzz 1jz xw000001', firstRegistration: '2021-03-15',
+    purchaseDate: '2021-04-01', purchasePrice: 24999.5, serviceIntervalMonths: 24, serviceIntervalKm: 30000,
+    insuranceCompany: 'HUK', insurancePremium: 420, insuranceDueMonth: 1, taxAmount: 180, taxDueMonth: 6, tireSizeSummer: '205/55 R16'
+  } });
+  assert.equal(anlegen.status, 201, JSON.stringify(anlegen.body));
+  const v = anlegen.body;
+  assert.equal(v.license_plate, 'AA-BB 123');
+  assert.equal(v.vin, 'WVWZZZ1JZXW000001');
+  assert.equal(v.first_registration, '2021-03-15', 'Datum ohne Zeitzonenverschiebung');
+  assert.equal(Number(v.purchase_price), 24999.5);
+  assert.equal(v.service_interval_months, 24);
+
+  const geaendert = await api('PATCH', `/vehicles/${v.id}`, { token: u.token, body: { licensePlate: '', taxDueMonth: 7 } });
+  assert.equal(geaendert.status, 200);
+  assert.equal(geaendert.body.license_plate, null);
+  assert.equal(geaendert.body.tax_due_month, 7);
+  assert.equal(geaendert.body.insurance_company, 'HUK', 'nicht gesendete Felder bleiben');
+
+  for (const [feld, wert] of [['taxDueMonth', 13], ['firstRegistration', '15.03.2021'], ['purchasePrice', -1], ['serviceIntervalKm', 50], ['vin', 'X'.repeat(18)]]) {
+    const r = await api('PATCH', `/vehicles/${v.id}`, { token: u.token, body: { [feld]: wert } });
+    assert.equal(r.status, 400, feld);
+    assert.equal(r.body.error, `invalid_${feld}`);
+  }
+  assert.equal((await api('GET', `/vehicles/${v.id}`, { token: u.token })).body.tire_size_summer, '205/55 R16');
+});
+
+test('Fälligkeiten aus Fahrzeugangaben (#45)', async () => {
+  const u = await newUser();
+  const heute = new Date();
+  const iso = (d) => d.toISOString().slice(0, 10);
+  // Erstzulassung vor 30 Monaten: erster TÜV in 6 Monaten (36 Monate nach Erstzulassung)
+  const ez = new Date(Date.UTC(heute.getUTCFullYear(), heute.getUTCMonth() - 30, 10));
+  const tuevErwartet = iso(new Date(Date.UTC(ez.getUTCFullYear(), ez.getUTCMonth() + 36, 10)));
+  const naechsterMonat = ((heute.getUTCMonth() + 1) % 12) + 1;
+  const v = await newVehicle(u.token, 'e10', { firstRegistration: iso(ez), serviceIntervalMonths: 24, taxDueMonth: naechsterMonat });
+  // Wartung vor 13 Monaten: mit 24-Monats-Intervall noch nicht fällig
+  await api('POST', '/entries', { token: u.token, body: { vehicleId: v, category: 'Wartung', amountEur: 300,
+    occurredAt: iso(new Date(Date.UTC(heute.getUTCFullYear(), heute.getUTCMonth() - 13, 1))) } });
+  const r = (await api('GET', `/vehicles/${v}/reminders`, { token: u.token })).body;
+  const nach = Object.fromEntries(r.map((x) => [x.category, x]));
+  assert.equal(nach.TUV.due_date, tuevErwartet);
+  assert.equal(nach.TUV.source, 'erstzulassung');
+  assert.equal(nach.Wartung.status, 'ok');
+  assert.equal(nach.Steuer.source, 'faelligkeitsmonat');
+  assert.equal(nach.Steuer.due_date.slice(5, 7), String(naechsterMonat).padStart(2, '0'));
+  assert.equal(nach.Versicherung.status, 'unbekannt');
+});
+
 test('Ausgabe ohne Tachostand speichert null, nicht 0', async () => {
   const u = await newUser();
   const v = await newVehicle(u.token);
