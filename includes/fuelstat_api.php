@@ -115,6 +115,7 @@ class FuelstatApi
     public function getUser(string $userId): array { return $this->request('GET', '/auth/users/' . rawurlencode($userId)); }
     public function patchUser(string $userId, array $data): array { return $this->request('PATCH', '/auth/users/' . rawurlencode($userId), $data); }
     public function getWhoAmI(): array { return $this->request('GET', '/whoami'); }
+    public function postAuthRefresh(): array { return $this->request('POST', '/auth/refresh', []); }
     public function getHealth(): array { return $this->request('GET', '/health'); }
     public function getVehicleReminders(string $vehicleId): array { return $this->request('GET', '/vehicles/' . rawurlencode($vehicleId) . '/reminders'); }
     public function getMailSettings(): array { return $this->request('GET', '/auth/mail-settings'); }

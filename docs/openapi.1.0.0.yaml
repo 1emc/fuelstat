@@ -1270,6 +1270,17 @@ paths:
         "404":
           description: feedback_not_found
 
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Renew the login token (7 days), at most 90 days after the last password login
+      operationId: postAuthRefresh
+      responses:
+        "200":
+          description: "OK ({ token })"
+        "401":
+          description: "missing_token, invalid_token, token_revoked oder reauth_required (letzter Login mit Passwort > 90 Tage)"
+
   /api/v1/auth/login/mfa:
     post:
       tags: [Auth]

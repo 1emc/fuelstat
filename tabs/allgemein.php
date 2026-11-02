@@ -39,6 +39,38 @@ $schnitt = $stats['avgConsumption'] ?? null;
 $aktuell = $trend['current'] ?? null;
 $diff = $aktuell !== null && $schnitt !== null ? round($aktuell - $schnitt, 2) : null;
 $eintragUrl = '../pages/eintrag_hinzufuegen.php?fahrzeug_id=' . urlencode($fahrzeug_id);
+
+// Nächster Termin (#48): der dringendste mit Datum steht oben
+$naechsterTermin = null;
+foreach ($faelligkeiten as $f) {
+    if (!empty($f['faellig_datum'])) {
+        $naechsterTermin = $f;
+        break;
+    }
+}
+// Kosten dieses Jahr und Verlauf der letzten 6 Monate (Kosten als Balken, Verbrauch als Linie)
+$alleEintraege = getMergedEintraegeFromApi($api, $fahrzeug_id)['eintraege'];
+$diesesJahr = (int)date('Y');
+$kostenJahr = 0.0;
+$kostenMonat = [];
+foreach ($alleEintraege as $monat => $liste) {
+    foreach ($liste as $e) {
+        if (istEintragOhneKosten($e['kategorie'] ?? '')) {
+            continue;
+        }
+        if ((int)substr($e['datum'], 0, 4) === $diesesJahr) {
+            $kostenJahr += (float)($e['kosten'] ?? 0);
+        }
+        $kostenMonat[$monat] = ($kostenMonat[$monat] ?? 0) + (float)($e['kosten'] ?? 0);
+    }
+}
+$verbrauchMonat = getStatistikDatenFromApi($api, $fahrzeug_id)['verbrauchProMonat'] ?? [];
+$verlauf = [];
+for ($i = 5; $i >= 0; $i--) {
+    $m = date('Y-m', strtotime(date('Y-m-01') . " -$i months"));
+    $verlauf[] = ['monat' => formatMonat($m), 'kosten' => round($kostenMonat[$m] ?? 0, 2), 'verbrauch' => isset($verbrauchMonat[$m]) && $verbrauchMonat[$m] > 0 ? (float)$verbrauchMonat[$m] : null];
+}
+$hatVerlauf = array_sum(array_column($verlauf, 'kosten')) > 0;
 ?>
 
 <div class="mt-3 mt-lg-4">
@@ -49,6 +81,21 @@ $eintragUrl = '../pages/eintrag_hinzufuegen.php?fahrzeug_id=' . urlencode($fahrz
         <div class="col-md-8">
             <?php if ($fahrzeugDetails): ?>
                 <p class="text-body-secondary small mb-3"><?= htmlspecialchars(implode(' · ', $fahrzeugDetails)) ?></p>
+            <?php endif; ?>
+
+            <?php if ($naechsterTermin):
+                $tFarbe = ['ueberfaellig' => 'danger', 'bald' => 'warning'][$naechsterTermin['status']] ?? 'secondary';
+                $tage = (int)$naechsterTermin['tage']; ?>
+            <!-- Nächster Termin prominent (#48) -->
+            <a href="#termine" class="naechster-termin text-reset text-decoration-none border-<?= $tFarbe ?> mb-3">
+                <i class="fas <?= getCategoryIcon($naechsterTermin['kategorie']) ?> text-<?= $tFarbe ?>"></i>
+                <span class="flex-grow-1 min-w-0">
+                    <span class="d-block small text-body-secondary">Nächster Termin</span>
+                    <span class="fw-semibold"><?= htmlspecialchars($naechsterTermin['titel']) ?></span>
+                    <span class="text-body-secondary">· <?= date('d.m.Y', strtotime($naechsterTermin['faellig_datum'])) ?></span>
+                </span>
+                <span class="badge text-bg-<?= $tFarbe ?>"><?= $tage < 0 ? 'seit ' . abs($tage) . ' Tagen' : ($tage === 0 ? 'heute' : 'in ' . $tage . ' Tagen') ?></span>
+            </a>
             <?php endif; ?>
 
             <div class="row g-2">
@@ -63,6 +110,12 @@ $eintragUrl = '../pages/eintrag_hinzufuegen.php?fahrzeug_id=' . urlencode($fahrz
                         <div class="small text-body-secondary">Fahrleistung</div>
                         <div class="kennzahl-wert"><?= $fahrleistung !== null ? number_format($fahrleistung['km'], 0, ',', '.') . ' km' : '—' ?></div>
                         <?php if ($fahrleistung !== null): ?><div class="small text-body-secondary"><?= htmlspecialchars($fahrleistung['basis']) ?></div><?php endif; ?>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="kennzahl">
+                        <div class="small text-body-secondary">Kosten <?= $diesesJahr ?></div>
+                        <div class="kennzahl-wert"><?= number_format($kostenJahr, 2, ',', '.') ?> €</div>
                     </div>
                 </div>
                 <?php foreach ($verbrauchJeEinheit as $u => $w):
@@ -101,8 +154,18 @@ $eintragUrl = '../pages/eintrag_hinzufuegen.php?fahrzeug_id=' . urlencode($fahrz
                 <?php endif; ?>
             </div>
 
-            <!-- Termine: Fälligkeiten und letzte Wartung, TÜV und Reifen in einer Karte -->
+            <?php if ($hatVerlauf): ?>
+            <!-- Letzte 6 Monate: Kosten (Balken) und Verbrauch (Linie) -->
             <div class="card border-0 shadow-sm mt-4">
+                <div class="card-body">
+                    <h3 class="h6 mb-2">Letzte 6 Monate</h3>
+                    <div class="diagramm-mini"><canvas id="verlaufMini" aria-label="Kosten und Verbrauch der letzten 6 Monate" role="img"></canvas></div>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <!-- Termine: Fälligkeiten und letzte Wartung, TÜV und Reifen in einer Karte -->
+            <div class="card border-0 shadow-sm mt-4" id="termine">
                 <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-3">
                     <h3 class="h5 mb-0">Termine</h3>
                     <a href="<?= htmlspecialchars($eintragUrl) ?>&kategorie=Wartung" class="btn btn-outline-primary btn-sm">
@@ -169,3 +232,32 @@ $eintragUrl = '../pages/eintrag_hinzufuegen.php?fahrzeug_id=' . urlencode($fahrz
         </div>
     </div>
 </div>
+
+<?php if ($hatVerlauf): ?>
+<script>
+// Mini-Diagramm (#48); Chart.js wird vom Statistik-Reiter derselben Seite geladen
+document.addEventListener('DOMContentLoaded', function () {
+  var ctx = document.getElementById('verlaufMini');
+  if (!ctx || !window.Chart) return;
+  var daten = <?= json_encode($verlauf, JSON_UNESCAPED_UNICODE) ?>;
+  var stil = getComputedStyle(document.documentElement);
+  var mitVerbrauch = daten.some(function (d) { return d.verbrauch !== null; });
+  new Chart(ctx, {
+    data: {
+      labels: daten.map(function (d) { return d.monat; }),
+      datasets: [
+        { type: 'bar', label: 'Kosten (€)', data: daten.map(function (d) { return d.kosten; }), backgroundColor: stil.getPropertyValue('--bs-primary').trim() || '#0d6efd', borderRadius: 4, yAxisID: 'y' }
+      ].concat(mitVerbrauch ? [{ type: 'line', label: <?= json_encode('Verbrauch (' . $einheitKurz . '/100 km)') ?>, data: daten.map(function (d) { return d.verbrauch; }), borderColor: stil.getPropertyValue('--bs-success').trim() || '#198754', backgroundColor: 'transparent', tension: .3, spanGaps: true, yAxisID: 'y2' }] : [])
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: { legend: { display: mitVerbrauch, labels: { boxWidth: 12 } } },
+      scales: {
+        y: { beginAtZero: true, ticks: { callback: function (v) { return v + ' €'; } } },
+        y2: { display: mitVerbrauch, position: 'right', grid: { drawOnChartArea: false } }
+      }
+    }
+  });
+});
+</script>
+<?php endif; ?>

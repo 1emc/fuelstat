@@ -182,10 +182,13 @@ const upload = multer({
   }
 });
 
-function signToken(user) {
+// auth_time: Zeitpunkt des letzten echten Logins (Sekunden). Beim Verlängern (#56) wird er übernommen, damit
+// eine aktive Anmeldung höchstens MAX_SESSION_DAYS lang ohne Passwort weiterläuft.
+const MAX_SESSION_DAYS = 90;
+function signToken(user, authTime = Math.floor(Date.now() / 1000)) {
   const jti = randomUUID();
   return jwt.sign(
-    { sub: user.id, email: user.email, jti },
+    { sub: user.id, email: user.email, jti, auth_time: authTime },
     process.env.JWT_SECRET,
     { expiresIn: '7d' }
   );
@@ -440,6 +443,23 @@ app.get('/api/v1/health', (req, res) => {
     registration_enabled: process.env.REGISTRATION_ENABLED !== 'false',
     beta_phase: isBetaPhase()
   });
+});
+
+// Anmeldung verlängern (#56): gültiges Token gegen ein neues mit wieder 7 Tagen Laufzeit tauschen.
+// Das Frontend ruft das bei aktiver Nutzung höchstens einmal am Tag auf. Widerrufene Tokens kommen hier gar
+// nicht an (auth), und spätestens MAX_SESSION_DAYS nach dem letzten Login ist eine neue Anmeldung nötig.
+app.post('/api/v1/auth/refresh', auth, async (req, res) => {
+  const authTime = Number(req.user.auth_time || req.user.iat || 0);
+  if (!authTime || Date.now() / 1000 - authTime > MAX_SESSION_DAYS * 86400) {
+    return res.status(401).json({ error: 'reauth_required' });
+  }
+  try {
+    const r = await pool.query('SELECT id, email FROM users WHERE id = $1', [req.user.sub]);
+    if (r.rowCount === 0) return res.status(401).json({ error: 'invalid_token' });
+    res.json({ token: signToken(r.rows[0], authTime) });
+  } catch (e) {
+    serverError(res, e);
+  }
 });
 
 // Whoami - zeigt aktuell angemeldeten User

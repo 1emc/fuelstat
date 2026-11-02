@@ -46,6 +46,10 @@ $currentUser = null;
 if (isApiAuthenticated()) {
     try {
         $currentUser = $api->getWhoAmI();
+        // Aktive Nutzung verlängert die Anmeldung (#56), statt nach 7 Tagen abzumelden
+        if (verlaengereAnmeldung($api)) {
+            $api = getApiClient();
+        }
     } catch (Throwable $e) {
         $code = method_exists($e, 'getCode') ? $e->getCode() : 0;
         error_log('[Header] getWhoAmI failed with code ' . $code . ': ' . $e->getMessage());

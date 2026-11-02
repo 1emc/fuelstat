@@ -18,6 +18,7 @@ Pfade relativ zu `/api/v1`. „Auth“: ohne = öffentlich, ✓ = angemeldet, Ad
 | POST | `/auth/register` | – | Konto anlegen, liefert Token |
 | POST | `/auth/login` | – | Anmelden (bei 2FA: `mfa_required` + `mfaToken`) |
 | POST | `/auth/login/mfa` | – | Zweiter Schritt mit 2FA-Code |
+| POST | `/auth/refresh` | ✓ | Anmeldung verlängern: neues Token (7 Tage), höchstens 90 Tage nach dem letzten Login |
 | POST | `/auth/password` | ✓ | Passwort ändern, widerruft alle Tokens |
 | POST | `/auth/mfa/setup` · `/enable` · `/disable` | ✓ | 2FA einrichten, aktivieren, abschalten |
 | GET | `/auth/users` | Admin | Alle Benutzer mit Aktivität |
@@ -125,6 +126,10 @@ Grundgerüst für ein späteres Premium-Modell. Was ein Tarif darf, steht an ein
 * `GET /whoami` liefert `plan`, `planUntil`, `effectivePlan` (gerade geltender Tarif), `limitsEnabled` und `features` (z. B. `maxVehicles: 1`, `sharing: false`; `null` = unbegrenzt).
 * Verbietet der Tarif etwas, antwortet die API mit **403** `{ "error": "plan_required", "feature": "maxVehicles", "limit": 1, "plan": "free" }`. Derzeit geprüft: Anzahl Fahrzeuge beim Anlegen. Herabstufen löscht nichts.
 * Datenexport ist nie an einen Tarif gebunden (DSGVO Art. 20).
+
+### Anmeldung verlängern
+
+`POST /auth/refresh` tauscht ein gültiges Token gegen ein neues mit wieder 7 Tagen Laufzeit (neue `jti`). Das Token trägt `auth_time`, den Zeitpunkt des letzten Logins mit Passwort; er wird übernommen. Liegt er mehr als 90 Tage zurück, antwortet die API mit **401** `{ "error": "reauth_required" }`. Widerrufene Tokens („Auf allen Geräten abmelden“, Passwortwechsel) werden wie bei jedem Aufruf abgelehnt. Das PHP-Frontend verlängert bei aktiver Nutzung, sobald das Token älter als einen Tag ist (höchstens ein Versuch pro Stunde).
 
 ## Health & Diagnostics
 

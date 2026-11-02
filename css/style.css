@@ -671,3 +671,69 @@ body.mit-tabbar {
         animation: none;
     }
 }
+
+/* Allgemein (#48): nächster Termin, Mini-Diagramm */
+.naechster-termin {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .75rem 1rem;
+    border-radius: .75rem;
+    border-left: .3rem solid;
+    background: var(--bs-tertiary-bg);
+}
+
+.naechster-termin > i {
+    font-size: 1.3rem;
+}
+
+.diagramm-mini {
+    position: relative;
+    height: 170px;
+}
+
+/* Einstellungen (#48): Angaben als Karten */
+.angaben-karte dt {
+    font-weight: 400;
+    color: var(--bs-secondary-color);
+    font-size: .875rem;
+}
+
+.angaben-karte dd {
+    margin-bottom: .6rem;
+}
+
+/* Cookie-Hinweis (#33): unten, mobil über der App-Leiste */
+.cookie-hinweis {
+    position: fixed;
+    left: .75rem;
+    right: .75rem;
+    bottom: .75rem;
+    z-index: 1040;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem 1rem;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: .75rem 1rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: .75rem;
+    background: var(--bs-body-bg);
+    color: var(--bs-body-color);
+    box-shadow: 0 .5rem 1.5rem rgba(0, 0, 0, .15);
+}
+
+.cookie-hinweis[hidden] {
+    display: none;
+}
+
+.cookie-hinweis p {
+    flex: 1 1 18rem;
+}
+
+@media (max-width: 991.98px) {
+    body.mit-tabbar .cookie-hinweis {
+        bottom: calc(var(--tabbar-hoehe) + env(safe-area-inset-bottom) + .5rem);
+    }
+}
