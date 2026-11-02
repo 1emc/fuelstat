@@ -1743,6 +1743,12 @@ components:
         odometerKm:
           type: integer
           minimum: 0
+          nullable: true
+          description: Optional – fehlt er, kann er später per PATCH nachgetragen werden (auch nach 14 Tagen)
+        odometerEstimated:
+          type: boolean
+          default: false
+          description: Wert ist nur geschätzt (Platzhalter); zählt nicht für Verbrauch und Tachostand
         unit:
           $ref: "#/components/schemas/FillupUnit"
           description: Optional, wird aus vehicle.fuel_type abgeleitet wenn nicht gesetzt (Plug-in-Hybrid ohne Angabe = l)
@@ -1776,15 +1782,21 @@ components:
         skipPrevious:
           type: boolean
           default: false
-      required: [vehicleId, odometerKm]
+      required: [vehicleId]
 
     FillupPatchRequest:
       type: object
       additionalProperties: false
+      description: Nur innerhalb von 14 Tagen nach filled_at – außer der Body enthält ausschließlich odometerKm und odometerEstimated (Tachostand nachtragen)
       properties:
         odometerKm:
           type: integer
           minimum: 0
+          nullable: true
+          description: null entfernt den Tachostand
+        odometerEstimated:
+          type: boolean
+          description: Ohne Angabe gilt ein neu gesetzter Tachostand als echt
         unit:
           $ref: "#/components/schemas/FillupUnit"
         amount:
@@ -1830,6 +1842,11 @@ components:
           format: uuid
         odometer_km:
           type: integer
+          nullable: true
+          description: null = Tachostand fehlt
+        odometer_estimated:
+          type: boolean
+          description: Tachostand ist nur geschätzt
         unit:
           $ref: "#/components/schemas/FillupUnit"
         amount:
@@ -1921,6 +1938,9 @@ components:
           type: number
           nullable: true
           description: Durchschnittlicher Preis pro Einheit des Fahrzeugs (Liter/kWh/kg; Plug-in-Hybrid Liter)
+        missingOdometer:
+          type: integer
+          description: Anzahl Tank-/Ladevorgänge ohne echten Tachostand (fehlt oder geschätzt)
         avgConsumption:
           type: number
           nullable: true

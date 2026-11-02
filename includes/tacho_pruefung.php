@@ -7,7 +7,7 @@
 $tachoWerte = [];
 foreach (getMergedEintraegeFromApi($api, $fahrzeug_id)['eintraege'] as $monatsEintraege) {
     foreach ($monatsEintraege as $e) {
-        if ((int)($e['tachostand'] ?? 0) > 0 && !empty($e['datum']) && (string)$e['id'] !== (string)($tachoAusnahmeId ?? '')) {
+        if ((int)($e['tachostand'] ?? 0) > 0 && empty($e['tachostand_geschaetzt']) && !empty($e['datum']) && (string)$e['id'] !== (string)($tachoAusnahmeId ?? '')) {
             $tachoWerte[] = ['d' => $e['datum'], 'km' => (int)$e['tachostand']];
         }
     }

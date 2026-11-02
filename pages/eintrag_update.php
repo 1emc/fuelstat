@@ -36,7 +36,11 @@ if ($type === 'entry') {
 }
 
 $datum = $_POST['datum'] ?? '';
-$tachostand = (int)($_POST['tachostand'] ?? 0);
+// Leer = Tachostand fehlt (#41); ein unveränderter geschätzter Wert bleibt als Schätzung markiert
+$tachoEingabe = trim((string)($_POST['tachostand'] ?? ''));
+$tachostand = $tachoEingabe !== '' ? (int)$tachoEingabe : null;
+$tachoGeschaetzt = $tachostand !== null && isset($_POST['tachostand_geschaetzt_wert'])
+    && (int)$_POST['tachostand_geschaetzt_wert'] === $tachostand;
 // Fehlt Menge oder Gesamtpreis, aus dem Preis pro Einheit berechnen; leer wird nie still zu 0
 $werte = mengeUndKostenAusFormular($_POST);
 if ($werte['fehler'] !== null) {
@@ -59,6 +63,7 @@ try {
     $einheit = in_array($_POST['einheit'] ?? '', $einheiten, true) ? $_POST['einheit'] : $einheiten[0];
     $api->patchFillup($eintrag_id, [
         'odometerKm' => $tachostand,
+        'odometerEstimated' => $tachoGeschaetzt,
         'unit' => $einheit,
         'amount' => $menge,
         'totalCostEur' => $kosten,

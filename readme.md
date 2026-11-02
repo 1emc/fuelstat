@@ -12,12 +12,15 @@ Fuelstat ist eine Web-App, mit der du Tankfüllungen, Ladevorgänge und alle and
 **Einträge**
 - Tankfüllungen bzw. Ladevorgänge mit Menge (l, kWh oder kg je nach Kraftstoff), Preis, Tankstelle, voll/teilweise getankt; alle Texte passen sich der Antriebsart an (Tankstelle/Ladestation, vollgetankt/vollgeladen …)
 - Warnung bei unplausiblem Tachostand (kleiner als der vorige oder ungewöhnlich großer Sprung)
+- Tachostand vergessen? Tank- und Ladevorgänge lassen sich ohne Tachostand (oder mit einer Schätzung aus Menge und Ø Verbrauch) speichern und später nachtragen – auch nach 14 Tagen. Hinweis in der Übersicht und in der Eintragsliste; der Verbrauch bleibt korrekt
+- Menge, Preis pro Einheit und Gesamtpreis: aus zwei Angaben wird die dritte berechnet und gespeichert; Info-Knöpfe zeigen, was eingetragen und was berechnet ist
 - Plug-in-Hybride: Tanken und Laden im selben Fahrzeug, Verbrauch getrennt in l/100 km und kWh/100 km, gemeinsame Energiekosten und Stromanteil; Tank und Akku als eigene Angaben
 - Tankstellen in der Nähe samt aktuellem Preis (Tankerkönig), beim Laden Ladestationen mit Leistung und Steckertypen (Open Charge Map); der zuletzt bezahlte kWh-Preis an einer Station wird vorgeschlagen
 - Andere Ausgaben (Versicherung, Werkstatt, Inspektion, Steuer, Reparatur, Reifen, TÜV, Wartung, Dekor) und Fahrten
 - Alle Einträge bearbeiten und löschen (Tankfüllungen innerhalb von 14 Tagen)
 
 **Auswertungen**
+- Ø Verbrauch über alle Abschnitte in Übersicht und Fahrzeugseite, dazu der letzte Abschnitt als Trend
 - Verbrauch pro Tankfüllung und Monat, bester/schlechtester Monat, Trend
 - Jahresübersicht mit Menge, Kosten, Verbrauch und CO₂
 - Ausgaben nach Kategorie und Kostengruppe, Kosten pro Monat und km, Wartungskosten je 10.000 km, Jahresvergleich
@@ -30,13 +33,15 @@ Fuelstat ist eine Web-App, mit der du Tankfüllungen, Ladevorgänge und alle and
 - Ohne eigene Angaben verschickt Fuelstat über den Mailserver des Betreibers (SMTP-Zugang des Admins) an die Konto-Adresse
 - Optional hinterlegt jeder Benutzer seinen eigenen Mailserver (SMTP) in den Einstellungen
 - Erinnerung, wenn TÜV, Wartung, Versicherung oder Steuer bald fällig sind (Vorlaufzeit einstellbar) und noch einmal, wenn sie überfällig sind
+- Erinnerung „Kilometerstand nachtragen“ einige Stunden nach einem Tank- oder Ladevorgang ohne Tachostand (genau einmal)
 - Monatsbericht mit Kosten, Strecke, Verbrauch und anstehenden Terminen je Fahrzeug
 
 **Konto**
 - Registrierung und Login, optional mit Zwei-Faktor-Authentifizierung (Authenticator-App)
 - Profil mit Benutzername und Profilbild, Passwort ändern
 - Abmelden auf allen Geräten, Konto löschen
-- Benutzerverwaltung für Admins: Fahrzeuge je Benutzer, zuletzt aktiv, letzter Login, letzter Eintrag, Beta-Tester-Kennzeichen und Feedback-Eingang
+- Benutzerverwaltung für Admins: Fahrzeuge je Benutzer, zuletzt aktiv, letzter Login, letzter Eintrag, Beta-Tester-Kennzeichen, Tarif (Free/Plus/Flotte, optional befristet) und Feedback-Eingang
+- Tarif-Grundgerüst für ein späteres Premium-Modell; Grenzen erst mit `PLAN_LIMITS_ENABLED=true` aktiv, bis dahin haben alle den vollen Umfang
 - „Feedback senden“ für angemeldete Benutzer (Fehler, Idee, Lob, Sonstiges): wird gespeichert und per Mail an den Betreiber geschickt
 - Hell- und Dunkelmodus, als App installierbar (PWA), auf dem Handy mit App-Navigation (untere Leiste, Profil- und Fahrzeugauswahl von unten)
 
@@ -130,7 +135,7 @@ Neue Datenbank-Migrationen (siehe unten) **vor** dem Neustart der API einspielen
 
 ```bash
 cd infra
-docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ../backend/database/postgres_011_plans.sql
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ../backend/database/postgres_012_missing_odometer.sql
 ```
 
 ### Datensicherung
@@ -158,7 +163,7 @@ docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < .
 
 ### Datenbank-Migrationen
 
-Neue Installationen brauchen keine Migrationen: `postgres_init.sql` enthält bereits alles bis einschließlich 011. Bestehende Installationen spielen alle noch fehlenden Migrationen der Reihe nach ein:
+Neue Installationen brauchen keine Migrationen: `postgres_init.sql` enthält bereits alles bis einschließlich 012. Bestehende Installationen spielen alle noch fehlenden Migrationen der Reihe nach ein:
 
 | Datei | Inhalt |
 |---|---|
@@ -169,6 +174,7 @@ Neue Installationen brauchen keine Migrationen: `postgres_init.sql` enthält ber
 | `postgres_009_user_activity.sql` | Letzter Login und zuletzt aktiv |
 | `postgres_010_plugin_hybrid.sql` | Antriebsart Plug-in-Hybrid (`phev`) und Akkugröße |
 | `postgres_011_plans.sql` | Tarif je Konto (`plan`, `plan_until`), siehe `PLAN_LIMITS_ENABLED` |
+| `postgres_012_missing_odometer.sql` | Tank-/Ladevorgänge ohne Tachostand, Markierung „geschätzt“, Erinnerung „Kilometerstand nachtragen“ |
 
 Alle Migrationen laufen in einer Transaktion und lassen sich gefahrlos ein zweites Mal ausführen.
 

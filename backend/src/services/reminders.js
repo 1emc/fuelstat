@@ -36,7 +36,7 @@ async function getVehicleReminders(pool, userId, vehicleId, warnDays = 30, today
     [userId, vehicleId, categories]
   );
   const odo = await pool.query(
-    'SELECT MAX(odometer_km) AS max_odo FROM fillups WHERE user_id = $1 AND vehicle_id = $2',
+    'SELECT MAX(odometer_km) AS max_odo FROM fillups WHERE user_id = $1 AND vehicle_id = $2 AND NOT odometer_estimated',
     [userId, vehicleId]
   );
   const currentOdo = odo.rows[0]?.max_odo ?? null;

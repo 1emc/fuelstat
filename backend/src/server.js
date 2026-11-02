@@ -1309,7 +1309,9 @@ app.delete('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
 // Add fillup (generalisiert: amount + unit)
 app.post('/api/v1/fillups', auth, async (req, res) => {
   const vehicleId = String(req.body?.vehicleId || '').trim();
-  const odometerKm = Number(req.body?.odometerKm);
+  // Tachostand darf fehlen (#41) und später nachgetragen werden; geschätzte Werte sind nur Platzhalter
+  const odometerKm = optionalNumber(req.body?.odometerKm) ?? null;
+  const odometerEstimated = odometerKm !== null && req.body?.odometerEstimated === true;
 
   // Backward-compatible: akzeptiere liters ODER amount
   const amount = Number(req.body?.amount ?? req.body?.liters);
@@ -1324,7 +1326,7 @@ app.post('/api/v1/fillups', auth, async (req, res) => {
   let unit = req.body?.unit ? String(req.body.unit).trim().toLowerCase() : null;
 
   if (!vehicleId) return res.status(400).json({ error: 'missing_vehicleId' });
-  if (!Number.isFinite(odometerKm) || odometerKm < 0) return res.status(400).json({ error: 'invalid_odometerKm' });
+  if (odometerKm !== null && (!Number.isFinite(odometerKm) || odometerKm < 0)) return res.status(400).json({ error: 'invalid_odometerKm' });
   if (!Number.isFinite(amount) || amount < 0) return res.status(400).json({ error: 'invalid_amount' });
   if (!Number.isFinite(totalCostEur) || totalCostEur < 0) return res.status(400).json({ error: 'invalid_totalCostEur' });
   if (filledAt && Number.isNaN(filledAt.getTime())) return res.status(400).json({ error: 'invalid_filledAt' });
@@ -1358,7 +1360,8 @@ app.post('/api/v1/fillups', auth, async (req, res) => {
          station,
          filled_at,
          is_full,
-         skip_previous
+         skip_previous,
+         odometer_estimated
        )
        VALUES (
          $1,
@@ -1375,10 +1378,11 @@ app.post('/api/v1/fillups', auth, async (req, res) => {
          $7,
          COALESCE($8, now()),
          $9,
-         $10
+         $10,
+         $11
        )
-       RETURNING id, vehicle_id, odometer_km, amount, unit, total_cost_eur, price_per_unit, station, filled_at, created_at, is_full, skip_previous`,
-      [req.user.sub, vehicleId, odometerKm, amount, unit, totalCostEur, station, filledAt, isFull, skipPrevious]
+       RETURNING id, vehicle_id, odometer_km, amount, unit, total_cost_eur, price_per_unit, station, filled_at, created_at, is_full, skip_previous, odometer_estimated`,
+      [req.user.sub, vehicleId, odometerKm === null ? null : Math.round(odometerKm), amount, unit, totalCostEur, station, filledAt, isFull, skipPrevious, odometerEstimated]
     );
 
     res.status(201).json(r.rows[0]);
@@ -1408,7 +1412,8 @@ app.get('/api/v1/fillups/:fillupId', auth, async (req, res) => {
          filled_at,
          created_at,
          is_full,
-         skip_previous
+         skip_previous,
+         odometer_estimated
        FROM fillups
        WHERE id = $1 AND user_id = $2`,
       [fillupId, req.user.sub]
@@ -1455,7 +1460,8 @@ app.patch('/api/v1/fillups/:fillupId', auth, async (req, res) => {
          filled_at,
          created_at,
          is_full,
-         skip_previous
+         skip_previous,
+         odometer_estimated
        FROM fillups
        WHERE id = $1 AND user_id = $2`,
       [fillupId, req.user.sub]
@@ -1467,13 +1473,18 @@ app.patch('/api/v1/fillups/:fillupId', auth, async (req, res) => {
 
     const existing = existingRes.rows[0];
 
-    // 14 Tage Änderungsfenster ab filled_at
+    // Eingehende Änderungen parsen (teilweise, optional)
+    const body = req.body || {};
+
+    // 14 Tage Änderungsfenster ab filled_at. Ausnahme (#41): nur den Tachostand nachtragen ist immer möglich.
+    const nurTachostand = Object.keys(body).length > 0 &&
+      Object.keys(body).every(k => k === 'odometerKm' || k === 'odometerEstimated');
     const now = new Date();
     const filledAtOriginal = new Date(existing.filled_at);
     const diffMs = now.getTime() - filledAtOriginal.getTime();
     const maxMs = 14 * 24 * 60 * 60 * 1000; // 14 Tage
 
-    if (diffMs > maxMs) {
+    if (diffMs > maxMs && !nurTachostand) {
       return res.status(409).json({
         error: 'fillup_edit_window_expired',
         message:
@@ -1481,11 +1492,10 @@ app.patch('/api/v1/fillups/:fillupId', auth, async (req, res) => {
       });
     }
 
-    // Eingehende Änderungen parsen (teilweise, optional)
-    const body = req.body || {};
-
-    const patchOdometerKm =
-      body.odometerKm !== undefined ? Number(body.odometerKm) : undefined;
+    // null bzw. leer: Tachostand entfernen (fehlt)
+    const patchOdometerKm = optionalNumber(body.odometerKm);
+    const patchOdometerEstimated =
+      body.odometerEstimated !== undefined ? body.odometerEstimated === true : undefined;
 
     // Backward-kompatibel: amount oder liters
     const rawAmount =
@@ -1527,7 +1537,8 @@ app.patch('/api/v1/fillups/:fillupId', auth, async (req, res) => {
       patchStation === undefined &&
       patchFilledAt === undefined &&
       patchIsFull === undefined &&
-      patchSkipPrevious === undefined
+      patchSkipPrevious === undefined &&
+      patchOdometerEstimated === undefined
     ) {
       return res.status(400).json({ error: 'nothing_to_update' });
     }
@@ -1535,10 +1546,11 @@ app.patch('/api/v1/fillups/:fillupId', auth, async (req, res) => {
     // Zielwerte (bestehend oder gepatcht)
     const newOdometerKm =
       patchOdometerKm !== undefined ? patchOdometerKm : existing.odometer_km;
+    // numeric-Spalten kommen von pg als Text ("30.000"); für die Prüfung unten in Zahlen umwandeln
     const newAmount =
-      patchAmount !== undefined ? patchAmount : existing.amount;
+      patchAmount !== undefined ? patchAmount : Number(existing.amount);
     const newTotalCostEur =
-      patchTotalCostEur !== undefined ? patchTotalCostEur : existing.total_cost_eur;
+      patchTotalCostEur !== undefined ? patchTotalCostEur : Number(existing.total_cost_eur);
     const newUnit =
       patchUnit !== undefined ? patchUnit : existing.unit;
     const newStation =
@@ -1549,9 +1561,14 @@ app.patch('/api/v1/fillups/:fillupId', auth, async (req, res) => {
       patchIsFull !== undefined ? patchIsFull : existing.is_full;
     const newSkipPrevious =
       patchSkipPrevious !== undefined ? patchSkipPrevious : existing.skip_previous;
+    // Ein neu eingetragener Tachostand gilt als echt, außer es wird ausdrücklich "geschätzt" mitgeschickt
+    const newOdometerEstimated = newOdometerKm === null ? false
+      : patchOdometerEstimated !== undefined ? patchOdometerEstimated
+      : patchOdometerKm !== undefined ? false
+      : existing.odometer_estimated;
 
     // Validierungen auf Zielwerten
-    if (!Number.isFinite(newOdometerKm) || newOdometerKm < 0) {
+    if (newOdometerKm !== null && (!Number.isFinite(newOdometerKm) || newOdometerKm < 0)) {
       return res.status(400).json({ error: 'invalid_odometerKm' });
     }
     if (!Number.isFinite(newAmount) || newAmount < 0) {
@@ -1584,7 +1601,8 @@ app.patch('/api/v1/fillups/:fillupId', auth, async (req, res) => {
          station       = $5,
          filled_at     = $6,
          is_full       = $7,
-         skip_previous = $8
+         skip_previous = $8,
+         odometer_estimated = $11
        WHERE id = $9 AND user_id = $10
        RETURNING
          id,
@@ -1599,9 +1617,10 @@ app.patch('/api/v1/fillups/:fillupId', auth, async (req, res) => {
          filled_at,
          created_at,
          is_full,
-         skip_previous`,
+         skip_previous,
+         odometer_estimated`,
       [
-        newOdometerKm,
+        newOdometerKm === null ? null : Math.round(newOdometerKm),
         newAmount,
         newUnit,
         newTotalCostEur,
@@ -1610,7 +1629,8 @@ app.patch('/api/v1/fillups/:fillupId', auth, async (req, res) => {
         newIsFull,
         newSkipPrevious,
         fillupId,
-        req.user.sub
+        req.user.sub,
+        newOdometerEstimated
       ]
     );
 
@@ -1736,7 +1756,8 @@ app.get('/api/v1/vehicles/:vehicleId/fillups', auth, async (req, res) => {
          filled_at,
          created_at,
          is_full,
-         skip_previous
+         skip_previous,
+         odometer_estimated
        FROM fillups
        WHERE user_id = $1 AND vehicle_id = $2
        ORDER BY filled_at DESC, created_at DESC
@@ -1988,7 +2009,10 @@ app.post('/api/v1/vehicles/:vehicleId/import', auth, importLimiter, async (req, 
   const nonNegative = (v) => Number.isFinite(Number(v)) && Number(v) >= 0;
   fillups.forEach((f, index) => {
     if (!validDate(f?.filledAt)) errors.push({ type: 'fillup', index, error: 'invalid_filledAt' });
-    else if (!nonNegative(f?.odometerKm)) errors.push({ type: 'fillup', index, error: 'invalid_odometerKm' });
+    // Tachostand darf fehlen (#41)
+    else if (f?.odometerKm !== undefined && f?.odometerKm !== null && f?.odometerKm !== '' && !nonNegative(f.odometerKm)) {
+      errors.push({ type: 'fillup', index, error: 'invalid_odometerKm' });
+    }
     else if (!nonNegative(f?.amount)) errors.push({ type: 'fillup', index, error: 'invalid_amount' });
     else if (!nonNegative(f?.totalCostEur)) errors.push({ type: 'fillup', index, error: 'invalid_totalCostEur' });
   });
@@ -2019,11 +2043,14 @@ app.post('/api/v1/vehicles/:vehicleId/import', auth, importLimiter, async (req, 
     for (const f of fillups) {
       const filledAt = new Date(f.filledAt);
       const unit = unitOf(f);
-      // Duplikat: gleicher Tag, gleicher Tachostand und gleiche Einheit (Tanken und Laden am selben Abend sind zwei Einträge)
+      const odo = f.odometerKm === undefined || f.odometerKm === null || f.odometerKm === '' ? null : Math.round(Number(f.odometerKm));
+      // Duplikat: gleicher Tag, gleicher Tachostand und gleiche Einheit (Tanken und Laden am selben Abend sind zwei Einträge);
+      // ohne Tachostand zusätzlich gleiche Menge
       const dup = await client.query(
         `SELECT 1 FROM fillups
-         WHERE vehicle_id = $1 AND user_id = $2 AND odometer_km = $3 AND filled_at::date = $4::date AND unit = $5`,
-        [vehicleId, req.user.sub, Math.round(Number(f.odometerKm)), filledAt, unit]
+         WHERE vehicle_id = $1 AND user_id = $2 AND odometer_km IS NOT DISTINCT FROM $3::int AND filled_at::date = $4::date AND unit = $5
+           AND ($3::int IS NOT NULL OR amount = $6::numeric)`,
+        [vehicleId, req.user.sub, odo, filledAt, unit, Number(f.amount)]
       );
       if (dup.rowCount > 0) { result.skipped.fillups++; continue; }
       await client.query(
@@ -2032,7 +2059,7 @@ app.post('/api/v1/vehicles/:vehicleId/import', auth, importLimiter, async (req, 
                  CASE WHEN $4::numeric > 0 THEN ROUND($6::numeric / $4::numeric, 4) ELSE NULL END,
                  $7, $8, $9, $10)`,
         [
-          req.user.sub, vehicleId, Math.round(Number(f.odometerKm)), Number(f.amount), unit, Number(f.totalCostEur),
+          req.user.sub, vehicleId, odo, Number(f.amount), unit, Number(f.totalCostEur),
           f.station ? String(f.station).trim() : null, filledAt,
           f.isFull !== undefined ? Boolean(f.isFull) : true,
           f.skipPrevious !== undefined ? Boolean(f.skipPrevious) : false

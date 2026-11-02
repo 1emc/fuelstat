@@ -63,6 +63,42 @@ function reminderMail(due) {
   return { subject, text, html };
 }
 
+// Erinnerung "Kilometerstand nachtragen" (#41): Tank-/Ladevorgänge ohne echten Tachostand, frühestens
+// ODOMETER_REMINDER_HOURS nach dem Erfassen. Nur Einträge der letzten 14 Tage (keine Mails für alte Importe).
+const ODOMETER_REMINDER_HOURS = 3;
+
+async function collectMissingOdometers(pool, settings, now = new Date()) {
+  const r = await pool.query(
+    `SELECT f.id, f.vehicle_id, f.filled_at, f.amount, f.unit, f.odometer_estimated, v.name AS vehicle, v.fuel_type
+     FROM fillups f JOIN vehicles v ON v.id = f.vehicle_id
+     WHERE f.user_id = $1 AND (f.odometer_km IS NULL OR f.odometer_estimated)
+       AND f.created_at <= $2::timestamptz - make_interval(hours => $3)
+       AND f.filled_at >= $2::timestamptz - interval '14 days'
+     ORDER BY f.filled_at`,
+    [settings.user_id, now, ODOMETER_REMINDER_HOURS]
+  );
+  return r.rows.map((row) => ({ ...row, ref: row.id }));
+}
+
+function odometerMail(rows, appUrl = process.env.APP_URL) {
+  const base = appUrl ? String(appUrl).replace(/\/+$/, '') : null;
+  const items = rows.map((f) => {
+    const was = f.fuel_type === 'electric' || f.unit === 'kwh' ? 'Ladevorgang' : 'Tankfüllung';
+    const datum = fmtDate(new Date(f.filled_at).toISOString().slice(0, 10));
+    const text = `${f.vehicle}: ${was} vom ${datum} (${fmt(f.amount)} ${UNITS[f.unit] || f.unit})${f.odometer_estimated ? ', bisher nur geschätzt' : ''}`;
+    const link = base ? `${base}/pages/tachostand_nachtragen.php?id=${encodeURIComponent(f.id)}&fahrzeug_id=${encodeURIComponent(f.vehicle_id)}` : null;
+    return { text, link };
+  });
+  const subject = rows.length === 1 ? 'Fuelstat: Kilometerstand nachtragen' : `Fuelstat: ${rows.length} Kilometerstände nachtragen`;
+  const hint = base ? '' : '\nDu findest die Einträge in der Eintragsliste des Fahrzeugs („Nachtragen“).\n';
+  const text = `Hallo,\n\nbei diesen Einträgen fehlt noch der Kilometerstand. Mit ihm stimmt die Verbrauchsberechnung wieder:\n\n${items
+    .map((i) => '- ' + i.text + (i.link ? `\n  ${i.link}` : '')).join('\n')}\n${hint}\nDeine Fuelstat-App`;
+  const html = `<p>Hallo,</p><p>bei diesen Einträgen fehlt noch der Kilometerstand. Mit ihm stimmt die Verbrauchsberechnung wieder:</p><ul>${items
+    .map((i) => `<li>${esc(i.text)}${i.link ? ` – <a href="${esc(i.link)}">jetzt nachtragen</a>` : ''}</li>`).join('')}</ul>${base
+    ? '' : '<p>Du findest die Einträge in der Eintragsliste des Fahrzeugs („Nachtragen“).</p>'}<p>Deine Fuelstat-App</p>`;
+  return { subject, text, html };
+}
+
 /** Monatsdaten aller Fahrzeuge für einen Monat (year, month 1-12). */
 async function buildMonthlyReport(pool, settings, year, month) {
   const start = new Date(Date.UTC(year, month - 1, 1));
@@ -85,8 +121,8 @@ async function buildMonthlyReport(pool, settings, year, month) {
       [settings.user_id, v.id, start, end]
     );
     const odo = await pool.query(
-      `SELECT (SELECT MAX(odometer_km) FROM fillups WHERE user_id = $1 AND vehicle_id = $2 AND filled_at < $4) AS end_odo,
-              (SELECT MAX(odometer_km) FROM fillups WHERE user_id = $1 AND vehicle_id = $2 AND filled_at < $3) AS start_odo`,
+      `SELECT (SELECT MAX(odometer_km) FROM fillups WHERE user_id = $1 AND vehicle_id = $2 AND filled_at < $4 AND NOT odometer_estimated) AS end_odo,
+              (SELECT MAX(odometer_km) FROM fillups WHERE user_id = $1 AND vehicle_id = $2 AND filled_at < $3 AND NOT odometer_estimated) AS start_odo`,
       [settings.user_id, v.id, start, end]
     );
     const stats = await getVehicleStats(pool, settings.user_id, v.id);
@@ -206,6 +242,21 @@ async function notifyUser(pool, settings, now = new Date()) {
     }
   }
 
+  // Kilometerstand nachtragen: gehört zu den Erinnerungen, jeder Eintrag nur einmal (mail_log kind 'odometer')
+  if (settings.reminders_enabled) {
+    const missing = await collectMissingOdometers(pool, settings, now);
+    const fresh = await claim(pool, settings.user_id, 'odometer', missing.map((f) => f.ref));
+    if (fresh.length) {
+      try {
+        await sendUserMail(settings, odometerMail(missing.filter((f) => fresh.includes(f.ref))));
+        await recordResult(pool, settings.user_id, null);
+      } catch (e) {
+        await release(pool, settings.user_id, 'odometer', fresh);
+        await recordResult(pool, settings.user_id, e);
+      }
+    }
+  }
+
   if (settings.monthly_report) {
     const { year, month } = previousMonth(now);
     const ref = `${year}-${String(month).padStart(2, '0')}`;
@@ -256,6 +307,6 @@ function startNotifier(pool) {
 }
 
 module.exports = {
-  loadUserSettings, collectDueReminders, reminderMail, buildMonthlyReport, reportMail,
+  loadUserSettings, collectDueReminders, reminderMail, collectMissingOdometers, odometerMail, buildMonthlyReport, reportMail,
   previousMonth, notifyUser, runNotifications, startNotifier
 };

@@ -10,6 +10,7 @@ if (!isset($_GET['fahrzeug_id'])) {
 $fahrzeug_id = trim($_GET['fahrzeug_id']);
 
 $aktuellerTacho = null;
+$schnittVerbrauch = null;
 $letztePreise = [];
 $fahrzeugKraftstoff = 'diesel';
 $einheit = 'l';
@@ -21,6 +22,8 @@ try {
     if ($fahrzeugKraftstoff === 'petrol') $fahrzeugKraftstoff = 'e10';
     $stats = $api->getVehicleStats($fahrzeug_id);
     $aktuellerTacho = $stats['currentOdo'] ?? null;
+    // Für die Schätzung des Tachostands (#41): Ø Verbrauch, beim Plug-in-Hybrid zu ungenau
+    $schnittVerbrauch = ($vehicle['fuel_type'] ?? '') !== 'phev' ? ($stats['avgConsumption'] ?? null) : null;
     // Bisherige Orte (neueste zuerst) als Vorschläge, beim E-Auto mit dem zuletzt bezahlten kWh-Preis je Ort
     $fillups = $api->getAllVehicleFillups($fahrzeug_id);
     usort($fillups, fn($a, $b) => strcmp((string)($b['filled_at'] ?? ''), (string)($a['filled_at'] ?? '')));
@@ -118,11 +121,17 @@ $allCategories = [
 						id="tachostand"
 						name="tachostand"
 						class="form-control"
-						min="0" step="1" required
+						min="0" step="1"
 						inputmode="numeric" pattern="[0-9]*"
 						placeholder="<?= $aktuellerTacho !== null
 										 ? number_format($aktuellerTacho, 0, ',', '.')
 										 : '' ?>">
+				<input type="hidden" name="tachostand_geschaetzt" id="tachostand_geschaetzt" value="">
+				<!-- Tankfüllung: Tachostand darf fehlen und wird später nachgetragen (#41) -->
+				<div class="form-text d-none" id="tachoHinweis">
+					Tachostand vergessen? Feld leer lassen und später in der Eintragsliste nachtragen.
+					<button type="button" class="btn btn-link btn-sm p-0 align-baseline d-none" id="btnTachoSchaetzung"></button>
+				</div>
             </div>
         </div>
 
@@ -365,6 +374,44 @@ let rechner = null;
 window.addEventListener('DOMContentLoaded', () => { rechner = mengenRechner({ einheit: () => mengenEinheit }); });
 
 typeSelect.addEventListener('change', toggleFields);
+
+// Tachostand (#41): bei Tankfüllungen optional, bei Fahrten Pflicht. Schätzung aus letztem Tachostand und Ø Verbrauch:
+// letzter Tachostand + Menge ÷ Ø Verbrauch × 100. Übernommene Schätzungen werden markiert und zählen nicht für den Verbrauch.
+const tachoFeld = document.getElementById('tachostand');
+const tachoGeschaetzt = document.getElementById('tachostand_geschaetzt');
+const tachoHinweis = document.getElementById('tachoHinweis');
+const btnSchaetzung = document.getElementById('btnTachoSchaetzung');
+const letzterTacho = <?= json_encode($aktuellerTacho !== null ? (int)$aktuellerTacho : null) ?>;
+const schnittVerbrauch = <?= json_encode($schnittVerbrauch !== null ? (float)$schnittVerbrauch : null) ?>;
+let schaetzung = null;
+function tachoPflicht() {
+    const tank = typeSelect.value === 'Tankfuellung';
+    tachoFeld.required = typeSelect.value === 'Fahrt';
+    tachoHinweis.classList.toggle('d-none', !tank);
+    aktualisiereSchaetzung();
+}
+function aktualisiereSchaetzung() {
+    const mengeFeld = document.getElementById('menge');
+    const menge = mengeFeld ? parseFloat(String(mengeFeld.value).replace(',', '.')) : NaN;
+    schaetzung = typeSelect.value === 'Tankfuellung' && letzterTacho !== null && schnittVerbrauch > 0 && menge > 0
+        ? Math.round(letzterTacho + menge / schnittVerbrauch * 100) : null;
+    btnSchaetzung.classList.toggle('d-none', schaetzung === null || tachoFeld.value !== '');
+    if (schaetzung !== null) {
+        btnSchaetzung.textContent = 'Schätzung übernehmen: ca. ' + schaetzung.toLocaleString('de-DE') + ' km';
+    }
+}
+btnSchaetzung.addEventListener('click', () => {
+    if (schaetzung === null) return;
+    tachoFeld.value = schaetzung;
+    tachoGeschaetzt.value = '1';
+    tachoHinweis.firstChild.textContent = 'Geschätzter Wert – bitte später durch den echten Tachostand ersetzen. ';
+    aktualisiereSchaetzung();
+});
+// Eigene Eingabe ersetzt die Schätzung
+tachoFeld.addEventListener('input', () => { tachoGeschaetzt.value = ''; aktualisiereSchaetzung(); });
+document.addEventListener('input', (e) => { if (e.target && e.target.id === 'menge') aktualisiereSchaetzung(); });
+typeSelect.addEventListener('change', tachoPflicht);
+window.addEventListener('DOMContentLoaded', tachoPflicht);
 
 // Tankstellen-Suche (nur bei Tankfuellung sichtbar)
 function toggleTankstellenButton() {

@@ -86,7 +86,9 @@ function getMergedEintraegeFromApi($api, string $vehicleId): array
             'kategorie' => 'Tankfuellung',
             'menge' => $f['amount'] ?? $f['liters'] ?? 0,
             'kosten' => $f['total_cost_eur'] ?? $f['price_total_eur'] ?? 0,
-            'tachostand' => $f['odometer_km'] ?? 0,
+            // null = Tachostand fehlt (#41), kann nachgetragen werden
+            'tachostand' => isset($f['odometer_km']) ? (int)$f['odometer_km'] : null,
+            'tachostand_geschaetzt' => !empty($f['odometer_estimated']),
             'vollgetankt' => $f['is_full'] ?? true,
             'skip_previous' => $f['skip_previous'] ?? false,
             'standort' => $f['station'] ?? '',
@@ -114,9 +116,10 @@ function getMergedEintraegeFromApi($api, string $vehicleId): array
     usort($list, function ($a, $b) {
         $d = strcmp($b['datum'], $a['datum']);
         if ($d !== 0) return $d;
-        $ta = $a['tachostand'] ?? 0;
-        $tb = $b['tachostand'] ?? 0;
-        return $tb - $ta;
+        // Ohne Tachostand bei gleichem Datum oben (= nach den Einträgen mit Tachostand, wie in der Statistik)
+        $ta = $a['tachostand'] ?? PHP_INT_MAX;
+        $tb = $b['tachostand'] ?? PHP_INT_MAX;
+        return $tb <=> $ta;
     });
 
     $eintraege = [];
@@ -170,7 +173,8 @@ function getFahrleistungFromApi($api, string $vehicleId, array $fahrzeug, $curre
     } catch (Throwable $e) {
         return null;
     }
-    $odos = array_filter(array_map(fn($f) => $f['odometer_km'] ?? null, $fillups), fn($o) => $o !== null);
+    // Nur echte Tachostände (fehlende und geschätzte zählen nicht, #41)
+    $odos = array_filter(array_map(fn($f) => empty($f['odometer_estimated']) ? ($f['odometer_km'] ?? null) : null, $fillups), fn($o) => $o !== null);
     if (!$odos) {
         return null;
     }
@@ -199,6 +203,12 @@ function getLetzterEintragApi($api, string $vehicleId, string $category): ?array
     return null;
 }
 
+/** Tachostand vorhanden und nicht nur geschätzt (#41)? */
+function hatEchtenTachostand(array $row): bool
+{
+    return isset($row['tachostand']) && $row['tachostand'] !== '' && empty($row['tachostand_geschaetzt']);
+}
+
 /**
  * Statistik- und Ausgabendaten aus API (Fillups + Entries) für Statistiken-/Ausgaben-Tabs.
  */
@@ -223,8 +233,9 @@ function getStatistikDatenFromApi($api, string $vehicleId): array
     $fillupsOnly = array_filter($flat, function ($e) {
         return ($e['kategorie'] ?? '') === 'Tankfuellung' && !empty($e['datum']);
     });
-    // Bei mehreren Tankfüllungen/Ladungen am selben Tag entscheidet der Tachostand
-    usort($fillupsOnly, fn($a, $b) => [$a['datum'], (float)($a['tachostand'] ?? 0)] <=> [$b['datum'], (float)($b['tachostand'] ?? 0)]);
+    // Bei mehreren Tankfüllungen/Ladungen am selben Tag entscheidet der Tachostand; Einträge ohne Tachostand
+    // kommen danach (wie in backend/src/services/stats.js), ihre Menge zählt zum nächsten Abschnitt
+    usort($fillupsOnly, fn($a, $b) => [$a['datum'], $a['tachostand'] ?? PHP_INT_MAX] <=> [$b['datum'], $b['tachostand'] ?? PHP_INT_MAX]);
     // Je Einheit getrennt rechnen: beim Plug-in-Hybrid Liter von Tankfüllung zu Tankfüllung, kWh von Ladung zu Ladung
     $nachEinheit = [];
     foreach ($fillupsOnly as $row) {
@@ -304,7 +315,8 @@ function verbrauchAusTankfuellungen(array $rows, array $jahre): array
             $jahresdaten[$y]['gekauft_ausgaben'] += (float)($row['kosten'] ?? 0);
         }
         $mengeSeitVoll += (float)($row['menge'] ?? 0);
-        if (!empty($row['vollgetankt'])) {
+        // Ohne echten Tachostand (fehlt oder geschätzt) zählt auch eine Vollbetankung wie eine Teilbetankung (#41)
+        if (!empty($row['vollgetankt']) && hatEchtenTachostand($row)) {
             // skip_previous: nur neuer Startpunkt, kein Verbrauch über die Lücke
             if ($letzteVoll && empty($row['skip_previous']) && ($row['tachostand'] - $letzteVoll['tachostand']) > 0) {
                 $km = $row['tachostand'] - $letzteVoll['tachostand'];

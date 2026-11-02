@@ -43,10 +43,12 @@ try {
                 $einheit = einheitKurz(getEinheitFuerKraftstoff($row['fuel_type'] ?? null));
 
                 $currentOdo = null;
+                $tachoFehlt = 0;
                 $verbrauchHtml = '';
                 try {
                     $stats = $api->getVehicleStats($vehicleId);
                     $currentOdo = $stats['currentOdo'] ?? null;
+                    $tachoFehlt = (int)($stats['missingOdometer'] ?? 0);
                     // Ø über alle Abschnitte (der letzte Abschnitt allein schwankt zu stark);
                     // Plug-in-Hybrid: Kraftstoff und Strom nebeneinander, z. B. "Ø 2,7 l + 20,0 kWh/100 km"
                     $teile = [];
@@ -106,6 +108,10 @@ try {
                         <div class="small text-body-secondary text-truncate"><?= $kennzahlen ? implode(' · ', $kennzahlen) : 'Noch keine Einträge' ?></div>
                         <?php if ($hinweis): ?>
                             <span class="badge text-bg-<?= $ueberfaellig ? 'danger' : 'warning' ?> mt-2"><i class="fas fa-bell me-1"></i><?= htmlspecialchars($hinweis) ?></span>
+                        <?php endif; ?>
+                        <?php if ($tachoFehlt > 0): ?>
+                            <!-- Tachostand vergessen (#41): führt zur Eintragsliste mit "Nachtragen" -->
+                            <span class="badge text-bg-warning mt-2"><i class="fas fa-gauge-high me-1"></i><?= $tachoFehlt === 1 ? '1 Tachostand fehlt' : $tachoFehlt . ' Tachostände fehlen' ?></span>
                         <?php endif; ?>
                     </div>
                     <div class="fahrzeug-aktionen">

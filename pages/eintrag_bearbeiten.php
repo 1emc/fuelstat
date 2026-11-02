@@ -92,7 +92,8 @@ try {
 // Plug-in-Hybrid: Begriffe nach der Einheit dieses Eintrags (Tankfüllung oder Ladevorgang)
 $begriffe = begriffeFuerEinheit($fuelType, $eintrag['unit'] ?? null);
 $istPhev = $fuelType === 'phev';
-$tachostand = $eintrag['odometer_km'] ?? 0;
+$tachostand = $eintrag['odometer_km'] ?? null; // null = fehlt (#41)
+$tachoGeschaetzt = !empty($eintrag['odometer_estimated']);
 $menge = $eintrag['amount'] ?? 0;
 $kosten = $eintrag['total_cost_eur'] ?? 0;
 $preis_pro_einheit = $eintrag['price_per_unit'] ?? ($menge > 0 ? $kosten / $menge : 0);
@@ -109,6 +110,9 @@ $bearbeitbar = isset($eintrag['filled_at']) && strtotime($eintrag['filled_at']) 
         <div class="alert alert-info mt-3">
             Dieser Eintrag ist älter als 14 Tage und kann nicht mehr geändert werden.
             Bei Bedarf kannst du ihn löschen und neu anlegen.
+            <?php if ($tachostand === null || $tachoGeschaetzt): ?>
+                Den Tachostand kannst du trotzdem <a href="tachostand_nachtragen.php?id=<?= urlencode($eintrag_id) ?>&amp;fahrzeug_id=<?= urlencode($fahrzeug_id) ?>">nachtragen</a>.
+            <?php endif; ?>
         </div>
     <?php endif; ?>
     <form method="post" action="eintrag_update.php" class="mt-4">
@@ -131,8 +135,14 @@ $bearbeitbar = isset($eintrag['filled_at']) && strtotime($eintrag['filled_at']) 
             <input type="date" class="form-control" name="datum" value="<?= htmlspecialchars($datum) ?>" required>
         </div>
         <div class="mb-3">
-            <label class="form-label">Tachostand (km)</label>
-            <input type="number" class="form-control" name="tachostand" value="<?= (int)$tachostand ?>" required>
+            <label class="form-label" for="tachostand">Tachostand (km)</label>
+            <input type="number" class="form-control" id="tachostand" name="tachostand" min="0" step="1" inputmode="numeric"
+                   value="<?= $tachostand !== null ? (int)$tachostand : '' ?>" placeholder="fehlt – kann leer bleiben">
+            <?php if ($tachoGeschaetzt): ?>
+                <!-- Bleibt der Wert unverändert, bleibt er als Schätzung markiert -->
+                <input type="hidden" name="tachostand_geschaetzt_wert" value="<?= (int)$tachostand ?>">
+                <div class="form-text text-warning-emphasis">Geschätzter Wert – bitte durch den echten Tachostand ersetzen.</div>
+            <?php endif; ?>
         </div>
         <div class="mb-3">
             <label class="form-label"><?= $begriffe['station'] ?></label>

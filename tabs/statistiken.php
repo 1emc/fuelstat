@@ -20,7 +20,8 @@ $kraftstoffKostenProKm = null;
 $tankRows = [];
 foreach (getMergedEintraegeFromApi($api, $fahrzeug_id)['eintraege'] as $monatsEintraege) {
     foreach ($monatsEintraege as $e) {
-        if (($e['kategorie'] ?? '') === 'Tankfuellung') {
+        // Kosten pro km: nur Einträge mit echtem Tachostand bilden die Spanne
+        if (($e['kategorie'] ?? '') === 'Tankfuellung' && hatEchtenTachostand($e)) {
             $tankRows[] = $e;
         }
     }

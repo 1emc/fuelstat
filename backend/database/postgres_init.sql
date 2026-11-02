@@ -1,5 +1,5 @@
 -- backend/database/postgres_init.sql
--- Vollständiges Schema für eine NEUE Installation (Stand: Migration 011).
+-- Vollständiges Schema für eine NEUE Installation (Stand: Migration 012).
 -- Beim ersten Start der Datenbank spielt Docker diese Datei automatisch ein (siehe infra/docker-compose.yml).
 -- Bestehende Installationen nutzen stattdessen die Migrationen postgres_0XX_*.sql.
 BEGIN;
@@ -53,7 +53,8 @@ CREATE TABLE IF NOT EXISTS fillups (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   vehicle_id uuid NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
-  odometer_km integer NOT NULL CHECK (odometer_km >= 0),
+  odometer_km integer NULL CHECK (odometer_km >= 0), -- darf fehlen und später nachgetragen werden
+  odometer_estimated boolean NOT NULL DEFAULT false, -- nur geschätzt: zählt nicht für Verbrauch und Tachostand
   amount numeric(10,3) NOT NULL CHECK (amount >= 0),
   unit text NOT NULL DEFAULT 'l' CHECK (unit IN ('l','kwh','kg')),
   total_cost_eur numeric(10,2) NOT NULL CHECK (total_cost_eur >= 0),
@@ -150,7 +151,7 @@ CREATE TABLE IF NOT EXISTS user_mail_settings (
 CREATE TABLE IF NOT EXISTS mail_log (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  kind text NOT NULL CHECK (kind IN ('reminder', 'report')),
+  kind text NOT NULL CHECK (kind IN ('reminder', 'report', 'odometer')),
   ref text NOT NULL,
   sent_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (user_id, kind, ref)
