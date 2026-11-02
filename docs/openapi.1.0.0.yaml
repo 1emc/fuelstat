@@ -677,6 +677,7 @@ paths:
               example:
                 currentOdo: 12845
                 avgPricePerLiter: 1.828
+                avgConsumption: 19.5
                 segments:
                   - full_id: "5546f0ac-b9f7-4d31-92c1-7886aba01701"
                     full_at: "2025-12-23T09:11:23.890Z"
@@ -1858,6 +1859,10 @@ components:
           type: number
           nullable: true
           description: Durchschnittlicher Preis pro Einheit des Fahrzeugs (Liter/kWh/kg; Plug-in-Hybrid Liter)
+        avgConsumption:
+          type: number
+          nullable: true
+          description: Ø Verbrauch pro 100 km über alle Abschnitte (nach km gewichtet) in der Einheit des Fahrzeugs; trend.current ist nur der letzte Abschnitt
         segments:
           type: array
           items:

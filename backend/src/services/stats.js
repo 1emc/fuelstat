@@ -121,6 +121,8 @@ async function getVehicleStats(pool, userId, vehicleId) {
     currentOdo,
     // Für Fahrzeuge mit einer Einheit wie bisher; Plug-in-Hybride: Werte des Kraftstoffs, alles Weitere in units
     avgPricePerLiter: main?.avgPrice ?? null,
+    // Ø Verbrauch über alle Abschnitte (gewichtet nach km); trend.current ist nur der letzte Abschnitt
+    avgConsumption: main?.avgConsumption ?? null,
     segments: segRows,
     trend: main?.trend ?? null,
     units

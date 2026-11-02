@@ -308,6 +308,7 @@ Authorization: Bearer <jwt>
 {
   "currentOdo": 68831,
   "avgPricePerLiter": "1.774",
+  "avgConsumption": 2.7,
   "segments": [
     {
       "full_id": "<fillup-uuid>",
@@ -326,8 +327,8 @@ Authorization: Bearer <jwt>
 }
 ```
 
-* `avgPricePerLiter` und `trend` gelten für die Einheit des Fahrzeugs (beim Plug-in-Hybrid Liter); `units` enthält die Werte für jede vorhandene Einheit.
-* `avgConsumption`: Ø Verbrauch pro 100 km über alle Abschnitte, nach km gewichtet. Abschnitte ohne Strecke (zwei volle Einträge beim selben Tachostand) zählen nicht.
+* `avgPricePerLiter`, `avgConsumption` und `trend` gelten für die Einheit des Fahrzeugs (beim Plug-in-Hybrid Liter); `units` enthält die Werte für jede vorhandene Einheit.
+* `avgConsumption`: Ø Verbrauch pro 100 km über alle Abschnitte, nach km gewichtet. Abschnitte ohne Strecke (zwei volle Einträge beim selben Tachostand) zählen nicht. `trend.current` ist nur der letzte Abschnitt.
 * `l_per_100km` ist je nach Einheit l, kWh oder kg pro 100 km.
 
 **Errors**
