@@ -65,7 +65,10 @@ foreach (getMergedEintraegeFromApi($api, $fahrzeug_id)['eintraege'] as $monatsEi
     return text;
   }
 
-  feld.addEventListener('input', zeige);
+  // Während des Tippens keine neue Warnung einblenden (jede Zwischenzahl wäre "zu niedrig" und das Layout
+  // würde springen, #90); eine angezeigte Warnung verschwindet aber sofort, sobald der Wert passt.
+  feld.addEventListener('input', function () { if (!hinweis.classList.contains('d-none')) zeige(); });
+  feld.addEventListener('change', zeige);
   datumFeld.addEventListener('change', zeige);
   feld.form.addEventListener('submit', function (e) {
     var text = zeige();
