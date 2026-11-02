@@ -48,7 +48,7 @@ Fuelstat ist eine Web-App, mit der du Tankfüllungen, Ladevorgänge und alle and
 - Benutzerverwaltung für Admins: Fahrzeuge je Benutzer, zuletzt aktiv, letzter Login, letzter Eintrag, Beta-Tester-Kennzeichen, Tarif (Free/Plus/Flotte, optional befristet) und Feedback-Eingang
 - Tarif-Grundgerüst für ein späteres Premium-Modell; Grenzen erst mit `PLAN_LIMITS_ENABLED=true` aktiv, bis dahin haben alle den vollen Umfang
 - „Feedback senden“ für angemeldete Benutzer (Fehler, Idee, Lob, Sonstiges): wird gespeichert und per Mail an den Betreiber geschickt
-- Hell- und Dunkelmodus, als App installierbar (PWA), auf dem Handy mit App-Navigation (untere Leiste, Profil- und Fahrzeugauswahl von unten)
+- Hell- und Dunkelmodus, als App installierbar (PWA), auf dem Handy mit App-Navigation (untere Leiste, Profil- und Fahrzeugauswahl von unten); auf der Fahrzeugseite wechselt Wischen nach links bzw. rechts zwischen den Reitern
 
 ## Aufbau
 
