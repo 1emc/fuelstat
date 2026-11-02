@@ -1098,6 +1098,43 @@ paths:
         "404":
           description: user_not_found
 
+  /api/v1/auth/plans:
+    put:
+      tags: [Users]
+      summary: Set plan for several users (admin only)
+      operationId: putPlans
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userIds:
+                  type: array
+                  maxItems: 1000
+                  items:
+                    type: string
+                    format: uuid
+                plan:
+                  type: string
+                  enum: [free, plus, fleet]
+                planUntil:
+                  type: string
+                  format: date-time
+                  nullable: true
+                  description: Ende des Tarifs, leer/null = unbefristet (bei free immer null)
+              required: [userIds, plan]
+      responses:
+        "200":
+          description: "OK ({ updated, plan, planUntil })"
+        "400":
+          description: invalid_plan, invalid_planUntil, invalid_userIds
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: forbidden
+
   /api/v1/auth/users/{userId}/plan:
     put:
       tags: [Users]

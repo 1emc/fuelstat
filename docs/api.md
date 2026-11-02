@@ -24,6 +24,7 @@ Pfade relativ zu `/api/v1`. „Auth“: ohne = öffentlich, ✓ = angemeldet, Ad
 | GET · PATCH · DELETE | `/auth/users/:userId` | Selbst/Admin | Konto lesen, `email`/`username`/`profileImageUrl` ändern, löschen |
 | PUT | `/auth/users/:userId/beta` | Admin | Beta-Tester setzen |
 | PUT | `/auth/users/:userId/plan` | Admin | Tarif setzen (`plan`, optional `planUntil`) |
+| PUT | `/auth/plans` | Admin | Tarif für mehrere Konten (`userIds`, `plan`, optional `planUntil`) |
 | POST | `/auth/users/:userId/revoke-all` | Selbst/Admin | Auf allen Geräten abmelden |
 | GET | `/auth/tokens` | ✓ | Gesperrte Tokens (Admin: alle) |
 | POST | `/auth/tokens/revoke` | ✓ | Ein Token sperren (Abmelden) |
@@ -119,7 +120,7 @@ Fehlende Rechte: **403** `{ "error": "forbidden" }`
 
 Grundgerüst für ein späteres Premium-Modell. Was ein Tarif darf, steht an einer Stelle: `backend/src/services/plans.js`.
 
-* `users.plan` (`free`, `plus`, `fleet`) und `users.plan_until` (Ende, `null` = unbefristet; danach gilt `free`). Admins setzen beides mit `PUT /auth/users/:userId/plan` bzw. in der Benutzerverwaltung.
+* `users.plan` (`free`, `plus`, `fleet`) und `users.plan_until` (Ende, `null` = unbefristet; danach gilt `free`). Admins setzen beides mit `PUT /auth/users/:userId/plan`, für mehrere Konten auf einmal mit `PUT /auth/plans` `{ "userIds": [...], "plan": "plus", "planUntil": null }` (Antwort `{ updated, plan, planUntil }`, max. 1000 IDs, sonst 400 `invalid_userIds`), oder in der Benutzerverwaltung (Häkchen, „Alle auswählen“, „Tarif setzen“).
 * `PLAN_LIMITS_ENABLED=true` in der `.env` schaltet die Grenzen ein. **Standard: aus**, dann haben alle Konten mindestens die Rechte von `plus`.
 * `GET /whoami` liefert `plan`, `planUntil`, `effectivePlan` (gerade geltender Tarif), `limitsEnabled` und `features` (z. B. `maxVehicles: 1`, `sharing: false`; `null` = unbegrenzt).
 * Verbietet der Tarif etwas, antwortet die API mit **403** `{ "error": "plan_required", "feature": "maxVehicles", "limit": 1, "plan": "free" }`. Derzeit geprüft: Anzahl Fahrzeuge beim Anlegen. Herabstufen löscht nichts.

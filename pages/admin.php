@@ -34,6 +34,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: admin.php');
             exit;
         }
+        // Tarif für mehrere ausgewählte Benutzer auf einmal
+        if ($aktion === 'tarif_sammel') {
+            $ids = array_values(array_filter(array_map('strval', (array)($_POST['user_ids'] ?? []))));
+            if (!$ids) {
+                throw new RuntimeException('Bitte mindestens einen Benutzer auswählen.');
+            }
+            $bis = trim($_POST['plan_until'] ?? '');
+            $plan = (string)($_POST['plan'] ?? 'plus');
+            $ergebnis = $api->putPlans($ids, $plan, $bis !== '' ? $bis . 'T23:59:59' : null);
+            $_SESSION['success_message'] = sprintf('Tarif %s für %d Benutzer gesetzt.', tarifNamen()[$plan] ?? $plan, (int)($ergebnis['updated'] ?? 0));
+            header('Location: admin.php');
+            exit;
+        }
         if ($aktion === 'feedback') {
             $api->patchFeedback(trim($_POST['feedback_id'] ?? ''), !empty($_POST['wert']));
             header('Location: admin.php#feedback');
@@ -105,10 +118,27 @@ include '../includes/header.php';
     <?php if ($error): ?>
         <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
     <?php endif; ?>
+    <!-- Tarif für mehrere Benutzer: Häkchen in der Tabelle setzen, dann hier Tarif wählen -->
+    <form method="post" id="tarifSammel" class="d-flex flex-wrap gap-2 align-items-center mb-3 p-2 rounded bg-body-tertiary"
+          onsubmit="return confirm('Tarif für ' + document.querySelectorAll('.tarif-auswahl:checked').length + ' Benutzer setzen?');">
+        <input type="hidden" name="aktion" value="tarif_sammel">
+        <span class="small text-body-secondary">Tarif für <strong id="tarifAnzahl">0</strong> ausgewählte Benutzer:</span>
+        <select name="plan" class="form-select form-select-sm w-auto" aria-label="Tarif für ausgewählte Benutzer">
+            <?php foreach (tarifNamen() as $wert => $name): ?>
+                <option value="<?= $wert ?>" <?= $wert === 'plus' ? 'selected' : '' ?>><?= $name ?></option>
+            <?php endforeach; ?>
+        </select>
+        <input type="date" name="plan_until" class="form-control form-control-sm w-auto" aria-label="Gültig bis (leer = unbefristet)" title="Gültig bis (leer = unbefristet)">
+        <button class="btn btn-sm btn-primary" id="tarifSammelKnopf" disabled>Tarif setzen</button>
+        <?php if (empty($ich['limitsEnabled'])): ?>
+            <span class="small text-body-secondary">Grenzen sind noch nicht aktiv (<code>PLAN_LIMITS_ENABLED</code>), bis dahin haben alle den vollen Umfang.</span>
+        <?php endif; ?>
+    </form>
     <div class="table-responsive">
         <table class="table align-middle">
             <thead>
                 <tr>
+                    <th><input class="form-check-input" type="checkbox" id="tarifAlle" aria-label="Alle Benutzer auswählen" title="Alle auswählen"></th>
                     <th>E-Mail</th><th>Benutzername</th>
                     <th class="text-end">Fahrzeuge</th>
                     <th title="Zuletzt die App benutzt (wird höchstens stündlich aktualisiert)">Zuletzt aktiv</th>
@@ -122,6 +152,7 @@ include '../includes/header.php';
             <tbody>
             <?php foreach ($benutzer as $u): $istIch = ($u['id'] ?? '') === ($ich['id'] ?? ''); ?>
                 <tr>
+                    <td><input class="form-check-input tarif-auswahl" type="checkbox" name="user_ids[]" form="tarifSammel" value="<?= htmlspecialchars($u['id']) ?>" aria-label="<?= htmlspecialchars($u['email'] ?? '') ?> auswählen"></td>
                     <td><?= htmlspecialchars($u['email'] ?? '') ?><?= $istIch ? ' <span class="badge text-bg-primary">Du</span>' : '' ?></td>
                     <td><?= htmlspecialchars($u['username'] ?? '') ?></td>
                     <td class="text-end"><?= (int)($u['vehicle_count'] ?? 0) ?></td>
@@ -141,14 +172,14 @@ include '../includes/header.php';
                         <form method="post" class="d-flex gap-1 align-items-center mb-0">
                             <input type="hidden" name="aktion" value="tarif">
                             <input type="hidden" name="user_id" value="<?= htmlspecialchars($u['id']) ?>">
-                            <select name="plan" class="form-select form-select-sm w-auto" aria-label="Tarif">
+                            <!-- Speichert direkt beim Ändern -->
+                            <select name="plan" class="form-select form-select-sm w-auto" aria-label="Tarif" onchange="this.form.submit()">
                                 <?php foreach (tarifNamen() as $wert => $name): ?>
                                     <option value="<?= $wert ?>" <?= ($u['plan'] ?? 'free') === $wert ? 'selected' : '' ?>><?= $name ?></option>
                                 <?php endforeach; ?>
                             </select>
                             <input type="date" name="plan_until" class="form-control form-control-sm w-auto" aria-label="Tarif gültig bis (leer = unbefristet)" title="Gültig bis (leer = unbefristet)"
-                                   value="<?= !empty($u['plan_until']) ? htmlspecialchars(date('Y-m-d', strtotime($u['plan_until']))) : '' ?>">
-                            <button class="btn btn-sm btn-outline-secondary" title="Tarif speichern" aria-label="Tarif speichern"><i class="fas fa-check"></i></button>
+                                   value="<?= !empty($u['plan_until']) ? htmlspecialchars(date('Y-m-d', strtotime($u['plan_until']))) : '' ?>" onchange="this.form.submit()">
                         </form>
                     </td>
                     <td><?= isset($u['created_at']) ? date('d.m.Y', strtotime($u['created_at'])) : '' ?></td>
@@ -208,4 +239,23 @@ include '../includes/header.php';
         <?php endforeach; ?>
     </div>
 </div>
+<script>
+// Auswahl für "Tarif setzen": Zähler, Knopf und "Alle auswählen"
+(function () {
+  var alle = document.getElementById('tarifAlle');
+  var boxen = Array.prototype.slice.call(document.querySelectorAll('.tarif-auswahl'));
+  var anzahl = document.getElementById('tarifAnzahl');
+  var knopf = document.getElementById('tarifSammelKnopf');
+  function aktualisiere() {
+    var n = boxen.filter(function (b) { return b.checked; }).length;
+    anzahl.textContent = n;
+    knopf.disabled = n === 0;
+    alle.checked = n > 0 && n === boxen.length;
+    alle.indeterminate = n > 0 && n < boxen.length;
+  }
+  alle.addEventListener('change', function () { boxen.forEach(function (b) { b.checked = alle.checked; }); aktualisiere(); });
+  boxen.forEach(function (b) { b.addEventListener('change', aktualisiere); });
+  aktualisiere();
+})();
+</script>
 <?php include '../includes/footer.php'; ?>

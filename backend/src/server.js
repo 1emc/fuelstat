@@ -742,26 +742,54 @@ app.put('/api/v1/auth/users/:userId/beta', auth, requireAdmin, async (req, res) 
   }
 });
 
-// Tarif setzen (nur Admin), z. B. Plus für Tester und Freunde. planUntil: ISO-Datum oder null (unbefristet)
-app.put('/api/v1/auth/users/:userId/plan', auth, requireAdmin, async (req, res) => {
-  const plan = String(req.body?.plan || '').trim();
-  if (!plans.PLAN_NAMES.includes(plan)) return res.status(400).json({ error: 'invalid_plan', allowed: plans.PLAN_NAMES });
+// Tarif und Ablaufdatum aus dem Request prüfen; liefert { plan, planUntil } oder { error }
+function parsePlanBody(body) {
+  const plan = String(body?.plan || '').trim();
+  if (!plans.PLAN_NAMES.includes(plan)) return { error: 'invalid_plan' };
   let planUntil = null;
-  if (req.body?.planUntil !== undefined && req.body?.planUntil !== null && req.body?.planUntil !== '') {
-    const d = new Date(String(req.body.planUntil));
-    if (Number.isNaN(d.getTime())) return res.status(400).json({ error: 'invalid_planUntil' });
+  if (body?.planUntil !== undefined && body?.planUntil !== null && body?.planUntil !== '') {
+    const d = new Date(String(body.planUntil));
+    if (Number.isNaN(d.getTime())) return { error: 'invalid_planUntil' };
     planUntil = d.toISOString();
   }
+  // Free ist immer unbefristet
+  return { plan, planUntil: plan === 'free' ? null : planUntil };
+}
+
+// Tarif setzen (nur Admin), z. B. Plus für Tester und Freunde. planUntil: ISO-Datum oder null (unbefristet)
+app.put('/api/v1/auth/users/:userId/plan', auth, requireAdmin, async (req, res) => {
+  const p = parsePlanBody(req.body);
+  if (p.error) return res.status(400).json({ error: p.error, allowed: plans.PLAN_NAMES });
   try {
     const r = await pool.query(
       `UPDATE users SET plan = $2, plan_until = $3, updated_at = now() WHERE id = $1
        RETURNING id, email, plan, plan_until`,
-      [String(req.params.userId || '').trim(), plan, plan === 'free' ? null : planUntil]
+      [String(req.params.userId || '').trim(), p.plan, p.planUntil]
     );
     if (r.rowCount === 0) return res.status(404).json({ error: 'user_not_found' });
     res.json({ id: r.rows[0].id, email: r.rows[0].email, ...plans.planInfo(r.rows[0]) });
   } catch (e) {
     if (e.code === '22P02') return res.status(404).json({ error: 'user_not_found' });
+    serverError(res, e);
+  }
+});
+
+// Tarif für mehrere Konten auf einmal setzen (nur Admin): { userIds: [...], plan, planUntil }
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+app.put('/api/v1/auth/plans', auth, requireAdmin, async (req, res) => {
+  const p = parsePlanBody(req.body);
+  if (p.error) return res.status(400).json({ error: p.error, allowed: plans.PLAN_NAMES });
+  const ids = Array.isArray(req.body?.userIds) ? [...new Set(req.body.userIds.map((x) => String(x).trim()))] : [];
+  if (ids.length === 0 || ids.length > 1000 || !ids.every((id) => UUID_RE.test(id))) {
+    return res.status(400).json({ error: 'invalid_userIds' });
+  }
+  try {
+    const r = await pool.query(
+      `UPDATE users SET plan = $2, plan_until = $3, updated_at = now() WHERE id = ANY($1::uuid[]) RETURNING id`,
+      [ids, p.plan, p.planUntil]
+    );
+    res.json({ updated: r.rowCount, plan: p.plan, planUntil: p.planUntil });
+  } catch (e) {
     serverError(res, e);
   }
 });
