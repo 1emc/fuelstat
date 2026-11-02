@@ -1,5 +1,4 @@
 <?php
-include_once __DIR__ . '/../includes/db_connect.php';
 include_once __DIR__ . '/../includes/functions.php';
 include_once __DIR__ . '/../includes/api_helpers.php';
 

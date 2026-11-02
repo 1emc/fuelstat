@@ -1,6 +1,4 @@
 <?php
-// API-Anbindung (ersetzt frühere DB-Verbindung)
-include 'db_connect.php';
 require_once __DIR__ . '/api_helpers.php';
 
 // Basis-URL (mit http/https) und Basis-Pfad (unterhalb Document-Root) ermitteln

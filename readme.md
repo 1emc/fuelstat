@@ -80,7 +80,7 @@ Wird `JWT_SECRET` später ohne eigenen `MAIL_ENCRYPTION_KEY` geändert, lassen s
 ### 2. Frontend (PHP)
 
 - Das Repository-Wurzelverzeichnis ist der Webroot des Frontends.
-- `includes/db_connect.php` anlegen. Die Datei wird noch eingebunden, kann aber leer sein: `echo '<?php' > includes/db_connect.php` (Aufräumen siehe [#39](https://github.com/1emc/fuelstat/issues/39)).
+- Eine Datenbankverbindung braucht das Frontend nicht: Es liest und schreibt ausschließlich über die API. Eine alte `includes/db_connect.php` aus der MySQL-Zeit kann gelöscht werden.
 - API-Adresse: Ohne Angabe nutzt das Frontend `https://tanken.1emc.de/api/v1`. Für eine eigene Installation im PHP-FPM-Pool setzen, z. B. `env[FUELSTAT_API_BASE_URL] = https://deine-domain.de/api/v1` (oder direkt `http://127.0.0.1:3000/api/v1`).
 - Tankstellensuche: Tankerkönig-API-Key (kostenlos auf creativecommons.tankerkoenig.de) in `api/key.key` ablegen.
 - Ladestationssuche für E-Autos und Plug-in-Hybride: Open-Charge-Map-API-Key (kostenlos, openchargemap.org → Mein Profil → API-Schlüssel) in `api/ocm.key` eintragen. Die leere Datei ist versioniert. Nach dem Eintragen `git update-index --skip-worktree api/ocm.key` ausführen, damit der Schlüssel nie committet wird.

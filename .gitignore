@@ -38,6 +38,7 @@ $RECYCLE.BIN/
 /backend/uploads/
 
 # --- Secrets ---
+# alte MySQL-Zugangsdaten (wird nicht mehr genutzt, auf bestehenden Servern löschen)
 includes/db_connect.php
 .env
 .user.ini

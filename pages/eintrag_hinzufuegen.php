@@ -1,6 +1,5 @@
 <?php
 include '../includes/session.php';
-include '../includes/db_connect.php';
 include '../includes/functions.php';
 include '../includes/header.php';
 

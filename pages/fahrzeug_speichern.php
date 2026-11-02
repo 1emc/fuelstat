@@ -1,7 +1,6 @@
 <?php
 include '../includes/session.php';
 require_once __DIR__ . '/../includes/api_config.php';
-include '../includes/db_connect.php';
 require_once __DIR__ . '/../includes/api_helpers.php';
 require_once __DIR__ . '/../includes/functions.php';
 

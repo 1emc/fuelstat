@@ -26,7 +26,6 @@ $show_mfa_form = $pending !== null;
 
 try {
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        include '../includes/db_connect.php';
 
         $mfaSchritt = isset($_POST['code']) && $pending;
         $email = $mfaSchritt ? ($pending['email'] ?? '') : trim($_POST['email'] ?? '');
