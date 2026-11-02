@@ -31,6 +31,7 @@ $farben = [
     'Dekor'        => 'info',
     'Verbrauch'    => 'secondary',
     'Fahrt'        => 'info',
+    'Kilometerstand' => 'secondary',
 ];
 ?>
 

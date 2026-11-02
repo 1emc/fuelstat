@@ -116,7 +116,7 @@ async function buildMonthlyReport(pool, settings, year, month) {
     );
     const e = await pool.query(
       `SELECT category, SUM(amount_eur) AS cost
-       FROM expenses WHERE user_id = $1 AND vehicle_id = $2 AND occurred_at >= $3 AND occurred_at < $4 AND category <> 'Fahrt'
+       FROM expenses WHERE user_id = $1 AND vehicle_id = $2 AND occurred_at >= $3 AND occurred_at < $4 AND category NOT IN ('Fahrt', 'Kilometerstand')
        GROUP BY category ORDER BY SUM(amount_eur) DESC`,
       [settings.user_id, v.id, start, end]
     );

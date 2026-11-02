@@ -230,6 +230,18 @@ test('Tachostand-Prüfung (#51): Warnung statt Ablehnung', async () => {
   assert.deepEqual(korrigiert.body.warnings, []);
 });
 
+test('Kilometerstand notieren (#42) zählt als aktueller Tachostand, nicht als Kosten', async () => {
+  const u = await newUser();
+  const v = await newVehicle(u.token);
+  await fillup(u.token, v, { odometerKm: 1000, amount: 40, totalCostEur: 70, filledAt: '2026-01-01T12:00:00Z' });
+  const notiz = await api('POST', '/entries', { token: u.token, body: { vehicleId: v, category: 'Kilometerstand', amountEur: 0, odometerKm: 1350, occurredAt: '2026-01-05T12:00:00Z' } });
+  assert.equal(notiz.status, 201);
+  assert.deepEqual(notiz.body.warnings, []);
+  const s = (await api('GET', `/vehicles/${v}/stats`, { token: u.token })).body;
+  assert.equal(s.currentOdo, 1350);
+  assert.equal(s.segments.length, 0, 'kein Verbrauchsabschnitt');
+});
+
 test('Ausgabe ohne Tachostand speichert null, nicht 0', async () => {
   const u = await newUser();
   const v = await newVehicle(u.token);

@@ -17,5 +17,33 @@
       "sizes": "512x512",
       "type": "image/png"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Tanken oder Laden",
+      "short_name": "Tanken",
+      "description": "Tank- oder Ladevorgang erfassen",
+      "url": "pages/schnell.php?art=tanken",
+      "icons": [
+        {
+          "src": "images/icon-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Kilometerstand notieren",
+      "short_name": "km notieren",
+      "description": "Nur den Tachostand festhalten",
+      "url": "pages/schnell.php?art=km",
+      "icons": [
+        {
+          "src": "images/icon-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
   ]
 }

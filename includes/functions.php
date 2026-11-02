@@ -30,6 +30,7 @@ function getCategoryIcon(string $kategorie, ?string $fuelType = null, ?string $e
         'Dekor'        => 'fa-paint-roller',
         'Verbrauch'    => 'fa-chart-line',
         'Fahrt'        => 'fa-route',
+        'Kilometerstand' => 'fa-gauge-high',
     ];
     return $icons[$kategorie] ?? 'fa-question-circle';
 }

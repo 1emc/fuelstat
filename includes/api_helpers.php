@@ -203,6 +203,12 @@ function getLetzterEintragApi($api, string $vehicleId, string $category): ?array
     return null;
 }
 
+/** Einträge ohne Kosten (Fahrten, notierte Kilometerstände) zählen nicht zu den Ausgaben */
+function istEintragOhneKosten(?string $kategorie): bool
+{
+    return in_array($kategorie, ['Fahrt', 'Kilometerstand'], true);
+}
+
 /** Tachostand vorhanden und nicht nur geschätzt (#41)? */
 function hatEchtenTachostand(array $row): bool
 {
@@ -250,7 +256,7 @@ function getStatistikDatenFromApi($api, string $vehicleId): array
         $jahr = (int)substr($datum, 0, 4);
         $kosten = (float)($e['kosten'] ?? 0);
         $kat = $e['kategorie'] ?? 'Sonstige';
-        if ($kat === 'Fahrt') continue;
+        if (istEintragOhneKosten($kat)) continue;
         if (!in_array($jahr, $verfuegbareJahre, true)) {
             $verfuegbareJahre[] = $jahr;
         }
@@ -375,7 +381,7 @@ function getStatistikDatenFromApiForYear($api, string $vehicleId, ?int $year): a
     $kostenProMonat = [];
     foreach ($flat as $e) {
         $kat = $e['kategorie'] ?? 'Sonstige';
-        if ($kat === 'Fahrt') continue;
+        if (istEintragOhneKosten($kat)) continue;
         $kosten = (float)($e['kosten'] ?? 0);
         $ausgabenDaten[$kat] = ($ausgabenDaten[$kat] ?? 0) + $kosten;
         $gesamtKosten += $kosten;

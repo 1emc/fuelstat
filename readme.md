@@ -10,6 +10,9 @@ Fuelstat ist eine Web-App, mit der du Tankfüllungen, Ladevorgänge und alle and
 - Hinweise in der Übersicht, wenn TÜV, Wartung, Versicherung oder Steuer bald fällig oder überfällig sind
 
 **Einträge**
+- Erfassen in wenigen Sekunden: Art als große Kacheln (Tanken, Laden, Ausgabe, Fahrt, km notieren), Tachostand zuerst, Datum steht auf heute, zuletzt genutzte Orte als Chips, Speichern-Knopf unten fest
+- App-Kürzel (lange auf das App-Icon tippen): „Tanken oder Laden“ und „Kilometerstand notieren“; bei mehreren Fahrzeugen steht das zuletzt genutzte oben
+- „km notieren“: nur den Tachostand festhalten (ohne Kosten), z. B. beim Parken; hilft beim Schätzen, bei der Plausibilitätsprüfung und bei der Fahrleistung
 - Tankfüllungen bzw. Ladevorgänge mit Menge (l, kWh oder kg je nach Kraftstoff), Preis, Tankstelle, voll/teilweise getankt; alle Texte passen sich der Antriebsart an (Tankstelle/Ladestation, vollgetankt/vollgeladen …)
 - Warnung bei unplausiblem Tachostand (kleiner als der vorige oder ungewöhnlich großer Sprung)
 - Tachostand vergessen? Tank- und Ladevorgänge lassen sich ohne Tachostand (oder mit einer Schätzung aus Menge und Ø Verbrauch) speichern und später nachtragen – auch nach 14 Tagen. Hinweis in der Übersicht und in der Eintragsliste; der Verbrauch bleibt korrekt

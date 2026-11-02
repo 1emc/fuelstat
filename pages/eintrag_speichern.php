@@ -11,8 +11,9 @@ $tachoEingabe = trim((string)($_POST['tachostand'] ?? ''));
 $tachostand = $tachoEingabe !== '' ? (int)$tachoEingabe : null;
 $tachoGeschaetzt = $tachostand !== null && !empty($_POST['tachostand_geschaetzt']);
 
-if (!$fahrzeug_id || !$datum || ($tachostand === null && $eintragstyp === 'Fahrt')) {
-    $_SESSION['error_message'] = $eintragstyp === 'Fahrt' ? 'Datum und Tachostand sind erforderlich.' : 'Fahrzeug und Datum sind erforderlich.';
+$tachoPflicht = in_array($eintragstyp, ['Fahrt', 'Kilometerstand'], true);
+if (!$fahrzeug_id || !$datum || ($tachostand === null && $tachoPflicht)) {
+    $_SESSION['error_message'] = $tachoPflicht ? 'Datum und Tachostand sind erforderlich.' : 'Fahrzeug und Datum sind erforderlich.';
     header('Location: eintrag_hinzufuegen.php?fahrzeug_id=' . rawurlencode($fahrzeug_id));
     exit;
 }
@@ -72,6 +73,17 @@ try {
             'occurredAt' => $dateTime,
             'description' => fahrtBeschreibung($_POST),
         ]);
+    } elseif ($eintragstyp === 'Kilometerstand') {
+        // Nur Tachostand notieren (#42): eigener Eintrag ohne Kosten
+        $notiz = trim($_POST['beschreibung'] ?? '');
+        $api->postEntry([
+            'vehicleId' => $fahrzeug_id,
+            'category' => 'Kilometerstand',
+            'amountEur' => 0,
+            'odometerKm' => $tachostand,
+            'occurredAt' => $dateTime,
+            'description' => $notiz !== '' ? $notiz : null,
+        ]);
     } else {
         $_SESSION['error_message'] = 'Ungültiger Eintragstyp.';
         header('Location: eintrag_hinzufuegen.php?fahrzeug_id=' . rawurlencode($fahrzeug_id));
@@ -79,7 +91,9 @@ try {
     }
     $_SESSION['success_message'] = $eintragstyp === 'Tankfuellung' && ($tachostand === null || $tachoGeschaetzt)
         ? 'Eintrag gespeichert. Den Tachostand kannst du in der Eintragsliste nachtragen.'
-        : 'Eintrag gespeichert.';
+        : ($eintragstyp === 'Kilometerstand' ? 'Kilometerstand notiert.' : 'Eintrag gespeichert.');
+    // Schnellerfassung (#42): zuletzt genutztes Fahrzeug merken
+    setcookie('fuelstat_fahrzeug', $fahrzeug_id, ['expires' => time() + 365 * 86400, 'path' => '/', 'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off', 'httponly' => true, 'samesite' => 'Lax']);
     header('Location: fahrzeug_detail.php?id=' . rawurlencode($fahrzeug_id));
     exit;
 } catch (Throwable $e) {

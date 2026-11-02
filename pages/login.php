@@ -51,11 +51,15 @@ try {
                         'id' => $userId,
                         'email' => $user['email'] ?? $email,
                     ]);
+                    // Nach dem Login dorthin, wo man hinwollte (z. B. App-Kürzel "Tanken", #42); nur Seiten dieser App
+                    $ziel = (string)($_SESSION['nach_login'] ?? '');
+                    unset($_SESSION['nach_login']);
+                    $ziel = preg_match('~^pages/[a-z_]+\.php(\?[A-Za-z0-9_=&%-]*)?$~', $ziel) ? '../' . $ziel : '../index.php';
                     session_write_close();
                     while (ob_get_level()) {
                         ob_end_clean();
                     }
-                    header('Location: ../index.php', true, 303);
+                    header('Location: ' . $ziel, true, 303);
                     exit;
                 }
                 error_log('[Login] missing token in response for ' . $email . ', keys=' . implode(',', array_keys($data)));

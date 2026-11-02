@@ -9,7 +9,7 @@ $zahl = fn($wert, int $stellen = 2) => number_format((float)$wert, $stellen, ','
 $alle = [];
 foreach (getMergedEintraegeFromApi($api, $fahrzeug_id)['eintraege'] as $monatsEintraege) {
     foreach ($monatsEintraege as $e) {
-        if (($e['kategorie'] ?? '') !== 'Fahrt' && !empty($e['datum'])) {
+        if (!istEintragOhneKosten($e['kategorie'] ?? '') && !empty($e['datum'])) {
             $alle[] = $e;
         }
     }
