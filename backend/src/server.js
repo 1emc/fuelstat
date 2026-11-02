@@ -1,6 +1,5 @@
 const express = require('express');
 const helmet = require('helmet');
-const cors = require('cors');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
@@ -59,7 +58,20 @@ const importLimiter = limiter(10 * 60 * 1000, 60, 60);
 
 app.use(helmet());
 app.use(apiLimiter);
-app.use(cors());
+// CORS: Das PHP-Frontend ruft die API nur serverseitig auf, Browser anderer Seiten brauchen keinen Zugriff.
+// Nur ausdrücklich erlaubte Ursprünge (CORS_ORIGINS, kommagetrennt) bekommen CORS-Header.
+const CORS_ORIGINS = String(process.env.CORS_ORIGINS || '').split(',').map((o) => o.trim()).filter(Boolean);
+app.use((req, res, next) => {
+  const origin = req.header('Origin');
+  if (!origin || !CORS_ORIGINS.includes(origin)) return next();
+  res.set({
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE',
+    Vary: 'Origin'
+  });
+  return req.method === 'OPTIONS' ? res.status(204).end() : next();
+});
 // 2 MB erlaubt größere CSV-Importe (Frontend sendet max. 500 Zeilen pro Anfrage)
 app.use(express.json({ limit: '2mb' }));
 
