@@ -42,6 +42,9 @@ Pfade relativ zu `/api/v1`. „Auth“: ohne = öffentlich, ✓ = angemeldet, Ad
 | GET | `/vehicles/:vehicleId/entries` | ✓ | Ausgaben und Fahrten (`limit`, `offset`) |
 | POST | `/entries` | ✓ | Ausgabe anlegen |
 | GET · PATCH · DELETE | `/entries/:entryId` | ✓ | Ausgabe lesen, ändern, löschen |
+| GET | `/categories` | ✓ | Kategorien für Ausgaben (fest, Premium, eigene) |
+| POST | `/categories` | ✓ | Eigene Kategorie anlegen (Plus) |
+| PATCH · DELETE | `/categories/:categoryId` | ✓ | Eigene Kategorie ändern, löschen (`?moveTo=`) |
 | POST | `/media/upload` | ✓ | Profilbild hochladen (Feld `file`) |
 | GET | `/media` · `/media/:mediaId` | ✓ | Eigene Bilder |
 | DELETE | `/media/:mediaId` | ✓ | Bild löschen |
@@ -124,7 +127,7 @@ Grundgerüst für ein späteres Premium-Modell. Was ein Tarif darf, steht an ein
 * `users.plan` (`free`, `plus`, `fleet`) und `users.plan_until` (Ende, `null` = unbefristet; danach gilt `free`). Admins setzen beides mit `PUT /auth/users/:userId/plan`, für mehrere Konten auf einmal mit `PUT /auth/plans` `{ "userIds": [...], "plan": "plus", "planUntil": null }` (Antwort `{ updated, plan, planUntil }`, max. 1000 IDs, sonst 400 `invalid_userIds`), oder in der Benutzerverwaltung (Häkchen, „Alle auswählen“, „Tarif setzen“).
 * `PLAN_LIMITS_ENABLED=true` in der `.env` schaltet die Grenzen ein. **Standard: aus**, dann haben alle Konten mindestens die Rechte von `plus`.
 * `GET /whoami` liefert `plan`, `planUntil`, `effectivePlan` (gerade geltender Tarif), `limitsEnabled` und `features` (z. B. `maxVehicles: 1`, `sharing: false`; `null` = unbegrenzt).
-* Verbietet der Tarif etwas, antwortet die API mit **403** `{ "error": "plan_required", "feature": "maxVehicles", "limit": 1, "plan": "free" }`. Derzeit geprüft: Anzahl Fahrzeuge beim Anlegen. Herabstufen löscht nichts.
+* Verbietet der Tarif etwas, antwortet die API mit **403** `{ "error": "plan_required", "feature": "maxVehicles", "limit": 1, "plan": "free" }`. Derzeit geprüft: Anzahl Fahrzeuge beim Anlegen, Premium- und eigene Kategorien (siehe Kategorien). Herabstufen löscht nichts.
 * Datenexport ist nie an einen Tarif gebunden (DSGVO Art. 20).
 
 ### Anmeldung verlängern
@@ -378,11 +381,39 @@ Authorization: Bearer <jwt>
 
 ## Ausgaben (Entries) (Auth required)
 
-`POST /entries` `{ "vehicleId", "category", "amountEur", "odometerKm", "occurredAt", "vendor", "description" }`. Pflicht sind `vehicleId`, `category` und `amountEur`. Übliche Kategorien: `Versicherung`, `Werkstatt`, `Inspektion`, `Steuer`, `Reparatur`, `Reifen`, `TUV`, `Wartung`, `Dekor`, `Fahrt`. Freitext ist erlaubt.
+`POST /entries` `{ "vehicleId", "category", "amountEur", "odometerKm", "occurredAt", "vendor", "description" }`. Pflicht sind `vehicleId`, `category` und `amountEur`. `category` ist ein Schlüssel aus `GET /categories` (siehe unten); unbekannte Kategorien lehnt die API mit 400 `unknown_category` ab, Premium- bzw. eigene Kategorien ohne passenden Tarif mit 403 `plan_required` (`feature`: `premiumCategories` bzw. `customCategories`).
 
 * `GET /entries/:entryId` – einzelne Ausgabe
 * `PATCH /entries/:entryId` – Felder `category`, `amountEur`, `odometerKm`, `occurredAt`, `vendor`, `description` (alle optional; `null` löscht optionale Felder)
 * `DELETE /entries/:entryId` – 204
+
+Beim Ändern bleibt die bisherige Kategorie immer erlaubt, auch nach dem Herabstufen oder bei alten Freitext-Kategorien aus früheren Importen.
+
+## Kategorien (Auth required)
+
+Die einzige Quelle für Kategorien ist `backend/src/services/categories.js`; Web-Frontend und Apps holen sie über die API.
+
+`GET /categories` → `{ groups, categories, custom }`
+
+* `groups`: Gruppen für Auswertungen `{ key, name, icon, color }` (`kraftstoff`, `fix`, `wartung`, `unterwegs`, `sonstiges`)
+* `categories`: je Kategorie `{ key, name, icon, color, group, form, countsAsCost, plan, custom, selectable, available }`
+  * `key` ist fest und steht so in `expenses.category`; `name`, `icon` (Font Awesome 6), `color` und `group` immer aus der API anzeigen
+  * `form`: `expense` (Ausgabe), `trip` (Fahrt), `odometer` (nur Kilometerstand) oder `fillup` (Tank-/Ladevorgang, nur für Name und Icon)
+  * `countsAsCost: false` (Fahrt, Kilometerstand) zählt in keiner Kostensumme
+  * `plan`: `free` oder `plus`; `available` sagt, ob der Benutzer sie für neue Einträge wählen kann. Gesperrte mit Hinweis „mit Plus“ anzeigen statt weglassen
+  * `selectable: false` für Tankfüllung, Fahrt und Kilometerstand (eigene Formulare)
+  * eigene Kategorien: `custom: true`, `id`, `key` = `custom:<id>`
+  * alte Freitext-Kategorien aus früheren Importen: `legacy: true`, nicht wählbar
+* `custom`: `{ max, used, canCreate, icons, colors, nameMaxLength }` – erlaubte Symbole und Farben für eigene Kategorien
+* Antwort mit `Cache-Control: private, max-age=300` und `ETag` (`If-None-Match` → 304)
+
+Feste Kategorien: Free – `Versicherung`, `Steuer`, `TUV`, `Werkstatt`, `Reparatur`, `Wartung`, `Inspektion`, `Reifen`, `Sonstiges` (plus `Fahrt`, `Kilometerstand`); Plus – `Dekor` (Zubehör & Dekor), `Pflege`, `Parken`, `Maut`, `Leasing`.
+
+Eigene Kategorien (Tarif-Recht `customCategories`, Plus: 10 je Benutzer):
+
+* `POST /categories` `{ "name", "icon", "color", "group" }` → 201 Kategorie. Fehler: 400 `missing_name`, `name_too_long`, `invalid_icon`, `invalid_color`, `invalid_group`, `name_taken` (Name einer festen Kategorie); 409 `name_taken`; 403 `plan_required` oder `category_limit_reached`
+* `PATCH /categories/:categoryId` – dieselben Felder, alle optional (auch nach dem Herabstufen erlaubt)
+* `DELETE /categories/:categoryId?moveTo=<key>` → `{ deleted, moved, moveTo }`. Hängen Ausgaben daran, ist `moveTo` Pflicht (sonst 409 `category_in_use` mit `entries`); Ziel muss eine wählbare Ausgaben-Kategorie sein (400 `invalid_moveTo`)
 
 Fremde oder ungültige IDs liefern 404 `entry_not_found`.
 

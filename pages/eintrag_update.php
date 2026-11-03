@@ -15,22 +15,37 @@ $type = $_POST['type'] ?? 'fillup';
 if ($type === 'entry') {
     $datum = $_POST['datum'] ?? '';
     $tachostand = trim($_POST['tachostand'] ?? '');
-    $standort = trim($_POST['standort'] ?? '');
-    $beschreibung = trim($_POST['beschreibung'] ?? '');
-    try {
-        $api->patchEntry($eintrag_id, [
-            'category' => trim($_POST['kategorie'] ?? ''),
-            'amountEur' => (float)($_POST['kosten'] ?? 0),
-            'odometerKm' => $tachostand !== '' ? (int)$tachostand : null,
-            'occurredAt' => $datum . 'T12:00:00.000Z',
+    $kategorie = trim($_POST['kategorie'] ?? '');
+    $art = kategorieFormular($kategorie);
+    $daten = [
+        'category' => $kategorie,
+        'odometerKm' => $tachostand !== '' ? (int)$tachostand : null,
+        'occurredAt' => $datum . 'T12:00:00.000Z',
+    ];
+    if ($art === 'trip') {
+        // Fahrt (#43): Von/Nach/Zweck/km stehen in der Beschreibung
+        $daten += ['amountEur' => 0, 'vendor' => null, 'description' => fahrtBeschreibung($_POST)];
+    } elseif ($art === 'odometer') {
+        $notiz = trim($_POST['beschreibung'] ?? '');
+        $daten += ['amountEur' => 0, 'vendor' => null, 'description' => $notiz !== '' ? $notiz : null];
+    } else {
+        $standort = trim($_POST['standort'] ?? '');
+        $beschreibung = trim($_POST['beschreibung'] ?? '');
+        $daten += [
+            'amountEur' => (float)str_replace(',', '.', (string)($_POST['kosten'] ?? 0)),
             'vendor' => $standort !== '' ? $standort : null,
             'description' => $beschreibung !== '' ? $beschreibung : null,
-        ]);
-        $_SESSION['success_message'] = 'Ausgabe aktualisiert.';
-    } catch (Throwable $e) {
-        $_SESSION['error_message'] = $e->getMessage();
+        ];
     }
-    header('Location: fahrzeug_detail.php?id=' . rawurlencode($fahrzeug_id));
+    try {
+        $api->patchEntry($eintrag_id, $daten);
+        $_SESSION['success_message'] = (['trip' => 'Fahrt', 'odometer' => 'Kilometerstand'][$art] ?? 'Ausgabe') . ' aktualisiert.';
+    } catch (Throwable $e) {
+        $_SESSION['error_message'] = eintragFehlerText($e);
+        header('Location: eintrag_bearbeiten.php?id=' . rawurlencode($eintrag_id) . '&fahrzeug_id=' . rawurlencode($fahrzeug_id) . '&type=entry');
+        exit;
+    }
+    header('Location: fahrzeug_detail.php?id=' . rawurlencode($fahrzeug_id) . '#eintraege');
     exit;
 }
 

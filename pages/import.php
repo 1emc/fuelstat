@@ -49,6 +49,8 @@ $daten = $_SESSION[$sitzungsKey] ?? null;
 $schritt = $_POST['schritt'] ?? ($daten ? 'zuordnen' : 'upload');
 $error = '';
 $standardKategorie = $_POST['standard_kategorie'] ?? 'Werkstatt';
+// Unbekannte Kategorien als eigene anlegen (#95, nur wenn der Tarif eigene Kategorien erlaubt)
+$eigeneAnlegen = !empty($_POST['eigene_anlegen']);
 $zuordnung = $daten['zuordnung'] ?? [];
 
 if (isset($_GET['neu'])) {
@@ -90,6 +92,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $schritt === 'upload') {
 }
 
 $umgewandelt = $daten ? importWandleUm($daten['zeilen'], $zuordnung, $standardKategorie) : null;
+$kategorienKatalog = kategorienKatalog();
+if ($umgewandelt) {
+    $umgewandelt = importKategorienZuordnen($umgewandelt, $kategorienKatalog, $eigeneAnlegen);
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $schritt === 'importieren' && $umgewandelt) {
     if (!isset($zuordnung['datum'])) {
@@ -104,7 +110,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $schritt === 'importieren' && $umge
                 $r = $api->postVehicleImport($fahrzeug_id, $paket, []);
                 foreach (['imported', 'skipped'] as $k) { $summe[$k]['fillups'] += $r[$k]['fillups']; }
             }
-            foreach (array_chunk($umgewandelt['entries'], 500) as $paket) {
+            // Neue eigene Kategorien zuerst anlegen, dann die Platzhalter ersetzen
+            $neueSchluessel = [];
+            foreach ($umgewandelt['kategorien']['neu'] as $name) {
+                try {
+                    $neueSchluessel[mb_strtolower($name)] = $api->postCategory(['name' => $name])['key'];
+                } catch (FuelstatApiException $e) {
+                    // z. B. Name schon vergeben oder Grenze erreicht: diese Zeilen landen bei "Sonstiges"
+                }
+            }
+            if ($umgewandelt['kategorien']['neu']) {
+                kategorienLeeren();
+            }
+            foreach (array_chunk(importKategorienErsetzen($umgewandelt['entries'], $neueSchluessel), 500) as $paket) {
                 $r = $api->postVehicleImport($fahrzeug_id, [], $paket);
                 foreach (['imported', 'skipped'] as $k) { $summe[$k]['entries'] += $r[$k]['entries']; }
             }
@@ -130,7 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $schritt === 'importieren' && $umge
 $hinweise = [];
 if ($umgewandelt && isset($zuordnung['datum']) && ($umgewandelt['fillups'] || $umgewandelt['entries'])) {
     try {
-        $hinweise = importPruefeVorab($api, $fahrzeug_id, $umgewandelt);
+        $hinweise = importPruefeVorab($api, $fahrzeug_id, ['entries' => importKategorienErsetzen($umgewandelt['entries'], [])] + $umgewandelt);
     } catch (Throwable $e) {
         // Vorschau ohne Hinweise; der eigentliche Import meldet Fehler selbst
     }
@@ -193,11 +211,18 @@ $f2 = fn($v) => $v === null ? '' : number_format((float)$v, 2, ',', '.');
                 <div class="col-sm-6 col-lg-4">
                     <label class="form-label small mb-0" for="standard_kategorie">Kategorie für Ausgaben ohne Angabe</label>
                     <select class="form-select form-select-sm" id="standard_kategorie" name="standard_kategorie">
-                        <?php foreach (['Versicherung', 'Werkstatt', 'Inspektion', 'Steuer', 'Reparatur', 'Reifen', 'TUV', 'Wartung', 'Dekor'] as $k): ?>
-                            <option value="<?= $k ?>" <?= $k === $standardKategorie ? 'selected' : '' ?>><?= htmlspecialchars(getKategorieName($k)) ?></option>
-                        <?php endforeach; ?>
+                        <?= kategorieOptionen($standardKategorie, false) ?>
                     </select>
                 </div>
+                <?php if (!empty($kategorienKatalog['custom']['max'])): ?>
+                <div class="col-sm-6 col-lg-4 d-flex align-items-end">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="eigene_anlegen" name="eigene_anlegen" value="1" <?= $eigeneAnlegen ? 'checked' : '' ?>>
+                        <label class="form-check-label small" for="eigene_anlegen">Unbekannte Kategorien als eigene Kategorien anlegen
+                            (noch <?= max(0, (int)$kategorienKatalog['custom']['max'] - (int)$kategorienKatalog['custom']['used']) ?> frei)</label>
+                    </div>
+                </div>
+                <?php endif; ?>
             </div>
             <button type="submit" name="schritt" value="zuordnen" class="btn btn-outline-primary btn-sm mb-4">Vorschau aktualisieren</button>
 
@@ -209,6 +234,15 @@ $f2 = fn($v) => $v === null ? '' : number_format((float)$v, 2, ',', '.');
                 <?php if ($warnAnzahl): ?><span class="badge text-bg-warning"><?= $warnAnzahl ?> mit unplausiblem Tachostand</span><?php endif; ?>
                 <?php if ($doppeltAnzahl): ?><span class="badge text-bg-secondary"><?= $doppeltAnzahl ?> bereits vorhanden</span><?php endif; ?>
             </p>
+            <?php if ($umgewandelt['kategorien']['sonstiges']): ?>
+                <div class="alert alert-info small py-2">
+                    <i class="fas fa-circle-info me-1"></i>Unbekannte oder nicht im Tarif enthaltene Kategorien werden als „Sonstiges“ übernommen, der Name bleibt in der Beschreibung:
+                    <?= htmlspecialchars(implode(', ', array_map(fn($n, $a) => $n . ' (' . $a . '×)', array_keys($umgewandelt['kategorien']['sonstiges']), $umgewandelt['kategorien']['sonstiges']))) ?>
+                </div>
+            <?php endif; ?>
+            <?php if ($umgewandelt['kategorien']['neu']): ?>
+                <div class="alert alert-success small py-2"><i class="fas fa-tags me-1"></i>Neue eigene Kategorien: <?= htmlspecialchars(implode(', ', $umgewandelt['kategorien']['neu'])) ?></div>
+            <?php endif; ?>
             <div class="table-responsive mb-3" style="max-height: 420px;">
                 <table class="table table-sm table-striped align-middle">
                     <thead class="sticky-top"><tr><th>Zeile</th><th>Datum</th><th>Art</th><th>km</th><th>Menge<?= $fuelType === 'phev' ? '' : ' (' . $einheit . ')' ?></th><th>Kosten</th><th>Voll</th><th>Ort</th><th>Beschreibung</th></tr></thead>
@@ -223,7 +257,7 @@ $f2 = fn($v) => $v === null ? '' : number_format((float)$v, 2, ',', '.');
                         <tr class="<?= $z['fehler'] ? 'table-danger' : ($hinweis ? ($hinweis['art'] === 'warnung' ? 'table-warning' : 'table-secondary text-body-secondary') : '') ?>">
                             <td><?= $z['nr'] ?></td>
                             <td><?= $z['datum'] ? date('d.m.Y', strtotime($z['datum'])) : '' ?></td>
-                            <td><?= $z['fehler'] ? '<strong>' . htmlspecialchars($z['fehler']) . '</strong>' : htmlspecialchars(getKategorieName($z['kategorie'], $fuelType, $fuelType === 'phev' ? ($z['einheit'] ?? 'l') : null)) ?><?= $hinweis ? '<div class="small">' . htmlspecialchars($hinweis['text']) . '</div>' : '' ?></td>
+                            <td><?= $z['fehler'] ? '<strong>' . htmlspecialchars($z['fehler']) . '</strong>' : htmlspecialchars($z['kategorie_text'] ?? getKategorieName($z['kategorie'], $fuelType, $fuelType === 'phev' ? ($z['einheit'] ?? 'l') : null)) ?><?= $hinweis ? '<div class="small">' . htmlspecialchars($hinweis['text']) . '</div>' : '' ?></td>
                             <td><?= $z['tachostand'] !== null ? number_format($z['tachostand'], 0, ',', '.') : '' ?></td>
                             <td><?= $f2($z['menge']) ?><?= $fuelType === 'phev' && $z['menge'] !== null ? ' ' . einheitKurz($z['einheit'] ?? 'l') : '' ?></td>
                             <td><?= $z['kosten'] !== null ? $f2($z['kosten']) . ' €' : '' ?></td>

@@ -29,6 +29,7 @@ Fuelstat ist eine Web-App, mit der du Tankfüllungen, Ladevorgänge und alle and
 - Verbrauch pro Tankfüllung und Monat, bester/schlechtester Monat, Trend
 - Jahresübersicht mit Menge, Kosten, Verbrauch und CO₂
 - Ausgaben nach Kategorie und Kostengruppe, Kosten pro Monat und km, Wartungskosten je 10.000 km, Jahresvergleich
+- Kategorien kommen aus der API (`GET /categories`, eine Liste für Web und Apps): feste Kategorien, Premium-Kategorien (Parken, Maut, Pflege, Leasing, Zubehör) und bis zu 10 eigene Kategorien mit Symbol, Farbe und Gruppe (Plus)
 - CO₂-Ausstoß gesamt und pro km
 - Fälligkeiten: TÜV alle 24 Monate (ohne Eintrag 36 Monate nach Erstzulassung), Wartung nach dem Intervall des Fahrzeugs (Standard 12 Monate oder 15.000 km), Versicherung und Steuer jährlich bzw. im hinterlegten Fälligkeitsmonat
 - Export als CSV (für Excel) und als Bericht zum Drucken bzw. Speichern als PDF
@@ -141,7 +142,7 @@ Neue Datenbank-Migrationen (siehe unten) **vor** dem Neustart der API einspielen
 
 ```bash
 cd infra
-docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ../backend/database/postgres_013_vehicle_details.sql
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ../backend/database/postgres_014_expense_categories.sql
 ```
 
 ### Datensicherung
@@ -169,7 +170,7 @@ docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < .
 
 ### Datenbank-Migrationen
 
-Neue Installationen brauchen keine Migrationen: `postgres_init.sql` enthält bereits alles bis einschließlich 013. Bestehende Installationen spielen alle noch fehlenden Migrationen der Reihe nach ein:
+Neue Installationen brauchen keine Migrationen: `postgres_init.sql` enthält bereits alles bis einschließlich 014. Bestehende Installationen spielen alle noch fehlenden Migrationen der Reihe nach ein:
 
 | Datei | Inhalt |
 |---|---|
@@ -182,6 +183,7 @@ Neue Installationen brauchen keine Migrationen: `postgres_init.sql` enthält ber
 | `postgres_011_plans.sql` | Tarif je Konto (`plan`, `plan_until`), siehe `PLAN_LIMITS_ENABLED` |
 | `postgres_012_missing_odometer.sql` | Tank-/Ladevorgänge ohne Tachostand, Markierung „geschätzt“, Erinnerung „Kilometerstand nachtragen“ |
 | `postgres_013_vehicle_details.sql` | Fahrzeugangaben: Kennzeichen, FIN, Erstzulassung, Kauf/Verkauf, Intervalle, Versicherung, Steuer, Reifen |
+| `postgres_014_expense_categories.sql` | Eigene Kategorien für Ausgaben (Plus) |
 
 Alle Migrationen laufen in einer Transaktion und lassen sich gefahrlos ein zweites Mal ausführen.
 

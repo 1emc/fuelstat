@@ -16,57 +16,91 @@ if ($type === 'entry') {
     } catch (Throwable $e) {
         die("Eintrag nicht gefunden.");
     }
-    $kategorien = ['Versicherung', 'Werkstatt', 'Inspektion', 'Steuer', 'Reparatur', 'Reifen', 'TUV', 'Wartung', 'Dekor', 'Fahrt'];
-    $kategorie = $eintrag['category'] ?? '';
-    if ($kategorie !== '' && !in_array($kategorie, $kategorien, true)) {
-        $kategorien[] = $kategorie;
-    }
+    $kategorie = (string)($eintrag['category'] ?? '');
+    // Formular je Art (#95): normale Ausgabe, Fahrt oder notierter Kilometerstand
+    $art = kategorieFormular($kategorie);
+    $artTitel = ['trip' => 'Fahrt', 'odometer' => 'Kilometerstand'][$art] ?? 'Ausgabe';
     $datum = isset($eintrag['occurred_at']) ? date('Y-m-d', strtotime($eintrag['occurred_at'])) : '';
+    $tachostand = $eintrag['odometer_km'] ?? null;
+    $fahrt = $art === 'trip' ? fahrtAusBeschreibung($eintrag['description'] ?? '') : null;
+    $katalog = kategorienKatalog();
+    $zurueck = 'fahrzeug_detail.php?id=' . urlencode($fahrzeug_id) . '#eintraege';
     ?>
-<div class="container mt-5">
-    <h2>Ausgabe bearbeiten</h2>
-    <form method="post" action="eintrag_update.php" class="mt-4">
+<div class="container eintrag-formular mt-3 mt-lg-5">
+    <h1 class="h3 d-none d-lg-block mb-3"><?= $artTitel ?> bearbeiten</h1>
+    <form method="post" action="eintrag_update.php" id="eintragFormular">
         <input type="hidden" name="id" value="<?= htmlspecialchars($eintrag_id) ?>">
         <input type="hidden" name="fahrzeug_id" value="<?= htmlspecialchars($fahrzeug_id) ?>">
         <input type="hidden" name="type" value="entry">
-        <div class="mb-3">
-            <label class="form-label" for="kategorie">Kategorie</label>
-            <select class="form-select" id="kategorie" name="kategorie" required>
-                <?php foreach ($kategorien as $k): ?>
-                    <option value="<?= htmlspecialchars($k) ?>" <?= $k === $kategorie ? 'selected' : '' ?>><?= htmlspecialchars(getKategorieName($k)) ?></option>
-                <?php endforeach; ?>
-            </select>
+        <?php if ($art !== 'expense'): ?>
+            <input type="hidden" name="kategorie" value="<?= htmlspecialchars($kategorie) ?>">
+        <?php endif; ?>
+
+        <div class="row g-3 mb-3">
+            <div class="col-7">
+                <label class="form-label fw-semibold" for="tachostand">Tachostand (km)</label>
+                <input type="number" class="form-control form-control-lg" id="tachostand" name="tachostand" min="0" step="1" inputmode="numeric" pattern="[0-9]*"
+                       value="<?= $tachostand !== null ? (int)$tachostand : '' ?>" <?= $art === 'odometer' ? 'required' : 'placeholder="optional"' ?>>
+            </div>
+            <div class="col-5">
+                <label class="form-label fw-semibold" for="datum">Datum</label>
+                <input type="date" class="form-control form-control-lg" id="datum" name="datum" value="<?= htmlspecialchars($datum) ?>" required>
+            </div>
         </div>
-        <div class="mb-3">
-            <label class="form-label" for="datum">Datum</label>
-            <input type="date" class="form-control" id="datum" name="datum" value="<?= htmlspecialchars($datum) ?>" required>
+
+        <?php if ($art === 'expense'): ?>
+        <div class="row g-2 mb-1">
+            <div class="col-7">
+                <label class="form-label" for="kategorie">Kategorie</label>
+                <select class="form-select" id="kategorie" name="kategorie" required>
+                    <?= kategorieOptionen($kategorie, false) ?>
+                </select>
+            </div>
+            <div class="col-5">
+                <label class="form-label" for="kosten">Kosten (€)</label>
+                <input type="number" inputmode="decimal" step="0.01" class="form-control" id="kosten" name="kosten" value="<?= htmlspecialchars((string)(float)($eintrag['amount_eur'] ?? 0)) ?>" min="0" required>
+            </div>
         </div>
-        <div class="mb-3">
-            <label class="form-label" for="tachostand">Tachostand (km)</label>
-            <input type="number" class="form-control" id="tachostand" name="tachostand" value="<?= htmlspecialchars((string)($eintrag['odometer_km'] ?? '')) ?>" min="0">
-        </div>
-        <div class="mb-3">
-            <label class="form-label" for="kosten">Kosten (€)</label>
-            <input type="number" step="0.01" class="form-control" id="kosten" name="kosten" value="<?= (float)($eintrag['amount_eur'] ?? 0) ?>" min="0" required>
+        <div class="form-text mb-3">
+            <?php if (($katalog['custom']['max'] ?? 0) > 0): ?>
+                <a href="kategorien.php?zurueck=<?= urlencode($_SERVER['REQUEST_URI'] ?? '') ?>"><i class="fas fa-tags me-1"></i>Eigene Kategorien verwalten</a>
+            <?php elseif (kategorienHatGesperrte()): ?>
+                <i class="fas fa-lock me-1"></i>Weitere Kategorien und eigene Kategorien gibt es mit Plus.
+            <?php endif; ?>
         </div>
         <div class="mb-3">
             <label class="form-label" for="standort">Anbieter / Ort</label>
-            <input type="text" class="form-control" id="standort" name="standort" value="<?= htmlspecialchars($eintrag['vendor'] ?? '') ?>">
+            <input type="text" class="form-control" id="standort" name="standort" value="<?= htmlspecialchars($eintrag['vendor'] ?? '') ?>" placeholder="optional">
         </div>
         <div class="mb-3">
             <label class="form-label" for="beschreibung">Beschreibung</label>
-            <textarea class="form-control" id="beschreibung" name="beschreibung"><?= htmlspecialchars($eintrag['description'] ?? '') ?></textarea>
+            <textarea class="form-control" id="beschreibung" name="beschreibung" rows="2" placeholder="optional"><?= htmlspecialchars($eintrag['description'] ?? '') ?></textarea>
         </div>
-        <div class="d-flex mt-4">
-            <button type="submit" class="btn btn-primary me-2">Speichern</button>
-            <a href="fahrzeug_detail.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?>" class="btn btn-secondary me-auto">Abbrechen</a>
+        <?php elseif ($art === 'trip'): ?>
+        <div class="row g-2 mb-3">
+            <div class="col-6"><label for="startort" class="form-label">Von</label><input type="text" id="startort" name="startort" class="form-control" value="<?= htmlspecialchars($fahrt['startort']) ?>"></div>
+            <div class="col-6"><label for="zielort" class="form-label">Nach</label><input type="text" id="zielort" name="zielort" class="form-control" value="<?= htmlspecialchars($fahrt['zielort']) ?>"></div>
+            <div class="col-7"><label for="zweck" class="form-label">Zweck</label><input type="text" id="zweck" name="zweck" class="form-control" value="<?= htmlspecialchars($fahrt['zweck']) ?>"></div>
+            <div class="col-5"><label for="gefahrene_km" class="form-label">km</label><input type="number" inputmode="decimal" id="gefahrene_km" name="gefahrene_km" class="form-control" min="0" step="0.1" value="<?= htmlspecialchars($fahrt['gefahrene_km']) ?>"></div>
+        </div>
+        <?php else: ?>
+        <div class="mb-3">
+            <label for="beschreibung" class="form-label">Notiz (optional)</label>
+            <input type="text" id="beschreibung" name="beschreibung" class="form-control" value="<?= htmlspecialchars($eintrag['description'] ?? '') ?>" placeholder="z. B. Parkhaus Bahnhof">
+        </div>
+        <?php endif; ?>
+
+        <!-- Mobil unten fest über der App-Leiste -->
+        <div class="formular-aktionen">
+            <button type="submit" class="btn btn-primary btn-lg flex-grow-1"><i class="fas fa-check me-1"></i>Speichern</button>
+            <a href="<?= htmlspecialchars($zurueck) ?>" class="btn btn-outline-secondary btn-lg">Abbrechen</a>
         </div>
     </form>
-    <form method="post" action="eintrag_loeschen.php" onsubmit="return confirm('Möchtest du diese Ausgabe wirklich löschen?');" class="mt-3">
+    <form method="post" action="eintrag_loeschen.php" onsubmit="return confirm(<?= htmlspecialchars(json_encode('Möchtest du diesen Eintrag (' . $artTitel . ') wirklich löschen?', JSON_UNESCAPED_UNICODE), ENT_QUOTES) ?>);" class="mt-4 mb-4">
         <input type="hidden" name="id" value="<?= htmlspecialchars($eintrag_id) ?>">
         <input type="hidden" name="fahrzeug_id" value="<?= htmlspecialchars($fahrzeug_id) ?>">
         <input type="hidden" name="type" value="entry">
-        <button type="submit" class="btn btn-danger">Ausgabe löschen</button>
+        <button type="submit" class="btn btn-link text-danger px-0"><i class="fas fa-trash me-1"></i><?= $artTitel ?> löschen</button>
     </form>
 </div>
     <?php

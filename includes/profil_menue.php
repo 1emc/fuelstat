@@ -9,6 +9,7 @@ $menue = [
     ['pages/passwort_aendern.php', 'fa-key', 'Passwort ändern'],
     ['pages/mfa_einrichten.php', 'fa-shield-alt', '2FA einrichten'],
     ['pages/benachrichtigungen.php', 'fa-envelope', 'E-Mail-Benachrichtigungen'],
+    ['pages/kategorien.php', 'fa-tags', 'Kategorien'],
 ];
 if (!empty($currentUser['is_admin'])) {
     $menue[] = ['pages/admin.php', 'fa-users-cog', 'Benutzerverwaltung & Feedback'];

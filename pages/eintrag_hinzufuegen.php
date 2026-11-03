@@ -97,7 +97,11 @@ $t = $texteJeEinheit[$einheit] ?? reset($texteJeEinheit);
 $stationsArt = $t['stationsArt'];
 
 $vorgegebeneKategorie = $_GET['kategorie'] ?? null;
-$allCategories = ['Versicherung', 'Werkstatt', 'Inspektion', 'Steuer', 'Reparatur', 'Reifen', 'TUV', 'Wartung', 'Dekor'];
+// Kategorien kommen vom API (#95); vorgegebene nur, wenn sie wählbar ist
+$kategorienKatalog = kategorienKatalog();
+if ($vorgegebeneKategorie !== null && empty(kategorieInfo($vorgegebeneKategorie)['available'])) {
+    $vorgegebeneKategorie = null;
+}
 $heute = (new DateTimeImmutable('now', new DateTimeZone('Europe/Berlin')))->format('Y-m-d');
 ?>
 
@@ -222,16 +226,20 @@ $heute = (new DateTimeImmutable('now', new DateTimeZone('Europe/Berlin')))->form
                 <div class="col-7">
                     <label for="kategorie" class="form-label">Kategorie</label>
                     <select id="kategorie" name="kategorie" class="form-select" required>
-                        <option value="">Bitte wählen</option>
-                        <?php foreach ($allCategories as $cat): ?>
-                            <option value="<?= $cat ?>" <?= $vorgegebeneKategorie === $cat ? 'selected' : '' ?>><?= getKategorieName($cat) ?></option>
-                        <?php endforeach; ?>
+                        <?= kategorieOptionen($vorgegebeneKategorie) ?>
                     </select>
                 </div>
                 <div class="col-5">
                     <label for="kosten_other" class="form-label">Kosten (€)</label>
                     <input type="number" inputmode="decimal" id="kosten_other" name="kosten" class="form-control" min="0" step="0.01" required>
                 </div>
+            </div>
+            <div class="form-text mt-n2 mb-3">
+                <?php if (($kategorienKatalog['custom']['max'] ?? 0) > 0): ?>
+                    <a href="kategorien.php?zurueck=<?= urlencode($_SERVER['REQUEST_URI'] ?? '') ?>"><i class="fas fa-tags me-1"></i>Eigene Kategorien verwalten</a>
+                <?php elseif (kategorienHatGesperrte()): ?>
+                    <i class="fas fa-lock me-1"></i>Weitere Kategorien und eigene Kategorien gibt es mit Plus.
+                <?php endif; ?>
             </div>
             <div class="mb-3">
                 <label for="beschreibung" class="form-label">Beschreibung</label>

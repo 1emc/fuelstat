@@ -702,7 +702,8 @@ paths:
       tags: [Entries]
       summary: Create Entry (expense/maintenance/etc.)
       description: >
-        Generischer Eintrag für Kosten und Ereignisse (Werkstatt, Steuer, Versicherung, Reifen, TUEV, ...).
+        Generischer Eintrag für Kosten und Ereignisse. category ist ein Schlüssel aus GET /api/v1/categories;
+        unbekannte Kategorien ergeben 400 unknown_category, gesperrte 403 plan_required.
       operationId: postEntries
       requestBody:
         required: true
@@ -712,7 +713,7 @@ paths:
               $ref: "#/components/schemas/EntryCreateRequest"
             example:
               vehicleId: "e3585b92-e620-470e-ae96-f11bc3baf1d1"
-              category: "Repair"
+              category: "Reparatur"
               amountEur: 65.5
               odometerKm: 45200
               occurredAt: "2023-10-27T14:30:00Z"
@@ -1269,6 +1270,85 @@ paths:
           description: forbidden
         "404":
           description: feedback_not_found
+
+  /api/v1/categories:
+    get:
+      tags: [Entries]
+      summary: Categories for expenses (built-in, premium, custom, legacy)
+      description: >
+        Liefert groups, categories (key, name, icon, color, group, form, countsAsCost, plan, custom, selectable, available)
+        und custom (max, used, canCreate, icons, colors, nameMaxLength). Cache-Control private, max-age=300; ETag.
+      operationId: getCategories
+      responses:
+        "200":
+          description: OK
+        "304":
+          description: Not Modified (If-None-Match)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Entries]
+      summary: Create a custom category (plan feature customCategories)
+      operationId: postCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 40 }
+                icon: { type: string, example: "fa-ferry" }
+                color: { type: string, example: "#0dcaf0" }
+                group: { type: string, enum: [fix, wartung, unterwegs, sonstiges] }
+      responses:
+        "201":
+          description: Created (key custom:<id>)
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          description: plan_required oder category_limit_reached
+        "409":
+          description: name_taken
+
+  /api/v1/categories/{categoryId}:
+    parameters:
+      - name: categoryId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Entries]
+      summary: Change a custom category (name, icon, color, group)
+      operationId: patchCategory
+      responses:
+        "200":
+          description: OK
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: name_taken
+    delete:
+      tags: [Entries]
+      summary: Delete a custom category; entries move to moveTo
+      operationId: deleteCategory
+      parameters:
+        - name: moveTo
+          in: query
+          required: false
+          schema: { type: string, example: "Sonstiges" }
+      responses:
+        "200":
+          description: "OK ({ deleted, moved, moveTo })"
+        "400":
+          description: invalid_moveTo
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: category_in_use (moveTo fehlt)
 
   /api/v1/auth/refresh:
     post:

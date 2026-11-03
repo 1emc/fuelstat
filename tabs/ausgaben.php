@@ -35,28 +35,30 @@ $gruppen = $istPhev ? [
 ] : [
     'kraftstoff' => [$begriffe['Verb'], $begriffe['icon'], '#0d6efd', ['Tankfuellung']],
 ];
-$gruppen += [
-    'fix' => ['Versicherung & Steuer', 'fa-shield-alt', '#6f42c1', ['Versicherung', 'Steuer']],
-    'wartung' => ['Werkstatt & Wartung', 'fa-tools', '#fd7e14', ['Werkstatt', 'Inspektion', 'Reparatur', 'Wartung', 'Reifen', 'TUV']],
-    'sonstiges' => ['Sonstiges', 'fa-ellipsis', '#20c997', []],
-];
+// Weitere Gruppen kommen mit den Kategorien vom API (#95): Fixkosten, Werkstatt & Wartung, Parken & Maut, Sonstiges
+foreach (kategorieGruppen() as $gKey => $g) {
+    if ($gKey !== 'kraftstoff') {
+        $gruppen[$gKey] = [$g['name'], $g['icon'], $g['color'], []];
+    }
+}
+$gruppen['wartung'] ??= ['Werkstatt & Wartung', 'fa-tools', '#fd7e14', []];
 $gruppeVon = function (string $kategorie) use ($gruppen): string {
     foreach ($gruppen as $schluessel => [, , , $kategorien]) {
         if (in_array($kategorie, $kategorien, true)) {
             return $schluessel;
         }
     }
-    return 'sonstiges';
+    $g = getKategorieGruppe($kategorie);
+    return isset($gruppen[$g]) && $g !== 'kraftstoff' ? $g : 'sonstiges';
 };
 $kategorieName = fn(string $k) => getKategorieName($katTeile($k)[0], $fuelType, $katTeile($k)[1]);
 $kategorieIcon = fn(string $k) => getCategoryIcon($katTeile($k)[0], $fuelType, $katTeile($k)[1]);
 
-// Farben je Kategorie (Diagramm und Liste)
-$kategorieFarben = [
-    'Tankfuellung' => '#0d6efd', 'Tankfuellung:l' => '#0d6efd', 'Tankfuellung:kwh' => '#198754', 'Versicherung' => '#6f42c1', 'Steuer' => '#a370f7', 'Werkstatt' => '#fd7e14',
-    'Inspektion' => '#ffc107', 'Reparatur' => '#dc3545', 'Wartung' => '#e8590c', 'Reifen' => '#6c757d',
-    'TUV' => '#d63384', 'Dekor' => '#20c997',
-];
+// Farben je Kategorie (Diagramm und Liste), vom API; Plug-in-Hybrid: Laden grün
+$kategorieFarben = ['Tankfuellung:l' => getKategorieFarbe('Tankfuellung'), 'Tankfuellung:kwh' => '#198754'];
+foreach ($eintraege as $e) {
+    $kategorieFarben[$e['kategorie']] ??= getKategorieFarbe($e['kategorie']);
+}
 
 // Summen je Kategorie und Gruppe
 $kategorien = [];
@@ -354,7 +356,7 @@ $zeitraumText = $selectedYear !== null ? 'im Jahr ' . $selectedYear : 'gesamt';
         new Chart(el, {
             type: 'doughnut',
             data: {
-                labels: <?= json_encode(array_map($kategorieName, array_keys($kategorien)), JSON_UNESCAPED_UNICODE) ?>,
+                labels: <?= json_encode(array_map($kategorieName, array_keys($kategorien)), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?>,
                 datasets: [{
                     data: <?= json_encode(array_map(fn($d) => round($d['summe'], 2), array_values($kategorien))) ?>,
                     backgroundColor: <?= json_encode(array_map(fn($k) => $kategorieFarben[$k] ?? '#adb5bd', array_keys($kategorien))) ?>,

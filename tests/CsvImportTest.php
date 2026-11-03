@@ -66,4 +66,34 @@ assert(array_column($r['vorschau'], 'einheit') === ['kwh', 'l', 'kwh', 'kwh']);
 assert(importEinheit('Liter') === 'l' && importEinheit('KWH') === 'kwh' && importEinheit('egal') === null);
 assert(importArt('Ladevorgang', null, 'Werkstatt') === ['typ' => 'fillup', 'kategorie' => 'Tankfuellung', 'einheit' => 'kwh']);
 
+// Kategorien mit dem Katalog des API abgleichen (#95)
+$katalog = [
+    'categories' => [
+        ['key' => 'Werkstatt', 'name' => 'Werkstatt', 'form' => 'expense', 'available' => true],
+        ['key' => 'TUV', 'name' => 'TÜV', 'form' => 'expense', 'available' => true],
+        ['key' => 'Parken', 'name' => 'Parken', 'form' => 'expense', 'available' => false],
+        ['key' => 'custom:1', 'name' => 'Fähre', 'form' => 'expense', 'available' => true, 'custom' => true],
+        ['key' => 'Fahrt', 'name' => 'Fahrt', 'form' => 'trip', 'available' => false],
+    ],
+    'custom' => ['max' => 10, 'used' => 9, 'canCreate' => true],
+];
+$daten = importLeseCsv("Datum;Kategorie;Kosten (EUR);Beschreibung\n"
+    . "01.02.2026;TÜV;120;HU\n"
+    . "02.02.2026;fähre;30;\n"
+    . "03.02.2026;Parken;3;Bahnhof\n"
+    . "04.02.2026;Schlüsseldienst;80;\n"
+    . "05.02.2026;Glasbruch;200;\n"
+    . "06.02.2026;Fahrt;0;A → B\n");
+$basis = importWandleUm($daten['zeilen'], importErkenneZuordnung($daten['kopf']), 'Werkstatt');
+$r = importKategorienZuordnen($basis, $katalog, true);
+assert(array_column($r['entries'], 'category') === ['TUV', 'custom:1', 'Sonstiges', 'neu:Schlüsseldienst', 'Sonstiges', 'Fahrt'], json_encode(array_column($r['entries'], 'category')));
+assert($r['entries'][2]['description'] === 'Parken – Bahnhof', 'gesperrte Kategorie bleibt in der Beschreibung');
+assert($r['entries'][4]['description'] === 'Glasbruch', 'nur noch ein Platz frei');
+assert($r['kategorien']['neu'] === ['Schlüsseldienst']);
+assert($r['vorschau'][3]['kategorie_text'] === 'Schlüsseldienst (neue eigene Kategorie)');
+$ohne = importKategorienZuordnen($basis, $katalog, false);
+assert($ohne['entries'][3]['category'] === 'Sonstiges' && $ohne['kategorien']['neu'] === []);
+assert(array_column(importKategorienErsetzen($r['entries'], ['schlüsseldienst' => 'custom:2']), 'category')[3] === 'custom:2');
+assert(array_column(importKategorienErsetzen($r['entries'], []), 'category')[3] === 'Sonstiges', 'Probelauf ohne neue Kategorien');
+
 echo "All tests passed\n";

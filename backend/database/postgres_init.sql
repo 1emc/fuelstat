@@ -1,5 +1,5 @@
 -- backend/database/postgres_init.sql
--- Vollständiges Schema für eine NEUE Installation (Stand: Migration 013).
+-- Vollständiges Schema für eine NEUE Installation (Stand: Migration 014).
 -- Beim ersten Start der Datenbank spielt Docker diese Datei automatisch ein (siehe infra/docker-compose.yml).
 -- Bestehende Installationen nutzen stattdessen die Migrationen postgres_0XX_*.sql.
 BEGIN;
@@ -104,6 +104,22 @@ CREATE TABLE IF NOT EXISTS expenses (
 
 CREATE INDEX IF NOT EXISTS idx_expenses_user_vehicle_date ON expenses(user_id, vehicle_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_expenses_vehicle_odo ON expenses(vehicle_id, odometer_km);
+CREATE INDEX IF NOT EXISTS idx_expenses_user_category ON expenses(user_id, category);
+
+-- Eigene Kategorien für Ausgaben (#95); feste Kategorien stehen im Code (backend/src/services/categories.js).
+-- Ausgaben mit eigener Kategorie speichern in expenses.category den Schlüssel "custom:<id>".
+CREATE TABLE IF NOT EXISTS expense_categories (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name text NOT NULL CHECK (length(name) BETWEEN 1 AND 40),
+  icon text NOT NULL DEFAULT 'fa-tag',
+  color text NOT NULL DEFAULT '#6c757d',
+  group_key text NOT NULL DEFAULT 'sonstiges',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_expense_categories_user_name ON expense_categories(user_id, lower(name));
 
 -- Hochgeladene Bilder (Profil und Fahrzeuge)
 CREATE TABLE IF NOT EXISTS user_media (

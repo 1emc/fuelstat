@@ -195,7 +195,11 @@ function importArt(?string $wert, ?float $menge, string $standardKategorie): arr
         'versicherung' => 'Versicherung', 'werkstatt' => 'Werkstatt', 'inspektion' => 'Inspektion',
         'steuer' => 'Steuer', 'kfzsteuer' => 'Steuer', 'reparatur' => 'Reparatur', 'reifen' => 'Reifen',
         'tuev' => 'TUV', 'tuv' => 'TUV', 'hu' => 'TUV', 'wartung' => 'Wartung', 'kundendienst' => 'Wartung',
-        'dekor' => 'Dekor', 'fahrt' => 'Fahrt',
+        'dekor' => 'Dekor', 'zubehoer' => 'Dekor', 'fahrt' => 'Fahrt', 'kilometerstand' => 'Kilometerstand',
+        'parken' => 'Parken', 'parkgebuehr' => 'Parken', 'maut' => 'Maut', 'vignette' => 'Maut',
+        'pflege' => 'Pflege', 'waesche' => 'Pflege', 'autowaesche' => 'Pflege', 'waschen' => 'Pflege',
+        'leasing' => 'Leasing', 'finanzierung' => 'Leasing', 'kredit' => 'Leasing',
+        'sonstiges' => 'Sonstiges', 'sonstige' => 'Sonstiges', 'other' => 'Sonstiges',
     ];
     if ($norm === '') {
         return ['typ' => 'entry', 'kategorie' => $standardKategorie, 'einheit' => null];
@@ -303,4 +307,69 @@ function importPruefeVorab($api, string $vehicleId, array $umgewandelt): array
         }
     }
     return $hinweise;
+}
+
+/**
+ * Kategorien der Ausgaben mit dem Katalog des API abgleichen (#95).
+ * Erkannt wird der Schlüssel oder der Anzeigename (auch eigener Kategorien, z. B. aus einem Export).
+ * Unbekannte werden – wenn gewünscht und im Tarif noch Platz ist – als eigene Kategorie angelegt ("neu:<Name>"),
+ * sonst wie gesperrte Kategorien zu "Sonstiges"; der ursprüngliche Name bleibt dann in der Beschreibung erhalten.
+ * @param array $katalog Antwort von GET /categories (kategorienKatalog())
+ * @return array $umgewandelt mit angepassten entries/vorschau und 'kategorien' => ['neu' => [Name, ...], 'sonstiges' => [Name => Anzahl]]
+ */
+function importKategorienZuordnen(array $umgewandelt, array $katalog, bool $eigeneAnlegen): array
+{
+    $nachSchluessel = [];
+    $nachName = [];
+    foreach ($katalog['categories'] ?? [] as $k) {
+        if (($k['form'] ?? 'expense') === 'fillup' || !empty($k['legacy'])) {
+            continue;
+        }
+        $nachSchluessel[$k['key']] = $k;
+        $nachName[mb_strtolower($k['name'])] = $k;
+    }
+    $frei = !empty($katalog['custom']['canCreate']) ? max(0, (int)$katalog['custom']['max'] - (int)$katalog['custom']['used']) : 0;
+    $neu = [];
+    $sonstiges = [];
+    $vorschauIndex = [];
+    foreach ($umgewandelt['vorschau'] as $i => $z) {
+        $vorschauIndex[$z['nr']] = $i;
+    }
+    foreach ($umgewandelt['entries'] as $i => &$e) {
+        $original = trim((string)$e['category']);
+        $k = $nachSchluessel[$original] ?? $nachName[mb_strtolower($original)] ?? null;
+        $nutzbar = $k !== null && (!empty($k['available']) || in_array($k['form'] ?? '', ['trip', 'odometer'], true));
+        $anzeige = null;
+        if ($nutzbar) {
+            $e['category'] = $k['key'];
+            $anzeige = $k['name'];
+        } elseif ($k === null && $eigeneAnlegen && (isset($neu[mb_strtolower($original)]) || count($neu) < $frei)) {
+            $neu[mb_strtolower($original)] = $original;
+            $e['category'] = 'neu:' . $original;
+            $anzeige = $original . ' (neue eigene Kategorie)';
+        } else {
+            $e['category'] = 'Sonstiges';
+            $e['description'] = trim($original . (($e['description'] ?? '') !== '' ? ' – ' . $e['description'] : ''));
+            $sonstiges[$original] = ($sonstiges[$original] ?? 0) + 1;
+            $anzeige = 'Sonstiges (' . $original . ')';
+        }
+        $nr = $umgewandelt['zeilenNr']['entry'][$i] ?? null;
+        if ($nr !== null && isset($vorschauIndex[$nr])) {
+            $umgewandelt['vorschau'][$vorschauIndex[$nr]]['kategorie_text'] = $anzeige;
+        }
+    }
+    unset($e);
+    $umgewandelt['kategorien'] = ['neu' => array_values($neu), 'sonstiges' => $sonstiges];
+    return $umgewandelt;
+}
+
+/** Platzhalter "neu:<Name>" durch Schlüssel ersetzen (nach dem Anlegen) bzw. für den Probelauf durch "Sonstiges" */
+function importKategorienErsetzen(array $entries, array $schluessel): array
+{
+    foreach ($entries as &$e) {
+        if (str_starts_with((string)$e['category'], 'neu:')) {
+            $e['category'] = $schluessel[mb_strtolower(substr($e['category'], 4))] ?? 'Sonstiges';
+        }
+    }
+    return $entries;
 }

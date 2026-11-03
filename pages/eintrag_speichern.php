@@ -97,7 +97,7 @@ try {
     header('Location: fahrzeug_detail.php?id=' . rawurlencode($fahrzeug_id));
     exit;
 } catch (Throwable $e) {
-    $_SESSION['error_message'] = $e->getMessage();
+    $_SESSION['error_message'] = eintragFehlerText($e);
     header('Location: eintrag_hinzufuegen.php?fahrzeug_id=' . rawurlencode($fahrzeug_id));
     exit;
 }
