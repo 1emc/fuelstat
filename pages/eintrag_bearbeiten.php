@@ -204,6 +204,8 @@ $bearbeitbar = isset($eintrag['filled_at']) && strtotime($eintrag['filled_at']) 
             </div>
         </div>
 
+        <div class="form-text text-warning-emphasis mb-3" id="rechenHinweis" aria-live="polite"></div>
+
         <div class="mb-3">
             <label class="form-label" for="standort" id="standortLabel"><?= $begriffe['station'] ?></label>
             <input type="text" class="form-control" id="standort" name="standort" value="<?= htmlspecialchars($standort) ?>">
@@ -233,15 +235,15 @@ $bearbeitbar = isset($eintrag['filled_at']) && strtotime($eintrag['filled_at']) 
 
 <script src="<?= htmlspecialchars(assetUrl($baseUrl, 'js/mengen-rechner.js')) ?>"></script>
 <script>
-// Menge × Preis = Gesamtpreis: beim Bearbeiten gelten alle drei Werte als eingetragen. Ändert man einen,
-// wird der am längsten nicht geänderte neu berechnet (zuerst der Preis pro Einheit).
+// Menge × Preis = Gesamtpreis: beim Bearbeiten gelten Menge und Gesamtpreis als eingetragen, der Preis pro Einheit
+// als daraus berechnet. Ändert man den Preis selbst, bleibt er stehen; passt dann etwas nicht zusammen, gibt es einen Hinweis (#94).
 window.addEventListener('DOMContentLoaded', () => {
     // Texte je Einheit (Plug-in-Hybrid: Tanken oder Laden), wie beim Erfassen
     const texte = <?= json_encode(array_map(fn($u) => (function ($b) use ($u) {
         return ['lang' => einheitLang($u), 'kurz' => einheitKurz($u), 'station' => $b['station'], 'voll' => $b['voll'], 'luecke' => $b['luecke'], 'vorgang' => $b['vorgang']];
     })(begriffeFuerEinheit($fuelType, $u)), array_combine(einheitenFuerKraftstoff($fuelType), einheitenFuerKraftstoff($fuelType))), JSON_UNESCAPED_UNICODE) ?>;
     let kurz = <?= json_encode(einheitKurz($einheit)) ?>;
-    const rechner = mengenRechner({ einheit: () => kurz, eingetragen: ['kosten', 'menge', 'preis'] });
+    const rechner = mengenRechner({ einheit: () => kurz, eingetragen: ['kosten', 'menge'], hinweis: 'rechenHinweis' });
     document.querySelectorAll('input[name="einheit"]').forEach(radio => radio.addEventListener('change', () => {
         const t = texte[radio.value];
         if (!radio.checked || !t) return;
