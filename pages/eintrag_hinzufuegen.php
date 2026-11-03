@@ -330,6 +330,15 @@ function setzeEinheit(u) {
     document.getElementById('tankstellenVorschlaege').replaceChildren();
 }
 
+// Ort gewählt (Chip oder Treffer der Suche): übrige Vorschläge ausblenden, bis das Feld wieder leer ist
+function vorschlaegeAusblenden() {
+    document.getElementById('ortChips').hidden = true;
+    document.getElementById('tankstellenVorschlaege').replaceChildren();
+}
+document.getElementById('standort').addEventListener('input', e => {
+    if (e.target.value.trim() === '') document.getElementById('ortChips').hidden = false;
+});
+
 // Zuletzt genutzte Orte als Chips; Antippen übernimmt den Ort (und beim Laden den letzten Preis)
 function zeigeOrtChips(u) {
     const box = document.getElementById('ortChips');
@@ -343,7 +352,7 @@ function zeigeOrtChips(u) {
             const feld = document.getElementById('standort');
             feld.value = ort;
             preisAusHistorie(ort);
-            box.querySelectorAll('.ort-chip').forEach(c => c.classList.toggle('active', c === chip));
+            vorschlaegeAusblenden();
         });
         box.append(chip);
     });
@@ -474,7 +483,7 @@ function zeigeTankstellen(stations, mitPreis, ortHinweis) {
             }
             // Weiter mit der Menge
             document.getElementById('menge').focus();
-            setTimeout(() => vorschlaege.replaceChildren(), 2000);
+            vorschlaegeAusblenden();
         });
         liste.append(li);
     });
@@ -548,7 +557,7 @@ function zeigeLadestationen(stations, ortHinweis) {
             const ort = station.ort && !station.name.includes(station.ort) ? station.name + ' (' + station.ort + ')' : station.name;
             document.getElementById('standort').value = ort;
             preisAusHistorie(ort);
-            setTimeout(() => vorschlaege.replaceChildren(), 2000);
+            vorschlaegeAusblenden();
         });
         liste.append(li);
     });
