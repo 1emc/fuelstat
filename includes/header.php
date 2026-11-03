@@ -142,7 +142,10 @@ $profilBildUrl = !empty($currentUser['profile_image_url'])
     <link rel="manifest" href="<?= htmlspecialchars($baseUrl) ?>manifest.json">
     <meta name="apple-mobile-web-app-capable" content="yes">
 	<meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <!-- iOS-Web-App: Statusleiste nicht durchsichtig, Inhalt beginnt darunter. Mit "black-translucent" lag die Kopfleiste
+         unter der Statusleiste, und iOS hat sie auf scrollbaren Seiten weichgezeichnet (#97). Wirkt erst nach erneutem
+         Hinzufügen zum Home-Bildschirm. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="theme-color" content="#f8f9fa">
     <link rel="apple-touch-icon" href="<?= htmlspecialchars($baseUrl) ?>images/new-icon-512x512.png">
 	<link rel="icon" type="image/x-icon" href="<?= htmlspecialchars($baseUrl) ?>images/new-icon.ico">
