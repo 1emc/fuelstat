@@ -3,7 +3,7 @@ const helmet = require('helmet');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
-const { randomUUID, randomBytes, createHmac, timingSafeEqual } = require('crypto');
+const { randomUUID, randomBytes, createHmac, createHash, timingSafeEqual } = require('crypto');
 const multer = require('multer');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const path = require('path');
@@ -13,6 +13,7 @@ const { getVehicleReminders } = require('./services/reminders');
 const { encryptSecret, decryptSecret, sendUserMail, resolveSmtpHost, ALLOWED_PORTS, loadDefaultSmtp, withDefaultSmtp } = require('./services/mail');
 const notifier = require('./services/notifier');
 const plans = require('./services/plans');
+const categories = require('./services/categories');
 const { checkOdometer, loadOdometerPoints, odometerWarnings } = require('./services/odometer');
 const { VEHICLE_EXTRA_COLUMNS, parseVehicleExtras } = require('./services/vehicleFields');
 
@@ -1854,6 +1855,113 @@ app.get('/api/v1/vehicles/:vehicleId/fillups', auth, async (req, res) => {
   }
 });
 
+// Benutzer mit Tarif (für Kategorie-Prüfungen)
+async function loadPlanUser(db, userId) {
+  const r = await db.query('SELECT id, plan, plan_until FROM users WHERE id = $1', [userId]);
+  return r.rows[0] || { id: userId, plan: 'free', plan_until: null };
+}
+
+// Kategorien (#95): feste Kategorien mit Tarif-Kennzeichen plus eigene Kategorien des Benutzers.
+// Clients dürfen die Antwort kurz zwischenspeichern (ETag für die erneute Abfrage).
+app.get('/api/v1/categories', auth, async (req, res) => {
+  try {
+    const user = await loadPlanUser(pool, req.user.sub);
+    const body = await categories.listForUser(pool, user);
+    const etag = '"' + createHash('sha256').update(JSON.stringify(body)).digest('base64url').slice(0, 27) + '"';
+    res.set('Cache-Control', 'private, max-age=300');
+    res.set('ETag', etag);
+    if (req.get('If-None-Match') === etag) return res.status(304).end();
+    res.json(body);
+  } catch (e) {
+    serverError(res, e);
+  }
+});
+
+// Eigene Kategorie anlegen (nur mit Tarif-Recht customCategories, höchstens customCategories Stück)
+app.post('/api/v1/categories', auth, async (req, res) => {
+  const v = categories.validateCustomInput(req.body || {});
+  if (v.error) return res.status(400).json(v);
+  try {
+    const user = await loadPlanUser(pool, req.user.sub);
+    const max = plans.limitOf(user, 'customCategories') ?? 0;
+    if (max <= 0) return plans.planRequired(res, 'customCategories', { limit: 0, plan: plans.effectivePlan(user) });
+    const count = await pool.query('SELECT COUNT(*)::int AS n FROM expense_categories WHERE user_id = $1', [req.user.sub]);
+    if (count.rows[0].n >= max) return res.status(403).json({ error: 'category_limit_reached', limit: max });
+    const r = await pool.query(
+      `INSERT INTO expense_categories (user_id, name, icon, color, group_key)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, name, icon, color, group_key`,
+      [req.user.sub, v.value.name, v.value.icon, v.value.color, v.value.group]
+    );
+    res.status(201).json(categories.customToApi(r.rows[0], true));
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'name_taken' });
+    serverError(res, e);
+  }
+});
+
+// Eigene Kategorie ändern (Name, Icon, Farbe, Gruppe). Auch nach dem Herabstufen erlaubt: es entsteht nichts Neues.
+app.patch('/api/v1/categories/:categoryId', auth, async (req, res) => {
+  const v = categories.validateCustomInput(req.body || {}, true);
+  if (v.error) return res.status(400).json(v);
+  const cols = { name: 'name', icon: 'icon', color: 'color', group: 'group_key' };
+  const fields = [];
+  const values = [];
+  for (const [k, col] of Object.entries(cols)) {
+    if (v.value[k] !== undefined) { values.push(v.value[k]); fields.push(`${col} = $${values.length}`); }
+  }
+  if (fields.length === 0) return res.status(400).json({ error: 'nothing_to_update' });
+  try {
+    values.push(String(req.params.categoryId || '').trim(), req.user.sub);
+    const r = await pool.query(
+      `UPDATE expense_categories SET ${fields.join(', ')}, updated_at = now()
+       WHERE id::text = $${values.length - 1} AND user_id = $${values.length}
+       RETURNING id, name, icon, color, group_key`,
+      values
+    );
+    if (r.rowCount === 0) return res.status(404).json({ error: 'category_not_found' });
+    const user = await loadPlanUser(pool, req.user.sub);
+    res.json(categories.customToApi(r.rows[0], (plans.limitOf(user, 'customCategories') ?? 0) > 0));
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'name_taken' });
+    serverError(res, e);
+  }
+});
+
+// Eigene Kategorie löschen. Hängen noch Ausgaben daran, muss ?moveTo=<Schlüssel> sagen, wohin sie wandern.
+app.delete('/api/v1/categories/:categoryId', auth, async (req, res) => {
+  const id = String(req.params.categoryId || '').trim();
+  const moveTo = req.query.moveTo ? String(req.query.moveTo).trim() : '';
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const c = await client.query('SELECT id FROM expense_categories WHERE id::text = $1 AND user_id = $2 FOR UPDATE', [id, req.user.sub]);
+    if (c.rowCount === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'category_not_found' }); }
+    const key = categories.customKey(c.rows[0].id);
+    const used = await client.query('SELECT COUNT(*)::int AS n FROM expenses WHERE user_id = $1 AND category = $2', [req.user.sub, key]);
+    const n = used.rows[0].n;
+    if (n > 0) {
+      const ziel = categories.BUILTIN_BY_KEY[moveTo];
+      if (!moveTo) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'category_in_use', entries: n }); }
+      if (moveTo === key || (ziel && ziel.form !== 'expense')) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'invalid_moveTo' }); }
+      const fehler = await categories.checkUsable(client, await loadPlanUser(client, req.user.sub), moveTo);
+      if (fehler) {
+        await client.query('ROLLBACK');
+        return res.status(fehler.status).json(fehler.status === 403 ? fehler.body : { error: 'invalid_moveTo', category: moveTo });
+      }
+      await client.query('UPDATE expenses SET category = $3 WHERE user_id = $1 AND category = $2', [req.user.sub, key, moveTo]);
+    }
+    await client.query('DELETE FROM expense_categories WHERE id = $1', [c.rows[0].id]);
+    await client.query('COMMIT');
+    res.json({ deleted: key, moved: n, moveTo: n > 0 ? moveTo : null });
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    serverError(res, e);
+  } finally {
+    client.release();
+  }
+});
+
 // Create non-fuel expense entry
 app.post('/api/v1/entries', auth, async (req, res) => {
   const vehicleId = String(req.body?.vehicleId || '').trim();
@@ -1886,6 +1994,10 @@ app.post('/api/v1/entries', auth, async (req, res) => {
       [vehicleId, req.user.sub]
     );
     if (v.rowCount === 0) return res.status(404).json({ error: 'vehicle_not_found' });
+
+    // Kategorie bekannt und im Tarif enthalten? (#95)
+    const fehler = await categories.checkUsable(pool, await loadPlanUser(pool, req.user.sub), category);
+    if (fehler) return res.status(fehler.status).json(fehler.body);
 
     const r = await pool.query(
       `INSERT INTO expenses (
@@ -2003,6 +2115,16 @@ app.patch('/api/v1/entries/:entryId', auth, async (req, res) => {
   if (fields.length === 0) return res.status(400).json({ error: 'nothing_to_update' });
 
   try {
+    // Neue Kategorie prüfen; die bisherige bleibt immer erlaubt (auch nach dem Herabstufen oder aus alten Importen)
+    if (body.category !== undefined) {
+      const alt = await pool.query('SELECT category FROM expenses WHERE id = $1 AND user_id = $2', [entryId, req.user.sub]);
+      if (alt.rowCount === 0) return res.status(404).json({ error: 'entry_not_found' });
+      const neu = String(body.category).trim();
+      if (alt.rows[0].category !== neu) {
+        const fehler = await categories.checkUsable(pool, await loadPlanUser(pool, req.user.sub), neu);
+        if (fehler) return res.status(fehler.status).json(fehler.body);
+      }
+    }
     values.push(entryId, req.user.sub);
     const r = await pool.query(
       `UPDATE expenses SET ${fields.join(', ')}
@@ -2102,6 +2224,21 @@ app.post('/api/v1/vehicles/:vehicleId/import', auth, importLimiter, async (req, 
       errors.push({ type: 'entry', index, error: 'invalid_odometerKm' });
     }
   });
+  // Kategorien prüfen (#95): nur bekannte und im Tarif enthaltene; Clients ordnen Unbekanntes vorher zu (z. B. "Sonstiges")
+  if (errors.length === 0 && entries.length > 0) {
+    try {
+      const user = await loadPlanUser(pool, req.user.sub);
+      const geprueft = new Map();
+      for (const [index, e] of entries.entries()) {
+        const key = String(e.category).trim();
+        if (!geprueft.has(key)) geprueft.set(key, await categories.checkUsable(pool, user, key));
+        const fehler = geprueft.get(key);
+        if (fehler) errors.push({ type: 'entry', index, error: fehler.body.error, category: key, ...(fehler.body.feature ? { feature: fehler.body.feature } : {}) });
+      }
+    } catch (e) {
+      return serverError(res, e);
+    }
+  }
   if (errors.length) return res.status(400).json({ error: 'invalid_rows', rows: errors.slice(0, 50) });
 
   const client = await pool.connect();

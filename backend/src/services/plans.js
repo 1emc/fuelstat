@@ -9,6 +9,8 @@ const PLANS = {
   free: {
     maxVehicles: 1,
     tripCategories: 2, // Fahrtenbuch: privat und dienstlich
+    premiumCategories: false, // zusätzliche Ausgaben-Kategorien (Parken, Maut, Pflege, …), siehe services/categories.js
+    customCategories: 0, // Anzahl eigener Ausgaben-Kategorien
     sharing: false,
     comparison: false,
     pdfReport: false,
@@ -18,6 +20,8 @@ const PLANS = {
   plus: {
     maxVehicles: null, // null = unbegrenzt
     tripCategories: null,
+    premiumCategories: true,
+    customCategories: 10,
     sharing: true,
     comparison: true,
     pdfReport: true,
@@ -27,6 +31,8 @@ const PLANS = {
   fleet: {
     maxVehicles: null,
     tripCategories: null,
+    premiumCategories: true,
+    customCategories: 10,
     sharing: true,
     comparison: true,
     pdfReport: true,

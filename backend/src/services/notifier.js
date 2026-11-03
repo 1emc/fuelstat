@@ -3,9 +3,9 @@
 const { getVehicleReminders } = require('./reminders');
 const { getVehicleStats } = require('./stats');
 const { sendUserMail, loadDefaultSmtp, withDefaultSmtp } = require('./mail');
+const categories = require('./categories');
 
 const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
-const CATEGORY_NAMES = { Tankfuellung: 'Tankfüllung', TUV: 'TÜV' };
 const UNITS = { l: 'l', kwh: 'kWh', kg: 'kg' };
 // Bezeichnung der Tank- bzw. Ladevorgänge passend zur Einheit (wie verbrauchsBegriffe() im Frontend)
 const vorgaengeName = (fuelType, unit) => (fuelType === 'electric' || unit === 'kwh' ? 'Ladevorgänge' : 'Tankfüllungen');
@@ -107,6 +107,8 @@ async function buildMonthlyReport(pool, settings, year, month) {
   const sections = [];
   let total = 0;
 
+  // Anzeigenamen der Kategorien inklusive eigener (#95)
+  const categoryNames = await categories.namesForUser(pool, settings.user_id);
   for (const v of await loadVehicles(pool, settings.user_id)) {
     const f = await pool.query(
       `SELECT unit, COUNT(*)::int AS n, COALESCE(SUM(amount), 0) AS amount, COALESCE(SUM(total_cost_eur), 0) AS cost
@@ -116,9 +118,9 @@ async function buildMonthlyReport(pool, settings, year, month) {
     );
     const e = await pool.query(
       `SELECT category, SUM(amount_eur) AS cost
-       FROM expenses WHERE user_id = $1 AND vehicle_id = $2 AND occurred_at >= $3 AND occurred_at < $4 AND category NOT IN ('Fahrt', 'Kilometerstand')
+       FROM expenses WHERE user_id = $1 AND vehicle_id = $2 AND occurred_at >= $3 AND occurred_at < $4 AND category <> ALL($5)
        GROUP BY category ORDER BY SUM(amount_eur) DESC`,
-      [settings.user_id, v.id, start, end]
+      [settings.user_id, v.id, start, end, categories.NON_COST_KEYS]
     );
     const odo = await pool.query(
       `SELECT (SELECT MAX(odometer_km) FROM fillups WHERE user_id = $1 AND vehicle_id = $2 AND filled_at < $4 AND NOT odometer_estimated) AS end_odo,
@@ -153,7 +155,7 @@ async function buildMonthlyReport(pool, settings, year, month) {
       name: v.name,
       energy,
       fillups: energy.reduce((a, x) => a + x.fillups, 0),
-      expenses: e.rows.map((r) => ({ category: CATEGORY_NAMES[r.category] || r.category, cost: Number(r.cost) })),
+      expenses: e.rows.map((r) => ({ category: categoryNames[r.category] || r.category, cost: Number(r.cost) })),
       cost,
       km: endOdo !== null && startOdo !== null ? endOdo - startOdo : null,
       reminders

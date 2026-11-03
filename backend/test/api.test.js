@@ -354,6 +354,91 @@ test('Tarife (#44): Grenzen nur mit PLAN_LIMITS_ENABLED', async () => {
   assert.equal((await api('PUT', '/auth/plans', { token: u.token, body: { userIds: [u.id], plan: 'plus' } })).status, 403);
 });
 
+test('Kategorien (#95): Liste, Premium, eigene Kategorien', async () => {
+  const u = await newUser();
+  const v = await newVehicle(u.token);
+
+  // Liste mit Gruppen, festen Kategorien und Cache-Angaben
+  const liste = await api('GET', '/categories', { token: u.token });
+  assert.equal(liste.status, 200);
+  assert.match(liste.headers.get('cache-control'), /private/);
+  const etag = liste.headers.get('etag');
+  assert.ok(etag);
+  assert.equal((await api('GET', '/categories', { token: u.token, headers: { 'if-none-match': etag } })).status, 304);
+  assert.equal((await api('GET', '/categories')).status, 401, 'nur mit Anmeldung');
+  const nachKey = Object.fromEntries(liste.body.categories.map((c) => [c.key, c]));
+  assert.equal(nachKey.TUV.name, 'TÜV');
+  assert.equal(nachKey.Parken.plan, 'plus');
+  assert.equal(nachKey.Parken.available, true, 'Beta: alle haben Plus-Rechte');
+  assert.equal(nachKey.Fahrt.countsAsCost, false);
+  assert.equal(nachKey.Tankfuellung.selectable, false);
+  assert.equal(liste.body.custom.max, 10);
+
+  // Unbekannte Kategorie und Tankfüllung als Ausgabe werden abgelehnt
+  assert.equal((await api('POST', '/entries', { token: u.token, body: { vehicleId: v, category: 'Quatsch', amountEur: 1 } })).body.error, 'unknown_category');
+  assert.equal((await api('POST', '/entries', { token: u.token, body: { vehicleId: v, category: 'Tankfuellung', amountEur: 1 } })).body.error, 'invalid_category');
+
+  // Eigene Kategorie anlegen, prüfen, verwenden
+  assert.equal((await api('POST', '/categories', { token: u.token, body: { name: 'tüv' } })).body.error, 'name_taken', 'Name einer festen Kategorie');
+  assert.equal((await api('POST', '/categories', { token: u.token, body: { name: 'X', icon: 'fa-evil' } })).body.error, 'invalid_icon');
+  const eigene = await api('POST', '/categories', { token: u.token, body: { name: 'Fähre', icon: 'fa-ferry', color: '#0dcaf0', group: 'unterwegs' } });
+  assert.equal(eigene.status, 201, JSON.stringify(eigene.body));
+  assert.equal(eigene.body.key, `custom:${eigene.body.id}`);
+  assert.equal((await api('POST', '/categories', { token: u.token, body: { name: 'FÄHRE' } })).status, 409);
+  const e1 = await api('POST', '/entries', { token: u.token, body: { vehicleId: v, category: eigene.body.key, amountEur: 80 } });
+  assert.equal(e1.status, 201, JSON.stringify(e1.body));
+  const umb = await api('PATCH', `/categories/${eigene.body.id}`, { token: u.token, body: { name: 'Fähre Sylt' } });
+  assert.equal(umb.body.name, 'Fähre Sylt');
+
+  // Fremde eigene Kategorien sind tabu
+  const fremd = await newUser();
+  const fv = await newVehicle(fremd.token);
+  assert.equal((await api('POST', '/entries', { token: fremd.token, body: { vehicleId: fv, category: eigene.body.key, amountEur: 1 } })).body.error, 'unknown_category');
+  assert.equal((await api('PATCH', `/categories/${eigene.body.id}`, { token: fremd.token, body: { name: 'x' } })).status, 404);
+  assert.equal((await api('DELETE', `/categories/${eigene.body.id}`, { token: fremd.token })).status, 404);
+
+  // Grenze: 10 eigene Kategorien
+  for (let i = 2; i <= 10; i++) assert.equal((await api('POST', '/categories', { token: u.token, body: { name: `Eigene ${i}` } })).status, 201);
+  const zuViel = await api('POST', '/categories', { token: u.token, body: { name: 'Elf' } });
+  assert.equal(zuViel.status, 403);
+  assert.equal(zuViel.body.error, 'category_limit_reached');
+
+  // Free-Tarif (mit aktiven Grenzen): Premium und eigene gesperrt, Bestand bleibt änderbar
+  process.env.PLAN_LIMITS_ENABLED = 'true';
+  try {
+    const free = await api('GET', '/categories', { token: u.token });
+    const f = Object.fromEntries(free.body.categories.map((c) => [c.key, c]));
+    assert.equal(f.Parken.available, false);
+    assert.equal(f.Werkstatt.available, true);
+    assert.equal(f[eigene.body.key].available, false);
+    assert.equal(free.body.custom.canCreate, false);
+    const p = await api('POST', '/entries', { token: u.token, body: { vehicleId: v, category: 'Parken', amountEur: 3 } });
+    assert.equal(p.status, 403);
+    assert.equal(p.body.feature, 'premiumCategories');
+    assert.equal((await api('POST', '/entries', { token: u.token, body: { vehicleId: v, category: eigene.body.key, amountEur: 3 } })).body.feature, 'customCategories');
+    assert.equal((await api('POST', '/categories', { token: u.token, body: { name: 'Neu' } })).body.feature, 'customCategories');
+    // Bestehende Ausgabe mit eigener Kategorie: Betrag ändern geht, Kategorie bleibt
+    const patch = await api('PATCH', `/entries/${e1.body.id}`, { token: u.token, body: { category: eigene.body.key, amountEur: 90 } });
+    assert.equal(patch.status, 200, JSON.stringify(patch.body));
+    // Import ordnet gesperrte Kategorien nicht stillschweigend zu
+    const imp = await api('POST', `/vehicles/${v}/import`, { token: u.token, body: { dryRun: true, entries: [{ occurredAt: '2026-02-01', category: 'Maut', amountEur: 10 }] } });
+    assert.equal(imp.status, 400);
+    assert.equal(imp.body.rows[0].error, 'plan_required');
+  } finally {
+    delete process.env.PLAN_LIMITS_ENABLED;
+  }
+
+  // Löschen: mit Ausgaben nur mit Ziel; die Ausgaben wandern mit
+  const del = await api('DELETE', `/categories/${eigene.body.id}`, { token: u.token });
+  assert.equal(del.status, 409);
+  assert.equal(del.body.entries, 1);
+  assert.equal((await api('DELETE', `/categories/${eigene.body.id}?moveTo=Fahrt`, { token: u.token })).body.error, 'invalid_moveTo');
+  const ok = await api('DELETE', `/categories/${eigene.body.id}?moveTo=Parken`, { token: u.token });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.equal(ok.body.moved, 1);
+  assert.equal((await api('GET', `/entries/${e1.body.id}`, { token: u.token })).body.category, 'Parken');
+});
+
 test('Ungültige IDs liefern 404 statt 500', async () => {
   const u = await newUser();
   for (const p of ['/fillups/xyz', '/entries/xyz', '/vehicles/xyz', '/vehicles/xyz/stats', '/vehicles/xyz/fillups']) {
