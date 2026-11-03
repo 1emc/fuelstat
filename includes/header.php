@@ -106,6 +106,7 @@ $seitenInfo = [
     'admin.php'                => ['Benutzerverwaltung', null],
     'onboarding.php'           => ['Willkommen', null],
     'feedback.php'             => ['Feedback', null],
+    'kategorien.php'           => ['Kategorien', null],
 ];
 [$seitenTitel, $zurueckUrl] = $angemeldet && isset($seitenInfo[$skript]) ? $seitenInfo[$skript] : [null, null];
 
@@ -117,6 +118,7 @@ $tabbarAktiv = [
     'eintrag_hinzufuegen.php' => 'eintrag', 'eintrag_bearbeiten.php' => 'eintrag', 'schnell.php' => 'eintrag',
     'einstellungen.php' => 'profil', 'passwort_aendern.php' => 'profil', 'mfa_einrichten.php' => 'profil',
     'benachrichtigungen.php' => 'profil', 'admin.php' => 'profil', 'feedback.php' => 'profil',
+    'kategorien.php' => 'profil',
 ][$skript] ?? null;
 
 // Ziel von "+ Eintrag" und "Statistik": aktuelles Fahrzeug, das einzige Fahrzeug oder Auswahl im Blatt

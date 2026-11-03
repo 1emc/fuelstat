@@ -6,6 +6,7 @@
 
 require_once __DIR__ . '/api_config.php';
 require_once __DIR__ . '/fuelstat_api.php';
+require_once __DIR__ . '/kategorien.php';
 
 if (!function_exists('getApiClient')) {
     function getApiClient(?string $token = null): FuelstatApi
@@ -215,12 +216,6 @@ function getLetzterEintragApi($api, string $vehicleId, string $category): ?array
     } catch (Throwable $e) {
     }
     return null;
-}
-
-/** Einträge ohne Kosten (Fahrten, notierte Kilometerstände) zählen nicht zu den Ausgaben */
-function istEintragOhneKosten(?string $kategorie): bool
-{
-    return in_array($kategorie, ['Fahrt', 'Kilometerstand'], true);
 }
 
 /** Tachostand vorhanden und nicht nur geschätzt (#41)? */
@@ -658,6 +653,52 @@ function fahrtBeschreibung(array $post): string
 }
 
 /**
+ * Gegenstück zu fahrtBeschreibung(): Von, Nach, Zweck und km aus der gespeicherten Beschreibung (zum Bearbeiten).
+ * Freier Text, der nicht dem Muster folgt, landet vollständig im Zweck.
+ */
+function fahrtAusBeschreibung(?string $text): array
+{
+    $text = trim((string)$text);
+    $ergebnis = ['startort' => '', 'zielort' => '', 'zweck' => '', 'gefahrene_km' => ''];
+    if ($text === '' || $text === 'Fahrt') {
+        return $ergebnis;
+    }
+    if (preg_match('/^(.*?)\s*\(([\d.]+(?:,\d+)?) km\)$/u', $text, $m)) {
+        $ergebnis['gefahrene_km'] = str_replace(',', '.', str_replace('.', '', $m[2]));
+        $text = $m[1];
+    }
+    $teile = explode(' – ', $text, 2);
+    $strecke = $teile[0];
+    $zweck = $teile[1] ?? '';
+    if (str_contains($strecke, ' → ')) {
+        [$ergebnis['startort'], $ergebnis['zielort']] = array_map('trim', explode(' → ', $strecke, 2));
+        $ergebnis['zweck'] = trim($zweck);
+    } elseif ($zweck === '' && $strecke !== '' && $ergebnis['gefahrene_km'] !== '') {
+        // "Ulm (12 km)": nur ein Ort
+        $ergebnis['zielort'] = trim($strecke);
+    } else {
+        $ergebnis['zweck'] = trim($text);
+    }
+    return $ergebnis;
+}
+
+/** Verständliche Meldung für Fehler der Ausgaben-API (Kategorie, Tarif) */
+function eintragFehlerText(Throwable $e): string
+{
+    $hinweis = tarifHinweis($e);
+    if ($hinweis !== null) {
+        return $hinweis;
+    }
+    return [
+        'unknown_category' => 'Diese Kategorie gibt es nicht (mehr). Bitte eine andere wählen.',
+        'invalid_category' => 'Bitte eine Kategorie wählen.',
+        'missing_category' => 'Bitte eine Kategorie wählen.',
+        'invalid_amountEur' => 'Bitte einen gültigen Betrag eingeben.',
+        'invalid_odometerKm' => 'Bitte einen gültigen Tachostand eingeben.',
+    ][$e->getMessage()] ?? $e->getMessage();
+}
+
+/**
  * Tarife (Issue #44): Text für die API-Antwort 403 plan_required, sonst null.
  * Solange PLAN_LIMITS_ENABLED in der API aus ist, kommt diese Antwort nie.
  */
@@ -672,6 +713,8 @@ function tarifHinweis(Throwable $e): ?string
         'comparison' => 'Der Fahrzeugvergleich ist eine Premium-Funktion.',
         'pdfReport' => 'Der PDF-Bericht ist eine Premium-Funktion.',
         'tripCategories' => 'Weitere Fahrtenbuch-Kategorien sind eine Premium-Funktion.',
+        'premiumCategories' => 'Diese Kategorie gibt es mit Plus. Wähle z. B. „Sonstiges“.',
+        'customCategories' => 'Eigene Kategorien sind eine Plus-Funktion.',
     ];
     $feature = (string)($e->data['feature'] ?? '');
     $limit = (int)($e->data['limit'] ?? 1);

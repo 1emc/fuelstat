@@ -737,3 +737,43 @@ body.mit-tabbar {
         bottom: calc(var(--tabbar-hoehe) + env(safe-area-inset-bottom) + .5rem);
     }
 }
+
+/* Kategorien verwalten (#95) */
+.kategorie-auswahl {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .375rem;
+}
+.kategorie-symbol {
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.kategorie-farbe {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    box-shadow: inset 0 0 0 2px var(--bs-body-bg);
+}
+.btn-check:checked + .kategorie-farbe {
+    border-color: var(--bs-body-color);
+}
+.btn-check:focus-visible + .kategorie-farbe {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: 2px;
+}
+.kategorie-chip {
+    background-color: var(--bs-tertiary-bg);
+    color: var(--bs-body-color);
+    font-weight: 500;
+    font-size: .85rem;
+    padding: .45em .8em;
+}
+.kategorie-chip.gesperrt {
+    opacity: .6;
+}

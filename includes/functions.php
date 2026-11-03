@@ -1,5 +1,6 @@
 <?php
 // includes/functions.php – Hilfsfunktionen ohne Datenbankzugriff (Daten kommen über die API, siehe includes/api_helpers.php)
+require_once __DIR__ . '/kategorien.php';
 
 // --------------------------------------------------
 // 0. System-Checks
@@ -17,22 +18,11 @@ function getCategoryIcon(string $kategorie, ?string $fuelType = null, ?string $e
     if ($kategorie === 'Tankfuellung' && $fuelType !== null) {
         return begriffeFuerEinheit($fuelType, $einheit)['icon'];
     }
-    $icons = [
-        'Tankfuellung' => 'fa-gas-pump',
-        'Versicherung' => 'fa-shield-alt',
-        'Werkstatt'    => 'fa-tools',
-        'Inspektion'   => 'fa-wrench',
-        'Steuer'       => 'fa-money-bill-wave',
-        'Reparatur'    => 'fa-car-crash',
-        'Reifen'       => 'fa-car-side',
-        'TUV'          => 'fa-calendar-check',
-        'Wartung'      => 'fa-cogs',
-        'Dekor'        => 'fa-paint-roller',
-        'Verbrauch'    => 'fa-chart-line',
-        'Fahrt'        => 'fa-route',
-        'Kilometerstand' => 'fa-gauge-high',
-    ];
-    return $icons[$kategorie] ?? 'fa-question-circle';
+    if ($kategorie === 'Verbrauch') {
+        return 'fa-chart-line';
+    }
+    // Icons kommen mit den Kategorien vom API (#95)
+    return kategorieInfo($kategorie)['icon'] ?? 'fa-tag';
 }
 
 function berechneVerbrauchProMonatAusTankfuellungen(array $rows): array
@@ -256,7 +246,8 @@ function getKategorieName($kategorie, ?string $fuelType = null, ?string $einheit
     if ($kategorie === 'Tankfuellung') {
         return $fuelType === null ? 'Tankfüllung' : begriffeFuerEinheit($fuelType, $einheit)['vorgang'];
     }
-    return ['TUV' => 'TÜV'][$kategorie] ?? $kategorie;
+    // Anzeigenamen kommen mit den Kategorien vom API (#95); unbekannte (alte Importe) heißen wie gespeichert
+    return kategorieInfo((string)$kategorie)['name'] ?? (string)$kategorie;
 }
 
 /**

@@ -19,7 +19,7 @@ $artVon = function (array $e) {
     if (($e['type'] ?? '') === 'fillup') {
         return ($e['einheit'] ?? '') === 'kwh' ? 'laden' : 'tanken';
     }
-    return ['Fahrt' => 'fahrt', 'Kilometerstand' => 'km'][$e['kategorie'] ?? ''] ?? 'ausgabe';
+    return ['trip' => 'fahrt', 'odometer' => 'km'][kategorieFormular($e['kategorie'] ?? '')] ?? 'ausgabe';
 };
 // Filter-Chips: nur Arten, die das Fahrzeug haben kann bzw. die vorkommen
 $vorhandeneArten = [];

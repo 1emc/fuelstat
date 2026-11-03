@@ -35,5 +35,16 @@ assert(fahrtBeschreibung(['startort' => 'Bolbingen', 'zielort' => 'Aalen', 'zwec
 assert(fahrtBeschreibung(['startort' => '', 'zielort' => 'Ulm', 'zweck' => '', 'gefahrene_km' => '12,5']) === 'Ulm (12,5 km)');
 assert(fahrtBeschreibung(['startort' => 'A', 'zielort' => 'B', 'zweck' => '', 'gefahrene_km' => '']) === 'A → B');
 assert(fahrtBeschreibung([]) === 'Fahrt');
+// Rückweg zum Bearbeiten (#95): Beschreibung wieder in Felder zerlegen
+foreach ([
+    ['startort' => 'Bolbingen', 'zielort' => 'Aalen', 'zweck' => 'Arbeit', 'gefahrene_km' => '42'],
+    ['startort' => '', 'zielort' => 'Ulm', 'zweck' => '', 'gefahrene_km' => '12.5'],
+    ['startort' => 'A', 'zielort' => 'B', 'zweck' => '', 'gefahrene_km' => ''],
+    ['startort' => 'A', 'zielort' => 'B', 'zweck' => 'Einkauf', 'gefahrene_km' => '1234'],
+] as $f) {
+    assert(fahrtAusBeschreibung(fahrtBeschreibung($f)) === $f, json_encode([$f, fahrtAusBeschreibung(fahrtBeschreibung($f))]));
+}
+assert(fahrtAusBeschreibung('Urlaubsfahrt mit Oma')['zweck'] === 'Urlaubsfahrt mit Oma');
+assert(fahrtAusBeschreibung('Fahrt') === ['startort' => '', 'zielort' => '', 'zweck' => '', 'gefahrene_km' => '']);
 
 echo "All tests passed\n";
