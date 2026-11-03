@@ -1,12 +1,14 @@
 /*
  * Menge × Preis pro Einheit = Gesamtpreis.
- * Aus den zwei zuletzt eingetragenen Feldern wird das dritte berechnet und direkt ins Feld geschrieben
- * (sind alle drei eingetragen, bevorzugt der Preis pro Einheit)
- * (also auch gespeichert). Ein Knopf neben jedem Feld zeigt, ob der Wert eingetragen oder berechnet ist;
- * Antippen zeigt die Rechnung.
+ * Sind genau zwei Felder eingetragen, wird das dritte berechnet und ins Feld geschrieben (also auch gespeichert).
+ * Eingetragene Werte – von Hand oder übernommen, z. B. der Preis der gewählten Tankstelle – werden nie
+ * überschrieben (#94). Sind alle drei eingetragen und passen nicht zusammen, erscheint nur ein Hinweis mit
+ * Knopf zum Angleichen des Preises. Ein berechneter Preis pro Einheit wird nur übernommen, wenn er plausibel
+ * ist (nicht während man den Gesamtpreis noch tippt).
+ * Ein Knopf neben jedem Feld zeigt, ob der Wert eingetragen oder berechnet ist; Antippen zeigt die Rechnung.
  *
  * Verwendung:
- *   const rechner = mengenRechner({ einheit: () => 'l', eingetragen: ['kosten', 'menge', 'preis'] });
+ *   const rechner = mengenRechner({ einheit: () => 'l', eingetragen: ['kosten', 'menge'], hinweis: 'calcHint' });
  *   rechner.setze('preis', 1.749);   // Wert von außen (z. B. Tankstellenpreis) wie eine Eingabe übernehmen
  *   rechner.aktualisiere();          // nach Wechsel der Einheit (Plug-in-Hybrid)
  */
@@ -15,6 +17,13 @@
 
     var FELDER = { menge: 'menge', preis: 'preis_pro_einheit', kosten: 'kosten' };
     var STELLEN = { menge: 2, preis: 3, kosten: 2 };
+    // Plausibler Preis pro Einheit (Strom darf 0 sein: kostenloses Laden)
+    var PREIS_SPANNE = { kWh: [0, 2], l: [0.3, 5], kg: [0.3, 5] };
+
+    function plausiblerPreis(p, einheit) {
+        var spanne = PREIS_SPANNE[einheit] || [0, 10];
+        return p !== null && isFinite(p) && p >= spanne[0] && p <= spanne[1];
+    }
 
     function zahlAus(input) {
         var n = parseFloat(String(input.value).replace(',', '.'));
@@ -28,6 +37,9 @@
     window.mengenRechner = function (optionen) {
         optionen = optionen || {};
         var einheit = optionen.einheit || function () { return 'l'; };
+        var hinweisFeld = optionen.hinweis ? document.getElementById(optionen.hinweis) : null;
+        // Vom Nutzer gerade geleertes Feld: nicht sofort wieder füllen, sonst hängt die nächste Eingabe an den alten Wert an
+        var geleert = null;
         // Zuletzt eingetragene Felder zuerst; beim Bearbeiten gelten alle vorhandenen Werte als eingetragen
         var reihenfolge = (optionen.eingetragen || []).slice();
         var zustand = {};
@@ -38,7 +50,8 @@
         Object.keys(FELDER).forEach(function (key) {
             inputs[key] = document.getElementById(FELDER[key]);
             knoepfe[key] = document.getElementById('info_' + FELDER[key]);
-            zustand[key] = inputs[key] && inputs[key].value !== '' && reihenfolge.indexOf(key) !== -1 ? 'eingetragen' : 'leer';
+            // Vorhandene Werte: in "eingetragen" genannt = eingetragen, sonst berechnet (z. B. Preis beim Bearbeiten)
+            zustand[key] = !inputs[key] || inputs[key].value === '' ? 'leer' : (reihenfolge.indexOf(key) !== -1 ? 'eingetragen' : 'berechnet');
         });
         reihenfolge = reihenfolge.filter(function (key) { return zustand[key] === 'eingetragen'; });
 
@@ -68,41 +81,60 @@
                 ? 'Berechnet: ' + rechnung(key) + '. Überschreiben ist jederzeit möglich.'
                 : z === 'eingetragen'
                     ? 'Von dir eingetragen.'
-                    : 'Wird berechnet, sobald zwei der drei Felder (Menge, Preis, Gesamtpreis) ausgefüllt sind.';
+                    : 'Wird berechnet, sobald die beiden anderen Felder (Menge, Preis, Gesamtpreis) ausgefüllt sind.';
             var label = NAMEN[key] + ': ' + (z === 'berechnet' ? 'berechnet' : z === 'eingetragen' ? 'eingetragen' : 'noch leer');
             knopf.setAttribute('aria-label', label);
             knopf.setAttribute('title', label);
         }
 
-        function berechne() {
-            // Die zwei zuletzt eingetragenen Felder bestimmen das dritte. Sind alle drei eingetragen, wird der
-            // Preis pro Einheit neu berechnet (Menge und Gesamtpreis stehen auf Zapfsäule bzw. Beleg; so rechnet
-            // auch die API) – außer man hat gerade den Preis selbst geändert.
-            if (reihenfolge.length === 3 && reihenfolge[0] !== 'preis') {
-                reihenfolge = reihenfolge.filter(function (k) { return k !== 'preis'; }).concat(['preis']);
-            }
-            var basis = reihenfolge.slice(0, 2);
-            Object.keys(FELDER).forEach(function (key) {
-                if (basis.indexOf(key) === -1 && zustand[key] === 'eingetragen' && basis.length === 2) {
-                    zustand[key] = 'berechnet';
-                    reihenfolge = reihenfolge.filter(function (k) { return k !== key; });
-                }
+        // Alle drei eingetragen, aber Menge × Preis ≠ Gesamt: Hinweis statt stillem Überschreiben
+        function abgleich() {
+            if (!hinweisFeld) return;
+            hinweisFeld.replaceChildren();
+            var alle = Object.keys(FELDER).every(function (k) { return zustand[k] === 'eingetragen'; });
+            var m = zahlAus(inputs.menge), p = zahlAus(inputs.preis), k = zahlAus(inputs.kosten);
+            if (!alle || m === null || p === null || k === null || m <= 0) return;
+            var differenz = Math.abs(m * p - k);
+            if (differenz <= Math.max(0.02, k * 0.005)) return;
+            var e = einheit();
+            var neu = k / m;
+            hinweisFeld.append(document.createTextNode(
+                format(m, 2) + ' ' + e + ' × ' + format(p, 3) + ' €/' + e + ' = ' + format(m * p, 2) + ' €, nicht ' + format(k, 2) + ' €. '
+                + 'Gespeichert wird der Preis aus Gesamt ÷ Menge: ' + format(neu, 3) + ' €/' + e + '. '));
+            var knopf = document.createElement('button');
+            knopf.type = 'button';
+            knopf.className = 'btn btn-link btn-sm p-0 align-baseline';
+            knopf.textContent = 'Preis angleichen';
+            knopf.addEventListener('click', function () {
+                inputs.preis.value = neu.toFixed(STELLEN.preis);
+                zustand.preis = 'berechnet';
+                reihenfolge = reihenfolge.filter(function (x) { return x !== 'preis'; });
+                berechne();
             });
-            var ziel = Object.keys(FELDER).filter(function (key) { return basis.indexOf(key) === -1; })[0];
-            if (basis.length === 2) {
+            hinweisFeld.append(knopf);
+        }
+
+        function berechne() {
+            // Nur wenn genau zwei Felder eingetragen sind, wird das dritte berechnet; eingetragene Werte bleiben unangetastet
+            var eingetragen = Object.keys(FELDER).filter(function (key) { return zustand[key] === 'eingetragen'; });
+            if (eingetragen.length === 2) {
+                var ziel = Object.keys(FELDER).filter(function (key) { return eingetragen.indexOf(key) === -1; })[0];
                 var m = zahlAus(inputs.menge), p = zahlAus(inputs.preis), k = zahlAus(inputs.kosten);
                 var wert = null;
+                if (ziel === geleert) ziel = null;
                 if (ziel === 'kosten' && m !== null && p !== null) wert = m * p;
                 if (ziel === 'preis' && k !== null && m) wert = k / m;
                 if (ziel === 'menge' && k !== null && p) wert = k / p;
+                // Preis nur übernehmen, wenn er plausibel ist (z. B. nicht 0,175 €/l, während man „72,10“ noch tippt)
+                if (ziel === 'preis' && !plausiblerPreis(wert, einheit())) wert = null;
                 if (wert !== null && isFinite(wert)) {
                     inputs[ziel].value = wert.toFixed(STELLEN[ziel]);
                     zustand[ziel] = 'berechnet';
-                } else if (zustand[ziel] === 'berechnet') {
+                } else if (ziel && zustand[ziel] === 'berechnet') {
                     inputs[ziel].value = '';
                     zustand[ziel] = 'leer';
                 }
-            } else {
+            } else if (eingetragen.length < 2) {
                 // Zu wenig Angaben: früher berechnete Werte wieder leeren
                 Object.keys(FELDER).forEach(function (key) {
                     if (zustand[key] === 'berechnet') {
@@ -112,10 +144,12 @@
                 });
             }
             Object.keys(FELDER).forEach(zeige);
+            abgleich();
         }
 
         function eingabe(key) {
             reihenfolge = reihenfolge.filter(function (k) { return k !== key; });
+            geleert = inputs[key].value === '' ? key : null;
             if (inputs[key].value !== '') {
                 zustand[key] = 'eingetragen';
                 reihenfolge.unshift(key);
@@ -160,7 +194,7 @@
                 eingabe(key);
             },
             zustand: function (key) { return zustand[key]; },
-            aktualisiere: function () { Object.keys(FELDER).forEach(zeige); }
+            aktualisiere: function () { berechne(); }
         };
     };
 })();

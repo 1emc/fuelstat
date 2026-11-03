@@ -168,6 +168,22 @@ $heute = (new DateTimeImmutable('now', new DateTimeZone('Europe/Berlin')))->form
             </div>
             <?php endif; ?>
 
+            <!-- Ort zuerst (#94): die Suche in der Nähe liefert den aktuellen Preis pro Liter; zuletzt genutzte Orte als Chips -->
+            <div class="mb-3">
+                <label for="standort" class="form-label" id="standortLabel"><?= htmlspecialchars($t['station']) ?></label>
+                <div class="input-group">
+                    <input type="text" list="stationen" placeholder="<?= htmlspecialchars($t['beispiel']) ?>" autocomplete="off" autocapitalize="words" enterkeyhint="done" id="standort" name="standort" class="form-control">
+                    <button type="button" class="btn btn-outline-primary" id="btnTankstellenSuche" title="<?= htmlspecialchars($t['stationen']) ?>" aria-label="<?= htmlspecialchars($t['stationen']) ?>">
+                        <i class="fas fa-map-marker-alt"></i>
+                    </button>
+                </div>
+                <datalist id="stationen">
+                    <?php foreach ($standortOptionen as $opt): ?><option value="<?= htmlspecialchars($opt) ?>"><?php endforeach; ?>
+                </datalist>
+                <div class="d-flex flex-wrap gap-1 mt-2" id="ortChips"></div>
+                <div id="tankstellenVorschlaege" class="mt-2"></div>
+            </div>
+
             <!-- Menge × Preis = Gesamt nebeneinander; das dritte Feld wird berechnet (js/mengen-rechner.js) -->
             <div class="row g-2 mb-1">
                 <div class="col-6 col-md-4">
@@ -192,23 +208,8 @@ $heute = (new DateTimeImmutable('now', new DateTimeZone('Europe/Berlin')))->form
                     </div>
                 </div>
             </div>
-            <small class="form-text text-muted d-block mb-3" id="calcHint"></small>
-
-            <!-- Ort: Suche in der Nähe und zuletzt genutzte Orte als Chips -->
-            <div class="mb-3">
-                <label for="standort" class="form-label" id="standortLabel"><?= htmlspecialchars($t['station']) ?></label>
-                <div class="input-group">
-                    <input type="text" list="stationen" placeholder="<?= htmlspecialchars($t['beispiel']) ?>" autocomplete="off" autocapitalize="words" enterkeyhint="done" id="standort" name="standort" class="form-control">
-                    <button type="button" class="btn btn-outline-primary" id="btnTankstellenSuche" title="<?= htmlspecialchars($t['stationen']) ?>" aria-label="<?= htmlspecialchars($t['stationen']) ?>">
-                        <i class="fas fa-map-marker-alt"></i>
-                    </button>
-                </div>
-                <datalist id="stationen">
-                    <?php foreach ($standortOptionen as $opt): ?><option value="<?= htmlspecialchars($opt) ?>"><?php endforeach; ?>
-                </datalist>
-                <div class="d-flex flex-wrap gap-1 mt-2" id="ortChips"></div>
-                <div id="tankstellenVorschlaege" class="mt-2"></div>
-            </div>
+            <small class="form-text text-muted d-block" id="calcHint"></small>
+            <div class="form-text text-warning-emphasis mb-3" id="rechenHinweis" aria-live="polite"></div>
 
             <div class="form-check form-switch mb-2">
                 <input type="checkbox" id="vollgetankt" name="vollgetankt" class="form-check-input" role="switch" value="1" checked>
@@ -400,7 +401,7 @@ document.getElementById('menge').addEventListener('input', aktualisiereSchaetzun
 
 window.addEventListener('DOMContentLoaded', () => {
     // Bootstrap (Erklärung am Info-Knopf) wird erst im Footer geladen
-    rechner = mengenRechner({ einheit: () => mengenEinheit });
+    rechner = mengenRechner({ einheit: () => mengenEinheit, hinweis: 'rechenHinweis' });
     waehleArt(document.querySelector('input[name="art"]:checked'), false);
 });
 
@@ -468,8 +469,11 @@ function zeigeTankstellen(stations, mitPreis, ortHinweis) {
         li.addEventListener('click', () => {
             document.getElementById('standort').value = eintrag;
             if (preis) {
+                // Tankstellenpreis gilt als eingetragen und wird nicht mehr überschrieben (#94)
                 if (rechner) rechner.setze('preis', preis);
             }
+            // Weiter mit der Menge
+            document.getElementById('menge').focus();
             setTimeout(() => vorschlaege.replaceChildren(), 2000);
         });
         liste.append(li);
