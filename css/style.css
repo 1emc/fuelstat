@@ -777,3 +777,36 @@ body.mit-tabbar {
 .kategorie-chip.gesperrt {
     opacity: .6;
 }
+
+/* Seitenwechsel (#89): Ladebalken oben und leichtes Abblenden, bis die neue Seite da ist (js/script.js) */
+.lade-balken {
+    position: fixed;
+    top: env(safe-area-inset-top);
+    left: 0;
+    z-index: 2000;
+    width: 0;
+    height: 3px;
+    background: var(--bs-primary);
+    box-shadow: 0 0 6px rgba(var(--bs-primary-rgb), .6);
+    opacity: 0;
+    pointer-events: none;
+}
+.lade-balken.laeuft {
+    opacity: 1;
+    width: 85%;
+    /* schnell los, dann immer langsamer: wirkt zügig, ohne vorzutäuschen, dass es gleich fertig ist */
+    transition: width 4s cubic-bezier(.1, .7, .2, 1), opacity .1s;
+}
+.lade-balken.fertig {
+    width: 100%;
+    opacity: 0;
+    transition: width .15s ease-out, opacity .3s .15s;
+}
+body.seite-laedt .hauptinhalt {
+    opacity: .55;
+    transition: opacity .2s;
+    pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+    .lade-balken.laeuft { transition: opacity .1s; }
+}

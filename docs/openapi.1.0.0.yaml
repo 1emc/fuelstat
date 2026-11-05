@@ -1418,6 +1418,24 @@ paths:
         "500":
           $ref: "#/components/responses/ServerError"
 
+  /api/v1/files/{name}:
+    get:
+      tags: [Media]
+      summary: Signed image download (no login; URL comes from API responses)
+      description: >
+        Bilder sind nur über signierte Adressen abrufbar, die die API in url, image_url und profile_image_url liefert.
+        Gültig bis Ende des nächsten Tages (UTC), Cache-Control private.
+      operationId: getFile
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string, example: "3f2c0d1e-0000-4000-8000-000000000000.webp" } }
+        - { name: exp, in: query, required: true, schema: { type: integer } }
+        - { name: sig, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Bild (image/webp)
+        "404":
+          description: Unbekannt, falsche Signatur oder abgelaufen
+
   /api/v1/media:
     get:
       tags: [Media]
