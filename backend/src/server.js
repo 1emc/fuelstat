@@ -14,6 +14,7 @@ const { encryptSecret, decryptSecret, sendUserMail, resolveSmtpHost, ALLOWED_POR
 const notifier = require('./services/notifier');
 const plans = require('./services/plans');
 const categories = require('./services/categories');
+const media = require('./services/media');
 const { checkOdometer, loadOdometerPoints, odometerWarnings } = require('./services/odometer');
 const { VEHICLE_EXTRA_COLUMNS, parseVehicleExtras } = require('./services/vehicleFields');
 
@@ -61,6 +62,22 @@ const uploadLimiter = limiter(10 * 60 * 1000, 30, 30);
 const importLimiter = limiter(10 * 60 * 1000, 60, 60);
 
 app.use(helmet());
+// Bilder nur mit gültiger Signatur ausliefern; kein öffentliches /uploads mehr.
+// Vor dem Rate-Limit: eine Seite lädt mehrere Bilder, die Signatur schützt schon vor Abruf ohne Berechtigung.
+// nosniff + CSP verhindern, dass Browser eine Datei als HTML/Skript ausführen.
+app.get('/api/v1/files/:name', (req, res) => {
+  const name = String(req.params.name || '');
+  if (!media.verify(name, req.query.exp, req.query.sig)) return res.status(404).end();
+  const datei = media.filePath(UPLOAD_DIR, name);
+  const restSekunden = Math.max(0, Number(req.query.exp) - Math.floor(Date.now() / 1000));
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self'; sandbox");
+  // Nur der Browser darf zwischenspeichern (bis zum Ablauf der Adresse), Cloudflare & Co. nicht
+  res.setHeader('Cache-Control', `private, max-age=${restSekunden}, immutable`);
+  res.sendFile(datei, { dotfiles: 'deny', cacheControl: false }, (err) => {
+    if (err && !res.headersSent) res.status(404).end();
+  });
+});
 app.use(apiLimiter);
 // CORS: Das PHP-Frontend ruft die API nur serverseitig auf, Browser anderer Seiten brauchen keinen Zugriff.
 // Nur ausdrücklich erlaubte Ursprünge (CORS_ORIGINS, kommagetrennt) bekommen CORS-Header.
@@ -79,14 +96,14 @@ app.use((req, res, next) => {
 // 2 MB erlaubt größere CSV-Importe (Frontend sendet max. 500 Zeilen pro Anfrage)
 app.use(express.json({ limit: '2mb' }));
 
-// Statischer File-Server für Uploads
-// Nur Bilddateien ausliefern; nosniff + CSP verhindern, dass Browser Uploads als HTML/Skript ausführen
-app.use(MEDIA_BASE_URL, (req, res, next) => {
-  if (!/\.(jpe?g|png|gif|webp)$/i.test(req.path)) return res.status(404).end();
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self'; sandbox");
-  return next();
-}, express.static(UPLOAD_DIR));
+// Bildadressen in allen Antworten signieren (#103): intern "/uploads/<datei>", nach außen "/api/v1/files/<datei>?exp=…&sig=…"
+app.use((req, res, next) => {
+  const json = res.json.bind(res);
+  res.json = (body) => json(media.signDeep(body));
+  next();
+});
+
+
 
 const PORT = process.env.PORT || 3000;
 
@@ -157,10 +174,19 @@ async function verifyUploadedImage(req, res, next) {
       await fs.promises.unlink(source).catch(() => {});
       return res.status(400).json({ error: 'invalid_image' });
     }
-    const filename = path.basename(source).replace(/\.upload$/, type.ext);
+    // Verkleinern, nach EXIF drehen, als WebP ohne Metadaten (GPS) speichern; das Original wird nicht behalten (#103)
+    const filename = path.basename(source).replace(/\.upload$/, '.webp');
     const target = path.join(UPLOAD_DIR, filename);
-    await fs.promises.rename(source, target);
-    Object.assign(req.file, { filename, path: target, mimetype: type.mime });
+    let info;
+    try {
+      info = await media.optimizeImage(source, target, req.mediaArt || 'vehicle');
+    } catch (e) {
+      await fs.promises.unlink(target).catch(() => {});
+      await fs.promises.unlink(source).catch(() => {});
+      return res.status(400).json({ error: 'invalid_image' });
+    }
+    await fs.promises.unlink(source).catch(() => {});
+    Object.assign(req.file, { filename, path: target, mimetype: 'image/webp', size: info.bytes });
     return next();
   } catch (e) {
     await fs.promises.unlink(source).catch(() => {});
@@ -861,7 +887,7 @@ app.patch('/api/v1/auth/users/:userId', auth, requireSelfOrAdmin, async (req, re
       ? String(req.body.email).trim().toLowerCase()
       : undefined;
   const username = optionalText(req.body?.username);
-  const profileImageUrl = optionalText(req.body?.profileImageUrl);
+  const profileImageUrl = media.normalizeInput(optionalText(req.body?.profileImageUrl));
 
   if (email === undefined && username === undefined && profileImageUrl === undefined) {
     return res.status(400).json({ error: 'nothing_to_update' });
@@ -1084,7 +1110,7 @@ app.post('/api/v1/vehicles', auth, async (req, res) => {
   const brand = req.body?.brand ? String(req.body.brand).trim() : null;
   const model = req.body?.model ? String(req.body.model).trim() : null;
   const year = optionalNumber(req.body?.year) ?? null;
-  const imageUrl = req.body?.imageUrl ? String(req.body.imageUrl).trim() : null;
+  const imageUrl = req.body?.imageUrl ? media.normalizeInput(String(req.body.imageUrl).trim()) : null;
   const odometerKm = optionalNumber(req.body?.odometerKm) ?? null;
   const mileageKm = optionalNumber(req.body?.mileageKm) ?? null;
   const tankCapacity = optionalNumber(req.body?.tankCapacity) ?? null;
@@ -1225,7 +1251,7 @@ app.patch('/api/v1/vehicles/:vehicleId', auth, async (req, res) => {
   const brand = optionalText(req.body?.brand);
   const model = optionalText(req.body?.model);
   const year = optionalNumber(req.body?.year);
-  const imageUrl = optionalText(req.body?.imageUrl);
+  const imageUrl = media.normalizeInput(optionalText(req.body?.imageUrl));
   const odometerKm = optionalNumber(req.body?.odometerKm);
   const mileageKm = optionalNumber(req.body?.mileageKm);
   const tankCapacity = optionalNumber(req.body?.tankCapacity);
@@ -2595,7 +2621,7 @@ app.get('/api/v1/vehicles/:vehicleId/stats', auth, async (req, res) => {
 // ============================================
 
 // Upload user media
-app.post('/api/v1/media/upload', auth, uploadLimiter, upload.single('file'), verifyUploadedImage, async (req, res) => {
+app.post('/api/v1/media/upload', auth, uploadLimiter, (req, res, next) => { req.mediaArt = 'user'; next(); }, upload.single('file'), verifyUploadedImage, async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'missing_file' });
   }
@@ -2698,7 +2724,7 @@ app.delete('/api/v1/media/:mediaId', auth, async (req, res) => {
 // ============================================
 
 // Upload vehicle media
-app.post('/api/v1/vehicles/:vehicleId/media/upload', auth, uploadLimiter, upload.single('file'), verifyUploadedImage, async (req, res) => {
+app.post('/api/v1/vehicles/:vehicleId/media/upload', auth, uploadLimiter, (req, res, next) => { req.mediaArt = 'vehicle'; next(); }, upload.single('file'), verifyUploadedImage, async (req, res) => {
   const vehicleId = String(req.params.vehicleId || '').trim();
   if (!vehicleId) return res.status(400).json({ error: 'missing_vehicleId' });
 

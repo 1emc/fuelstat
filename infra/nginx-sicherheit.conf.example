@@ -31,13 +31,6 @@ location ~* /(?:package(?:-lock)?|composer)\.json$ { return 404; }
 # includes/ enthält nur eingebundene Dateien – bis auf das Sortier-Formular
 location ~ ^/includes/(?!fahrzeug_sortieren\.php$) { return 404; }
 
-# Hochgeladene Bilder: nie als PHP ausführen, nur Bildformate ausliefern
-location ^~ /uploads/ {
-    location ~* \.(?:jpe?g|png|gif|webp)$ {
-        expires 30d;
-        add_header X-Content-Type-Options "nosniff" always;
-        add_header Content-Security-Policy "default-src 'none'; img-src 'self'; sandbox" always;
-        try_files $uri =404;
-    }
-    return 404;
-}
+# Hochgeladene Bilder nie direkt ausliefern: die API gibt sie nur über signierte, ablaufende Adressen
+# (/api/v1/files/…) an berechtigte Nutzer heraus (#103)
+location ^~ /uploads/ { return 404; }

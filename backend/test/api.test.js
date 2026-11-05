@@ -439,6 +439,53 @@ test('Kategorien (#95): Liste, Premium, eigene Kategorien', async () => {
   assert.equal((await api('GET', `/entries/${e1.body.id}`, { token: u.token })).body.category, 'Parken');
 });
 
+test('Bilder (#103): verkleinert, WebP, ohne Metadaten, nur signiert abrufbar', async () => {
+  const sharp = require('sharp');
+  const u = await newUser();
+  const v = await newVehicle(u.token);
+  // Großes JPEG mit EXIF (Autor) wie von einer Handykamera
+  const jpeg = await sharp({ create: { width: 4000, height: 3000, channels: 3, background: { r: 200, g: 30, b: 30 } } })
+    .jpeg({ quality: 95 }).withExif({ IFD0: { Artist: 'Testkamera', Copyright: 'Geheim' } }).toBuffer();
+  assert.ok((await sharp(jpeg).metadata()).exif, 'Testbild hat EXIF');
+
+  const form = new FormData();
+  form.append('file', new Blob([jpeg], { type: 'image/jpeg' }), 'foto.jpg');
+  const up = await fetch(`${base}/vehicles/${v}/media/upload`, { method: 'POST', headers: { authorization: `Bearer ${u.token}` }, body: form });
+  const media = await up.json();
+  assert.equal(up.status, 201, JSON.stringify(media));
+  assert.equal(media.mime_type, 'image/webp');
+  assert.match(media.url, /^\/api\/v1\/files\/[0-9a-f-]{36}\.webp\?exp=\d+&sig=[\w-]+$/, 'Antwort enthält signierte Adresse');
+  assert.ok(media.bytes < jpeg.length / 5, `deutlich kleiner (${media.bytes} statt ${jpeg.length})`);
+
+  // Abrufen: mit Signatur ja, ohne bzw. manipuliert nein
+  const origin = base.replace(/\/api\/v1$/, '');
+  const bild = await fetch(origin + media.url);
+  assert.equal(bild.status, 200);
+  assert.match(bild.headers.get('cache-control'), /private/);
+  const buf = Buffer.from(await bild.arrayBuffer());
+  const meta = await sharp(buf).metadata();
+  assert.equal(meta.format, 'webp');
+  assert.equal(Math.max(meta.width, meta.height), 1600);
+  assert.equal(meta.exif, undefined, 'keine EXIF-Daten mehr');
+  const datei = media.url.split('?')[0];
+  assert.equal((await fetch(origin + datei)).status, 404, 'ohne Signatur');
+  assert.equal((await fetch(origin + media.url.replace(/sig=[\w-]+/, 'sig=falsch'))).status, 404, 'falsche Signatur');
+  assert.equal((await fetch(origin + media.url.replace(/exp=\d+/, 'exp=1000000000'))).status, 404, 'abgelaufen');
+  assert.equal((await fetch(origin + '/uploads/' + datei.split('/').pop())).status, 404, 'kein öffentliches /uploads');
+
+  // Bild als Fahrzeugbild setzen: signierte Adresse wird intern gespeichert und beim Lesen neu signiert
+  const patch = await api('PATCH', `/vehicles/${v}`, { token: u.token, body: { imageUrl: media.url } });
+  assert.equal(patch.status, 200, JSON.stringify(patch.body));
+  const intern = await pool.query('SELECT image_url FROM vehicles WHERE id = $1', [v]);
+  assert.match(intern.rows[0].image_url, /^\/uploads\/[0-9a-f-]{36}\.webp$/);
+  assert.match((await api('GET', `/vehicles/${v}`, { token: u.token })).body.image_url, /^\/api\/v1\/files\//);
+
+  // Kein Bild: abgelehnt
+  const kaputt = new FormData();
+  kaputt.append('file', new Blob([Buffer.from('kein bild')], { type: 'image/jpeg' }), 'x.jpg');
+  assert.equal((await fetch(`${base}/media/upload`, { method: 'POST', headers: { authorization: `Bearer ${u.token}` }, body: kaputt })).status, 400);
+});
+
 test('Ungültige IDs liefern 404 statt 500', async () => {
   const u = await newUser();
   for (const p of ['/fillups/xyz', '/entries/xyz', '/vehicles/xyz', '/vehicles/xyz/stats', '/vehicles/xyz/fillups']) {
