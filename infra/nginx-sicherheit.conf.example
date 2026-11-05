@@ -24,7 +24,7 @@ location ~ /\.(?!well-known/) { return 404; }
 # API-Schlüssel (api/key.key für Tankerkönig, api/ocm.key für Open Charge Map und künftige *.key-Dateien)
 location ~* \.key$ { return 404; }
 
-# Doku-, Konfigurations- und Skriptdateien aus dem Repository (readme.md, SECURITY.md, *.yml, Backups, Logs …)
+# Doku-, Konfigurations- und Skriptdateien aus dem Repository (README.md, SECURITY.md, *.yml, Backups, Logs …)
 location ~* \.(?:md|ya?ml|example|sql|sh|lock|bak|log|dist|service|timer|env)$ { return 404; }
 location ~* /(?:package(?:-lock)?|composer)\.json$ { return 404; }
 
