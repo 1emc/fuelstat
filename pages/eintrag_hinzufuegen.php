@@ -330,14 +330,19 @@ function setzeEinheit(u) {
     document.getElementById('tankstellenVorschlaege').replaceChildren();
 }
 
-// Ort gewählt (Chip oder Treffer der Suche): übrige Vorschläge ausblenden, bis das Feld wieder leer ist
-function vorschlaegeAusblenden() {
-    document.getElementById('ortChips').hidden = true;
-    document.getElementById('tankstellenVorschlaege').replaceChildren();
+// Vorschlags-Chips nur bei leerem Ort zeigen (#106): entscheidend ist allein der Inhalt des Feldes, egal ob er
+// getippt, aus der Liste, per Chip oder aus der Suche kommt. Ausblenden per Klasse "d-none", denn "d-flex" am
+// Container setzt display mit !important und würde das hidden-Attribut überstimmen.
+function ortVorschlaegeAktualisieren() {
+    const leer = document.getElementById('standort').value.trim() === '';
+    document.getElementById('ortChips').classList.toggle('d-none', !leer);
 }
-document.getElementById('standort').addEventListener('input', e => {
-    if (e.target.value.trim() === '') document.getElementById('ortChips').hidden = false;
-});
+// Ort gewählt (Chip oder Treffer der Suche): Trefferliste schließen, Chips nach Feldinhalt
+function vorschlaegeAusblenden() {
+    document.getElementById('tankstellenVorschlaege').replaceChildren();
+    ortVorschlaegeAktualisieren();
+}
+['input', 'change'].forEach(ereignis => document.getElementById('standort').addEventListener(ereignis, ortVorschlaegeAktualisieren));
 
 // Zuletzt genutzte Orte als Chips; Antippen übernimmt den Ort (und beim Laden den letzten Preis)
 function zeigeOrtChips(u) {
@@ -356,6 +361,7 @@ function zeigeOrtChips(u) {
         });
         box.append(chip);
     });
+    ortVorschlaegeAktualisieren();
 }
 
 // Kachel gewählt: Abschnitt, Pflichtfelder und Texte umschalten
