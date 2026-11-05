@@ -52,6 +52,8 @@ services:
   adminer:
     image: adminer:latest
     restart: unless-stopped
+    # Standard des Images ist [::]:8080 (nur IPv6); ohne IPv6 im Docker-Netz startet es dann nicht
+    command: ["php", "-S", "0.0.0.0:8080", "-t", "/var/www/html"]
     # Adminer ebenfalls nur lokal binden oder über Nginx-Subdomain absichern
     ports:
       - "127.0.0.1:${ADMINER_PORT:-8080}:8080"

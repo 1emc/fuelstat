@@ -3,7 +3,7 @@
 #   /srv/www/fuelstat/public     → Webroot (= Repository-Wurzel)
 #   /run/php/php8.4-fpm.sock     → Socket des PHP-FPM-Pools
 # Voraussetzungen: infra/nginx-sicherheit.conf.example als /etc/nginx/snippets/fuelstat-sicherheit.conf,
-# Zertifikat von Let's Encrypt (z. B. certbot certonly --webroot -w /srv/www/fuelstat/public -d fuelstat.example.de).
+# Zertifikat von Let's Encrypt, vor dem Aktivieren dieser Datei holen: sudo certbot certonly --nginx -d fuelstat.example.de
 # Prüfen und laden: sudo nginx -t && sudo systemctl reload nginx
 
 # Cache-Dauer für CSS/JS: mit ?v=… (Version) ein Jahr, sonst bei jedem Aufruf prüfen (#89)
