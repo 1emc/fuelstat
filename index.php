@@ -35,7 +35,13 @@ try {
         <div class="alert alert-danger">Die Fahrzeuge konnten gerade nicht geladen werden. Bitte versuche es gleich noch einmal.</div>
     <?php elseif (count($vehicles) > 0): ?>
         <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3 g-sm-4">
-            <?php foreach (array_values($vehicles) as $index => $row):
+            <?php
+            // Statistik und Fälligkeiten aller Fahrzeuge gleichzeitig laden statt nacheinander (#89)
+            $api->vorladen(array_merge(...array_map(fn($v) => [
+                '/vehicles/' . rawurlencode((string)$v['id']) . '/stats',
+                '/vehicles/' . rawurlencode((string)$v['id']) . '/reminders',
+            ], array_values($vehicles))));
+            foreach (array_values($vehicles) as $index => $row):
                 $vehicleId = $row['id'];
                 $displayName = $row['name'] ?? 'Fahrzeug';
                 $bildUrl = fahrzeugBildUrl($row, $baseUrl);
