@@ -60,12 +60,14 @@ const apiLimiter = limiter(60 * 1000, 600, 300);
 // Nach auth eingehängt, zählen also immer je Konto
 const uploadLimiter = limiter(10 * 60 * 1000, 30, 30);
 const importLimiter = limiter(10 * 60 * 1000, 60, 60);
+// Signierte Bilder (#103): ohne Anmeldung, zählen je IP; großzügig, eine Seite lädt mehrere Bilder
+const fileLimiter = limiter(60 * 1000, 2000, 2000);
 
 app.use(helmet());
 // Bilder nur mit gültiger Signatur ausliefern; kein öffentliches /uploads mehr.
-// Vor dem Rate-Limit: eine Seite lädt mehrere Bilder, die Signatur schützt schon vor Abruf ohne Berechtigung.
+// Eigene, großzügige Grenze statt der allgemeinen: eine Seite lädt mehrere Bilder.
 // nosniff + CSP verhindern, dass Browser eine Datei als HTML/Skript ausführen.
-app.get('/api/v1/files/:name', (req, res) => {
+app.get('/api/v1/files/:name', fileLimiter, (req, res) => {
   const name = String(req.params.name || '');
   if (!media.verify(name, req.query.exp, req.query.sig)) return res.status(404).end();
   const datei = media.filePath(UPLOAD_DIR, name);
