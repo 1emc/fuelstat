@@ -8,7 +8,9 @@ if (!function_exists('getApiBaseUrl')) {
             return rtrim(trim($envBase), '/');
         }
 
-        return 'https://tanken.1emc.de/api/v1';
+        // Standard: API auf demselben Server (Docker-Port nur auf 127.0.0.1). Nie über die öffentliche Adresse:
+        // dann ginge jeder API-Aufruf über das Internet bzw. Cloudflare und kostete je ca. 0,2 s (#89)
+        return 'http://127.0.0.1:3000/api/v1';
     }
 }
 
