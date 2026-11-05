@@ -178,7 +178,7 @@ $f2 = fn($v) => $v === null ? '' : number_format((float)$v, 2, ',', '.');
             <?php endif; ?>
             <li>Bereits vorhandene Einträge (gleiches Datum und gleicher Tachostand bzw. gleiche Kategorie und Betrag) werden übersprungen.</li>
         </ul>
-        <p><a href="import.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?>&vorlage=1"><i class="fas fa-download me-1"></i>Vorlage herunterladen</a></p>
+        <p><a href="import.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?>&vorlage=1" download><i class="fas fa-download me-1"></i>Vorlage herunterladen</a></p>
         <form method="post" enctype="multipart/form-data" class="card card-body">
             <input type="hidden" name="id" value="<?= htmlspecialchars($fahrzeug_id) ?>">
             <input type="hidden" name="schritt" value="upload">

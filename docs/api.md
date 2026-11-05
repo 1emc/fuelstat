@@ -514,7 +514,13 @@ Umgebungsvariablen des Backends:
 
 ## Bilder (Auth required)
 
-Upload als `multipart/form-data` mit dem Feld `file`, höchstens 20 MB. Erlaubt sind nur JPEG, PNG, GIF und WebP; geprüft wird der Inhalt, nicht die Dateiendung. Die Datei wird unter zufälligem Namen in `UPLOAD_DIR` gespeichert, die Antwort enthält die `url` (unter `MEDIA_BASE_URL`).
+Upload als `multipart/form-data` mit dem Feld `file`, höchstens 20 MB. Erlaubt sind nur JPEG, PNG, GIF und WebP; geprüft wird der Inhalt, nicht die Dateiendung.
+
+Verarbeitung (#103): Das Bild wird nach EXIF gedreht, verkleinert (Fahrzeugbild höchstens 1600 px, Profilbild 800 px lange Kante, nie vergrößert) und als **WebP ohne Metadaten** (kein GPS) unter zufälligem Namen in `UPLOAD_DIR` gespeichert. Das Original wird nicht aufbewahrt. Animierte GIFs werden zum ersten Bild.
+
+Abruf nur signiert: In allen Antworten (`url`, `image_url`, `profile_image_url`) stehen Adressen der Form `/api/v1/files/<datei>.webp?exp=<Unix-Zeit>&sig=<Signatur>`. Sie gelten bis zum Ende des nächsten Tages (UTC) und bleiben einen Tag lang gleich, damit Browser und Apps sie zwischenspeichern können (`Cache-Control: private`). Ohne gültige Signatur oder nach Ablauf: 404. Öffentlich unter `/uploads/` liegt nichts mehr. Signierte Adressen, die ein Client als `imageUrl`/`profileImageUrl` zurückschickt, speichert die API wieder als interne Adresse `/uploads/<datei>`. Schlüssel: `MEDIA_SIGNING_KEY` (optional, sonst aus `JWT_SECRET` abgeleitet).
+
+Bestehende Bilder umstellen (einmalig, wiederholbar): `docker compose exec api node scripts/bilder-optimieren.js --probe` (zeigt nur an), danach ohne `--probe`.
 
 * `POST /media/upload` → Profilbild; danach `PATCH /auth/users/:userId { "profileImageUrl": url }`
 * `POST /vehicles/:vehicleId/media/upload` → Fahrzeugbild; danach `PATCH /vehicles/:vehicleId { "imageUrl": url }`

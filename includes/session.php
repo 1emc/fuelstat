@@ -28,6 +28,8 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
     // Session-Daten so lange behalten wie das Cookie (PHP-Standard: 24 Minuten ohne Aktivität)
     ini_set('session.gc_maxlifetime', (string)getSessionCookieOptions()['lifetime']);
     session_set_cookie_params(getSessionCookieOptions());
+    // Cache-Header setzen wir unten selbst (PHP-Standard wäre "no-store")
+    session_cache_limiter('');
     session_start();
 }
 
@@ -50,9 +52,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
         . '<a href="javascript:history.back()">Zurück</a>, Seite neu laden und erneut versuchen.</p>');
 }
 
-// Dynamische Seiten nicht cachen (verhindert veraltete Anzeige bei F5 / alte MySQL-Daten)
-header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-header('Pragma: no-cache');
+// Dynamische Seiten: nur im eigenen Browser halten und bei jedem Aufruf neu vom Server holen ("private, no-cache").
+// Bewusst ohne "no-store": sonst kommt die Seite nicht in den Back-Forward-Cache, und "Zurück" lädt alles neu (#89).
+// Veraltete Seiten aus dem Back-Forward-Cache lädt js/script.js neu (nach Speichern, Abmelden oder 10 Minuten).
+header('Cache-Control: private, no-cache, max-age=0');
 header('Expires: 0');
 
 ?>

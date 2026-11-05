@@ -23,6 +23,8 @@ class FuelstatApi
     private ?string $token;
     /** GET-Antworten innerhalb eines Seitenaufrufs; wird bei jeder Änderung geleert */
     private array $getCache = [];
+    /** Eine curl-Verbindung für alle Aufrufe eines Seitenaufrufs (Keep-alive statt neuem Verbindungsaufbau, #89) */
+    private static $curl = null;
 
     public function __construct(?string $token = null, ?string $baseUrl = null)
     {
@@ -96,6 +98,68 @@ class FuelstatApi
     /** Alle Ausgaben eines Fahrzeugs (seitenweise geladen, ohne 200er-Grenze). */
     public function getAllVehicleEntries(string $vehicleId): array { return $this->getAllPages('/vehicles/' . rawurlencode($vehicleId) . '/entries'); }
 
+    /**
+     * Mehrere GET-Anfragen gleichzeitig stellen und die Antworten vormerken (#89), z. B. Statistik und
+     * Fälligkeiten aller Fahrzeuge auf der Übersicht. Spätere request()-Aufrufe derselben Pfade kommen
+     * dann aus dem Zwischenspeicher. Fehler werden nicht vorgemerkt: request() fragt dann normal nach.
+     * @param string[] $pfade z. B. ['/vehicles/…/stats', '/vehicles/…/reminders']
+     */
+    public function vorladen(array $pfade): void
+    {
+        $multi = curl_multi_init();
+        $handles = [];
+        foreach (array_unique($pfade) as $pfad) {
+            $url = $this->baseUrl . '/' . ltrim($pfad, '/');
+            if (array_key_exists($url, $this->getCache)) {
+                continue;
+            }
+            $ch = curl_init($url);
+            curl_setopt_array($ch, $this->curlOptionen('GET', ['Accept: application/json']));
+            curl_multi_add_handle($multi, $ch);
+            $handles[$url] = $ch;
+        }
+        if (!$handles) {
+            curl_multi_close($multi);
+            return;
+        }
+        do {
+            $status = curl_multi_exec($multi, $laufend);
+            if ($laufend) {
+                curl_multi_select($multi, 1.0);
+            }
+        } while ($laufend && $status === CURLM_OK);
+        foreach ($handles as $url => $ch) {
+            $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+            $body = curl_multi_getcontent($ch);
+            if ($code >= 200 && $code < 300 && is_string($body)) {
+                $daten = json_decode($body, true);
+                if (is_array($daten)) {
+                    $this->getCache[$url] = $daten;
+                }
+            }
+            curl_multi_remove_handle($multi, $ch);
+            curl_close($ch);
+        }
+        curl_multi_close($multi);
+    }
+
+    /** Gemeinsame curl-Optionen (Kopfzeilen inkl. Anmeldung, Zeitlimits) */
+    private function curlOptionen(string $method, array $headers): array
+    {
+        if ($this->token !== null && $this->token !== '') {
+            $headers[] = 'Authorization: Bearer ' . $this->token;
+        }
+        return [
+            CURLOPT_CUSTOMREQUEST => $method,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_ENCODING => '',
+        ];
+    }
+
     private function getAllPages(string $path): array
     {
         $alle = [];
@@ -142,10 +206,18 @@ class FuelstatApi
         if ($method !== 'GET') {
             $this->getCache = [];
         }
-        $ch = curl_init($url);
-        if ($ch === false) {
-            throw new RuntimeException('curl_init failed');
+        // Verbindung wiederverwenden: curl_reset löscht nur die Optionen, nicht die offene Verbindung
+        if (self::$curl === null) {
+            self::$curl = curl_init();
+            if (self::$curl === false) {
+                self::$curl = null;
+                throw new RuntimeException('curl_init failed');
+            }
+        } else {
+            curl_reset(self::$curl);
         }
+        $ch = self::$curl;
+        curl_setopt($ch, CURLOPT_URL, $url);
 
         $headers = ['Accept: application/json'];
         if ($payload !== null) {
@@ -160,28 +232,18 @@ class FuelstatApi
             // curl setzt Content-Type multipart/form-data inkl. Boundary selbst
             curl_setopt($ch, CURLOPT_POSTFIELDS, $multipart);
         }
-        if ($this->token !== null && $this->token !== '') {
-            $headers[] = 'Authorization: Bearer ' . $this->token;
-        }
-
-        curl_setopt_array($ch, [
-            CURLOPT_CUSTOMREQUEST => $method,
-            CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_CONNECTTIMEOUT => 10,
-            CURLOPT_TIMEOUT => 30,
-            CURLOPT_FOLLOWLOCATION => true,
-        ]);
+        curl_setopt_array($ch, $this->curlOptionen($method, $headers));
 
         $body = curl_exec($ch);
         if ($body === false) {
             $err = curl_error($ch);
+            // Verbindung verwerfen, die nächste Anfrage baut eine neue auf
             curl_close($ch);
+            self::$curl = null;
             throw new RuntimeException('API request failed: ' . $err);
         }
 
         $httpCode = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        curl_close($ch);
 
         $data = [];
         if ($body !== '') {

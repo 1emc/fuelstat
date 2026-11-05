@@ -29,6 +29,7 @@ $email = ($b['email'] ?? '') !== '' ? htmlspecialchars(str_replace('@', '[at]', 
     <li><strong>Anmeldung:</strong> nach dem Login erhält dein Browser ein Sitzungs-Cookie und ein Anmelde-Cookie; die Anmeldung (Token) läuft nach 7 Tagen ab. Beim Abmelden wird das Token in einer Sperrliste vermerkt, die mit deinem Konto gelöscht wird. Fehlgeschlagene Anmeldeversuche werden zum Schutz vor Angriffen kurzzeitig gezählt (nur im Arbeitsspeicher, höchstens 15 Minuten).</li>
     <li><strong>Aktivität:</strong> Zeitpunkt der letzten Anmeldung und der letzten Nutzung (höchstens stündlich aktualisiert), damit ich als Betreiber sehe, ob Konten noch genutzt werden.</li>
     <li><strong>Beta-Phase:</strong> während der Beta wird dein Konto als „Beta-Tester“ gekennzeichnet.</li>
+    <li><strong>Bilder (Profil- und Fahrzeugbilder):</strong> werden beim Hochladen verkleinert und als WebP gespeichert; dabei werden alle eingebetteten Metadaten entfernt, insbesondere der <strong>Aufnahmeort (GPS)</strong>, Kameramodell und Aufnahmezeit. Das Original wird nicht aufbewahrt. Abrufbar sind die Bilder nur über zeitlich begrenzte, signierte Adressen, die nur du (angemeldet) erhältst.</li>
   </ul>
 
   <h2 class="h5 mt-4">4. Fahrzeug- und Fahrtdaten</h2>
@@ -56,7 +57,8 @@ $email = ($b['email'] ?? '') !== '' ? htmlspecialchars(str_replace('@', '[at]', 
     <li><strong>Fahrzeug-Cookie (fuelstat_fahrzeug):</strong> merkt sich das zuletzt genutzte Fahrzeug, damit es bei der Schnellerfassung über das App-Kürzel oben steht. Es enthält nur die interne Kennung des Fahrzeugs, ist für Skripte nicht lesbar und gilt ein Jahr.</li>
     <li><strong>Lokaler Speicher (fuelstat-theme):</strong> merkt sich, ob du die helle oder dunkle Darstellung gewählt hast.</li>
     <li><strong>Lokaler Speicher (fuelstat-cookie-hinweis):</strong> merkt sich, dass du den Hinweis zu Cookies gesehen hast, damit er nicht bei jedem Aufruf erscheint. Über „Cookie-Hinweis“ unten auf jeder Seite kannst du ihn wieder anzeigen.</li>
-    <li><strong>Service Worker:</strong> speichert Programmdateien und Bilder der App (z. B. Stylesheets, Symbole) im Browser, damit sie schneller laden. Persönliche Daten werden dort nicht abgelegt.</li>
+    <li><strong>Lokaler Speicher (fuelstat-geaendert):</strong> Zeitpunkt der letzten Änderung (Speichern, Abmelden), damit beim Zurückblättern keine veraltete Seite angezeigt wird.</li>
+    <li><strong>Service Worker:</strong> speichert Programmdateien und Grafiken der App (z. B. Stylesheets, Schriften, Symbole) im Browser, damit sie schneller laden. Seiten mit persönlichen Daten und deine hochgeladenen Bilder werden dort nicht abgelegt.</li>
   </ul>
   <p>Diese Speicherungen sind für die angebotenen Funktionen unbedingt erforderlich (§ 25 Abs. 2 Nr. 2 TDDDG); es gibt keine Tracking- oder Werbe-Cookies. Deshalb fragt Fuelstat keine Einwilligung ab, sondern weist beim ersten Besuch nur darauf hin. Sollten später optionale Dienste hinzukommen, werden sie erst nach deiner ausdrücklichen Einwilligung geladen.</p>
 

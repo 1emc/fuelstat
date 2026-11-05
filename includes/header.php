@@ -23,6 +23,21 @@ $baseUrl = $scheme . '://' . $host . ($basePath === '/' ? '' : $basePath) . '/';
 // Fahrzeuge des eingeloggten Benutzers über API (user_id wird ignoriert; API nutzt JWT)
 $api = getApiClient();
 
+// Abfragen, die diese Seite sicher braucht, gleichzeitig vorladen statt nacheinander (#89)
+if (isApiAuthenticated()) {
+    $vorabSkript = basename($_SERVER['SCRIPT_NAME'] ?? '');
+    $vorab = ['/whoami', '/vehicles'];
+    $vorabId = (string)($_GET['fahrzeug_id'] ?? ($vorabSkript === 'fahrzeug_detail.php' ? ($_GET['id'] ?? '') : ''));
+    if ($vorabId !== '' && in_array($vorabSkript, ['fahrzeug_detail.php', 'eintrag_hinzufuegen.php'], true)) {
+        $p = '/vehicles/' . rawurlencode($vorabId);
+        array_push($vorab, $p, $p . '/stats', $p . '/fillups?limit=200&offset=0', $p . '/entries?limit=200&offset=0');
+        if ($vorabSkript === 'fahrzeug_detail.php') {
+            $vorab[] = $p . '/reminders';
+        }
+    }
+    $api->vorladen($vorab);
+}
+
 function getUserVehicles($user_id) {
     global $api;
     $vehicles = [];

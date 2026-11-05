@@ -6,6 +6,12 @@
 # Zertifikat von Let's Encrypt (z. B. certbot certonly --webroot -w /srv/www/fuelstat/public -d fuelstat.example.de).
 # Prüfen und laden: sudo nginx -t && sudo systemctl reload nginx
 
+# Cache-Dauer für CSS/JS: mit ?v=… (Version) ein Jahr, sonst bei jedem Aufruf prüfen (#89)
+map $arg_v $asset_cache {
+    ""      "no-cache";
+    default "public, max-age=31536000, immutable";
+}
+
 # HTTP → HTTPS (Let's Encrypt muss per HTTP erreichbar bleiben)
 server {
     listen 80;
@@ -61,13 +67,14 @@ server {
         proxy_hide_header Referrer-Policy;
     }
 
-    # PHP-Frontend. Optional die API-Adresse hier statt im FPM-Pool setzen:
-    #   fastcgi_param FUELSTAT_API_BASE_URL http://127.0.0.1:3000/api/v1;
+    # PHP-Frontend. Die API direkt ansprechen, nicht über die öffentliche Adresse (sonst geht jeder
+    # API-Aufruf über Cloudflare bzw. das Internet und kostet je ca. 0,2 s, siehe #89)
     location ~ \.php$ {
         try_files $uri =404;
         include fastcgi_params;
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         fastcgi_param HTTPS on;
+        fastcgi_param FUELSTAT_API_BASE_URL http://127.0.0.1:3000/api/v1;
         fastcgi_pass unix:/run/php/php8.4-fpm.sock;
     }
 
@@ -78,9 +85,10 @@ server {
         try_files $uri =404;
     }
 
-    # CSS/JS: im Browser behalten, aber bei jedem Aufruf kurz auf Änderungen prüfen (ETag)
+    # CSS/JS: Die Seiten binden sie mit ?v=<Änderungszeit> ein (assetUrl). Mit Version ein Jahr unverändert
+    # behalten (kein Nachfragen bei jedem Seitenwechsel), ohne Version kurz prüfen ($asset_cache, siehe oben)
     location ~* \.(?:css|js)$ {
-        add_header Cache-Control "no-cache";
+        add_header Cache-Control $asset_cache;
         add_header X-Content-Type-Options "nosniff" always;
         try_files $uri =404;
     }

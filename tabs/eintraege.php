@@ -62,7 +62,7 @@ $zeilenNr = 0;
       <noscript><button class="btn btn-outline-secondary ms-2">Anzeigen</button></noscript>
     </form>
     <div class="btn-group flex-shrink-0 ms-lg-auto">
-      <a href="../pages/export.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?><?= $jahr !== null ? '&jahr=' . $jahr : '' ?>" class="btn btn-outline-primary" title="Als CSV für Excel herunterladen">
+      <a download href="../pages/export.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?><?= $jahr !== null ? '&jahr=' . $jahr : '' ?>" class="btn btn-outline-primary" title="Als CSV für Excel herunterladen">
         <i class="fas fa-file-csv"></i><span class="d-none d-sm-inline ms-1">CSV</span>
       </a>
       <a href="../pages/bericht.php?id=<?= htmlspecialchars(urlencode($fahrzeug_id)) ?><?= $jahr !== null ? '&jahr=' . $jahr : '' ?>" class="btn btn-outline-primary" title="Druckansicht, auch zum Speichern als PDF" target="_blank">

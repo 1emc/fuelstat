@@ -29,6 +29,7 @@ Fuelstat ist eine Web-App, mit der du Tankfüllungen, Ladevorgänge und alle and
 - Verbrauch pro Tankfüllung und Monat, bester/schlechtester Monat, Trend
 - Jahresübersicht mit Menge, Kosten, Verbrauch und CO₂
 - Ausgaben nach Kategorie und Kostengruppe, Kosten pro Monat und km, Wartungskosten je 10.000 km, Jahresvergleich
+- Schnell auch mobil (#89): Ladebalken beim Seitenwechsel, „Zurück“ aus dem Browser-Cache, Seitendaten werden parallel geladen; Bilder verkleinert (WebP, ohne GPS-Metadaten) und nur über signierte Adressen abrufbar (#103)
 - Kategorien kommen aus der API (`GET /categories`, eine Liste für Web und Apps): feste Kategorien, Premium-Kategorien (Parken, Maut, Pflege, Leasing, Zubehör) und bis zu 10 eigene Kategorien mit Symbol, Farbe und Gruppe (Plus)
 - CO₂-Ausstoß gesamt und pro km
 - Fälligkeiten: TÜV alle 24 Monate (ohne Eintrag 36 Monate nach Erstzulassung), Wartung nach dem Intervall des Fahrzeugs (Standard 12 Monate oder 15.000 km), Versicherung und Steuer jährlich bzw. im hinterlegten Fälligkeitsmonat
@@ -136,6 +137,14 @@ cd infra
 sudo chown -R 1000:1000 ../uploads          # Uploads gehören jetzt dem Benutzer "node"
 sudo docker compose up -d --build api
 sudo docker volume rm infra_api_node_modules # altes Paket-Volume wird nicht mehr gebraucht
+```
+
+**Einmalig nach dem Update auf geschützte Bilder (#103):** vorhandene Bilder verkleinern, als WebP ohne Metadaten speichern und `/uploads/` in nginx sperren (`infra/nginx-sicherheit.conf.example`):
+
+```bash
+cd infra
+sudo docker compose exec api node scripts/bilder-optimieren.js --probe   # zeigt nur an
+sudo docker compose exec api node scripts/bilder-optimieren.js           # umstellen
 ```
 
 Neue Datenbank-Migrationen (siehe unten) **vor** dem Neustart der API einspielen, z. B.:
