@@ -153,7 +153,7 @@ Weitere technische Informationen:
 
 ## Installation und Self-Hosting
 
-Fuelstat kann auf einem eigenen Linux-Server betrieben werden.
+Fuelstat kann auf einem eigenen Linux-Server betrieben werden. Hier die Kurzfassung; die vollständige, getestete Anleitung mit nginx-Tabelle, Prüfbefehlen und Hinweisen zu Cloudflare steht in **[docs/installation.md](docs/installation.md)**.
 
 ### Voraussetzungen
 
@@ -271,12 +271,17 @@ sudo systemctl reload nginx
 ### 5. Erstes Konto und Administrator einrichten
 
 1. Fuelstat im Browser öffnen und ein Konto registrieren.
-2. Die eigene Benutzer-ID in der Datenbank ermitteln.
+2. Die eigene Benutzer-ID in der Datenbank ermitteln:
+
+   ```bash
+   sudo docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "select id, email from users"'
+   ```
+
 3. Die ID in `ADMIN_USER_IDS` in `infra/.env` eintragen.
 4. API neu starten:
 
 ```bash
-docker compose up -d
+sudo docker compose up -d
 ```
 
 Danach stehen Administratorfunktionen und Feedback-Verwaltung zur Verfügung.
@@ -285,13 +290,15 @@ Danach stehen Administratorfunktionen und Feedback-Verwaltung zur Verfügung.
 
 ## Betrieb und Wartung
 
+Ausführlich mit allen Befehlen, der Liste der Migrationen, einmaligen Umstellungen und der Einrichtung der Datensicherung: **[docs/betrieb.md](docs/betrieb.md)**.
+
 ### Aktualisieren
 
 ```bash
 git pull
 
 cd infra
-docker compose up -d --build
+sudo docker compose up -d --build
 
 sudo systemctl reload php8.4-fpm
 ```
