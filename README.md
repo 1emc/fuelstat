@@ -442,21 +442,20 @@ Weitere Informationen:
 
 ## Roadmap
 
-Fuelstat wird kontinuierlich weiterentwickelt.
+Die Planung läuft über die [Milestones](https://github.com/FuelStat/fuelstat/milestones) in diesem Repository, auch für die iOS-App. Deren Aufgaben liegen in [FuelStat/fuelstat-ios](https://github.com/FuelStat/fuelstat-ios/issues) und sind hier über ein Sammel-Issue je Version eingeplant.
 
-Geplant sind unter anderem:
+| Version | Schwerpunkt |
+|---|---|
+| [0.10.0 – Foundation](https://github.com/FuelStat/fuelstat/milestone/1) | Grundlage für native Apps und Tarife: Tarif nur serverseitig, modulare API, Statistik in der API, Release-Prozess |
+| [0.11.0 – Sharing and Logbook](https://github.com/FuelStat/fuelstat/milestone/2) | Fahrzeuge mit anderen Konten teilen, neues Fahrtenbuch mit Zweck, Auswertung und Export |
+| [0.12.0 – Maintenance, Costs and Charging](https://github.com/FuelStat/fuelstat/milestone/3) | Service-Historie je Bauteil, Gesamtkosten und Fahrzeug-Lebenszyklus, Ladevorgänge, Web-Push |
+| [1.0.0 – End of Beta](https://github.com/FuelStat/fuelstat/milestone/4) | Bereit für zahlende Nutzer: Rechtliches und Zahlung, einheitliches Design, Fahrzeugvergleich, Budget und Kostenprognose |
+| [2.0.0 – native iOS-Version](https://github.com/FuelStat/fuelstat/milestone/6) | Erste native App fürs iPhone auf derselben API; ab hier ist die API ein festes Versprechen an App-Clients |
+| [Später](https://github.com/FuelStat/fuelstat/milestone/5) | Ideen ohne Termin, z. B. Dokumente je Fahrzeug, Flottenverwaltung, Passkeys, Kilometerstand automatisch |
 
-- Ausbau der API und weiterer Client-Anwendungen
-- Erweiterte Statistiken und Fahrzeugvergleiche
-- Budgetplanung und Kostenprognosen
-- Dokumentenverwaltung je Fahrzeug
-- Flottenverwaltung
-- Premium-Funktionen und Tarifverwaltung
-- Native mobile Anwendungen
-- Erweiterte Offline-Funktionen
-- Perspektivisch OBD- und Connected-Car-Integration
+Leitlinie: erst Zuverlässigkeit und Datensicherheit, dann müheloses Erfassen im Alltag, dann große neue Funktionen.
 
-Der aktuelle Entwicklungsstand und offene Aufgaben sind im [GitHub Issue Tracker](https://github.com/FuelStat/fuelstat/issues) einsehbar.
+Offene Aufgaben und Fehler: [GitHub Issue Tracker](https://github.com/FuelStat/fuelstat/issues).
 
 ---
 
