@@ -34,17 +34,15 @@ API-Änderungen, die Apps anpassen müssen). Die geplanten Versionen sind die Mi
    git push origin vX.Y.Z
    ```
 
-5. **Ausrollen** auf dem Server, wie unter „Aktualisieren“ in `docs/betrieb.md`:
+5. **Ausrollen** auf dem Server, genau in der Reihenfolge aus `docs/betrieb.md` („Aktualisieren“):
+   sichern → `git pull` → „Hinweise zum Update“ lesen und geänderte Migrationen/Beispieldateien
+   prüfen → **Migrationen einspielen, bevor die API neu startet** → `.env`/nginx nachziehen →
+   `cd infra && sudo docker compose up -d --build` und `sudo systemctl reload php8.4-fpm` →
+   `/api/v1/health` zeigt die neue Version.
 
-   ```bash
-   git pull
-   cd infra && sudo docker compose up -d --build
-   sudo systemctl reload php8.4-fpm
-   ```
-
-   Ohne `--build` meldet die API weiter die alte Version (`/api/v1/health`), und unter
-   „Neuigkeiten“ warnt die Seite Admins, dass API und Frontend nicht zusammenpassen. Danach die
-   „Hinweise zum Update“ der Version abarbeiten (Migrationen, `.env`, nginx).
+   Ohne `--build` meldet die API weiter die alte Version, und unter „Neuigkeiten“ warnt die Seite
+   Admins, dass API und Frontend nicht zusammenpassen. Wer Ausroll-Schritte nennt (in PRs,
+   CHANGELOG oder Antworten), nennt sie in dieser Reihenfolge.
 
 **Erinnern:** Der Maintainer möchte an diesen Ablauf erinnert werden. Weise am Ende einer Aufgabe
 darauf hin, wenn
@@ -55,6 +53,30 @@ darauf hin, wenn
 - ein Tag existiert, der Server aber noch nicht ausgerollt ist (Schritt 5).
 
 Tags setzt und pusht Claude nur, wenn der Maintainer ausdrücklich darum bittet.
+
+## Checkliste für jeden PR
+
+Vor dem PR prüfen und am Ende einer Aufgabe daran erinnern, was davon fehlt:
+
+- **CHANGELOG:** sichtbare Änderung unter `## [Unreleased]` eingetragen; bei allem, was beim
+  Ausrollen zu tun ist, ein Punkt unter „Hinweise zum Update“ mit dem genauen Befehl.
+- **Neue oder geänderte API-Endpunkte:** `docs/api.md` (Übersichtstabelle und eigener Abschnitt)
+  und `docs/openapi.1.0.0.yaml` angepasst; nur abwärtskompatibel unter `/api/v1`.
+- **Datenbankschema:** neue Migration `backend/database/postgres_0NN_name.sql` (in einer
+  Transaktion, mehrfach ausführbar: `IF NOT EXISTS` u. Ä.), dieselbe Änderung in
+  `postgres_init.sql` für Neuinstallationen, Zeile in der Migrationstabelle in `docs/betrieb.md`
+  (und dort den Stand „enthält alles bis einschließlich 0NN“), Einspiel-Befehl unter „Hinweise zum
+  Update“. Migrationen müssen vor dem Neustart der API laufen können, also mit dem alten
+  API-Code verträglich sein.
+- **Konfiguration:** neue oder geänderte Variablen in `infra/.env.example` mit Kommentar
+  (Zweck, Standardwert, ob Pflicht), ebenso `infra/backup/backup.env.example` und die
+  nginx-Beispiele (`infra/nginx-sicherheit.conf.example`, `infra/nginx/fuelstat.conf.example`);
+  bei Bedarf `docs/installation.md`.
+- **Funktionen:** Funktionsliste im `README.md` aktualisiert; neue oder geänderte Funktionen der
+  Web-App in der iOS-Feature-Referenz
+  [FuelStat/fuelstat-ios#15](https://github.com/FuelStat/fuelstat-ios/issues/15) ergänzt, damit
+  die App nachzieht.
+- **Tests:** passende Tests ergänzt (`backend/test`, `tests/`).
 
 ## Regeln
 
