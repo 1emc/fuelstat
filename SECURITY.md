@@ -4,7 +4,7 @@
 
 Bitte melde Sicherheitslücken **vertraulich** und **nicht** über öffentliche Issues, Pull Requests oder Diskussionen:
 
-1. **Bevorzugt:** über GitHub unter [„Report a vulnerability“](https://github.com/1emc/fuelstat/security/advisories/new)
+1. **Bevorzugt:** über GitHub unter [„Report a vulnerability“](https://github.com/FuelStat/fuelstat/security/advisories/new)
 2. Alternativ per E-Mail an mario@caraggiu.eu
 
 Hilfreich sind:
@@ -36,4 +36,4 @@ Fuelstat wird nur in der aktuellen Version betrieben. Sicherheitskorrekturen gib
 
 ---
 
-**English summary:** Please report vulnerabilities privately via [GitHub security advisories](https://github.com/1emc/fuelstat/security/advisories/new) or mario@caraggiu.eu, never in public issues. Acknowledgement within 3 business days. Scope: tanken.1emc.de and this repository's `main` branch. Only test with your own accounts, no DoS, no social engineering; good-faith research following these rules will not face legal action.
+**English summary:** Please report vulnerabilities privately via [GitHub security advisories](https://github.com/FuelStat/fuelstat/security/advisories/new) or mario@caraggiu.eu, never in public issues. Acknowledgement within 3 business days. Scope: tanken.1emc.de and this repository's `main` branch. Only test with your own accounts, no DoS, no social engineering; good-faith research following these rules will not face legal action.

@@ -30,7 +30,7 @@ if (!cl.includes('## [Unreleased]')) fehler('CHANGELOG.md: Abschnitt "## [Unrele
 const nachUnreleased = cl.split('## [Unreleased]')[1].split(/\n## \[/)[0];
 if (!/^\s*- /m.test(nachUnreleased)) fehler('CHANGELOG.md: unter [Unreleased] steht noch nichts – erst die Änderungen eintragen');
 cl = cl.replace('## [Unreleased]', `## [Unreleased]\n\n## [${version}] - ${datum}`);
-cl = cl.replace(/^\[Unreleased\]: .*$/m, `[Unreleased]: https://github.com/1emc/fuelstat/compare/v${version}...HEAD\n[${version}]: https://github.com/1emc/fuelstat/compare/v${alt}...v${version}`);
+cl = cl.replace(/^\[Unreleased\]: .*$/m, `[Unreleased]: https://github.com/FuelStat/fuelstat/compare/v${version}...HEAD\n[${version}]: https://github.com/FuelStat/fuelstat/compare/v${alt}...v${version}`);
 fs.writeFileSync(clPfad, cl);
 
 fs.writeFileSync(path.join(ROOT, 'VERSION'), version + '\n');

@@ -7,7 +7,7 @@ Fuelstat ist eine selbst gehostete Fahrzeug- und Kostenverwaltung. Erfasse Tankf
 Ob Benziner, Diesel, Autogas, Erdgas, Elektroauto, Hybrid oder Plug-in-Hybrid: Fuelstat unterstützt unterschiedliche Antriebsarten und hilft dir, die tatsächlichen Kosten deiner Mobilität zu verstehen.
 
 **Live-Anwendung:** [tanken.1emc.de](https://tanken.1emc.de)  
-**Quellcode:** [github.com/1emc/fuelstat](https://github.com/1emc/fuelstat)
+**Quellcode:** [github.com/FuelStat/fuelstat](https://github.com/FuelStat/fuelstat)
 
 ---
 
@@ -170,7 +170,7 @@ Fuelstat kann auf einem eigenen Linux-Server betrieben werden. Hier die Kurzfass
 sudo mkdir -p /srv/www/fuelstat
 sudo chown "$USER" /srv/www/fuelstat
 
-git clone https://github.com/1emc/fuelstat.git \
+git clone https://github.com/FuelStat/fuelstat.git \
   /srv/www/fuelstat/public
 ```
 
@@ -435,8 +435,8 @@ Weitere Informationen:
 - [Mitwirken am Projekt](CONTRIBUTING.md)
 - [Verhaltenskodex](CODE_OF_CONDUCT.md)
 - [Barrierefreiheit](ACCESSIBILITY.md)
-- [Fehler melden](https://github.com/1emc/fuelstat/issues)
-- [Verbesserungen vorschlagen](https://github.com/1emc/fuelstat/issues)
+- [Fehler melden](https://github.com/FuelStat/fuelstat/issues)
+- [Verbesserungen vorschlagen](https://github.com/FuelStat/fuelstat/issues)
 
 ---
 
@@ -456,13 +456,13 @@ Geplant sind unter anderem:
 - Erweiterte Offline-Funktionen
 - Perspektivisch OBD- und Connected-Car-Integration
 
-Der aktuelle Entwicklungsstand und offene Aufgaben sind im [GitHub Issue Tracker](https://github.com/1emc/fuelstat/issues) einsehbar.
+Der aktuelle Entwicklungsstand und offene Aufgaben sind im [GitHub Issue Tracker](https://github.com/FuelStat/fuelstat/issues) einsehbar.
 
 ---
 
 ## Versionen
 
-Aktuelle Version und alle Änderungen: [CHANGELOG.md](CHANGELOG.md), in der App unter „Neuigkeiten“ und als [GitHub-Releases](https://github.com/1emc/fuelstat/releases). Ablauf für neue Versionen: [docs/betrieb.md](docs/betrieb.md#versionen-und-releases).
+Aktuelle Version und alle Änderungen: [CHANGELOG.md](CHANGELOG.md), in der App unter „Neuigkeiten“ und als [GitHub-Releases](https://github.com/FuelStat/fuelstat/releases). Ablauf für neue Versionen: [docs/betrieb.md](docs/betrieb.md#versionen-und-releases).
 
 ---
 
@@ -481,7 +481,8 @@ Details stehen in der [LICENSE](LICENSE).
 **Mario Caraggiu**
 
 - GitHub: [@1emc](https://github.com/1emc)
-- Projekt: [github.com/1emc/fuelstat](https://github.com/1emc/fuelstat)
+- Projekt: [github.com/FuelStat/fuelstat](https://github.com/FuelStat/fuelstat)
+- iOS-App (in Planung): [github.com/FuelStat/fuelstat-ios](https://github.com/FuelStat/fuelstat-ios)
 - Live-Anwendung: [tanken.1emc.de](https://tanken.1emc.de)
 
 

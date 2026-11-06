@@ -107,7 +107,7 @@ Automated accessibility tools can help identify common issues, but manual testin
 
 If you encounter an accessibility barrier in Fuelstat, we appreciate your feedback.
 
-Please report accessibility issues through the [GitHub issue tracker](https://github.com/1emc/fuelstat/issues).
+Please report accessibility issues through the [GitHub issue tracker](https://github.com/FuelStat/fuelstat/issues).
 
 When reporting an issue, please include:
 
@@ -148,4 +148,4 @@ Please refer to [CONTRIBUTING.md](CONTRIBUTING.md) for general contribution guid
 Accessibility is an ongoing commitment. Every improvement helps make Fuelstat more inclusive and easier to use.
 
 **Fuelstat**  
-[GitHub Repository](https://github.com/1emc/fuelstat)
+[GitHub Repository](https://github.com/FuelStat/fuelstat)

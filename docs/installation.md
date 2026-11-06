@@ -16,7 +16,7 @@ Das Repository wird direkt in den späteren Webroot geklont (hier `/srv/www/fuel
 
 ```bash
 sudo mkdir -p /srv/www/fuelstat && sudo chown "$USER" /srv/www/fuelstat
-git clone https://github.com/1emc/fuelstat.git /srv/www/fuelstat/public
+git clone https://github.com/FuelStat/fuelstat.git /srv/www/fuelstat/public
 cd /srv/www/fuelstat/public/infra
 cp .env.example .env    # Datenbank-Passwort, JWT_SECRET, MAIL_ENCRYPTION_KEY eintragen, alle Optionen sind dort beschrieben
 openssl rand -base64 48 # je einmal für JWT_SECRET und MAIL_ENCRYPTION_KEY
