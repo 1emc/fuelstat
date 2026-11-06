@@ -6,11 +6,14 @@ Kategorien je Version: **Neu**, **Verbessert**, **Behoben**, **Sicherheit**, **T
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-06
+
 ### Neu
 - API: `GET /api/v1/stations` liefert Tankstellen in der Nähe mit aktuellen Preisen von Tankerkönig, damit die Apps beim Tanken Tankstelle und Preis vorschlagen können. Der API-Key bleibt auf dem Server.
 
 ### Technik
 - Das Repository ist umgezogen nach [FuelStat/fuelstat](https://github.com/FuelStat/fuelstat); Links in App und Doku zeigen auf die neue Adresse. Die iOS-App entsteht in [FuelStat/fuelstat-ios](https://github.com/FuelStat/fuelstat-ios).
+- Abhängigkeiten aktualisiert: express-rate-limit 8.7.3 (API), actions/setup-node 7 (CI).
 
 ### Hinweise zum Update
 - Für die Tankstellensuche in den Apps den Tankerkönig-Key als `TANKERKOENIG_API_KEY` in `infra/.env` eintragen (derselbe wie in `api/key.key`) und die API neu starten.
@@ -58,5 +61,6 @@ Erste Version mit Versionsnummer: alles, was Fuelstat bis zu diesem Stand kann.
 - Einmalig vorhandene Bilder umstellen: `sudo docker compose exec api node scripts/bilder-optimieren.js`
 - nginx: `/uploads/` sperren, `FUELSTAT_API_BASE_URL` direkt auf `127.0.0.1:3000` setzen (`docs/installation.md`)
 
-[Unreleased]: https://github.com/FuelStat/fuelstat/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/FuelStat/fuelstat/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/FuelStat/fuelstat/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/FuelStat/fuelstat/releases/tag/v0.9.0
