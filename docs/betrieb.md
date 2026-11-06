@@ -27,17 +27,45 @@ Fuelstat folgt [Semantic Versioning](https://semver.org/lang/de/) (`MAJOR.MINOR.
 
 ## Aktualisieren
 
-```bash
-git pull
-cd infra && sudo docker compose up -d --build   # API: neues Image mit aktuellem Code und aktuellen Paketen
-sudo systemctl reload php8.4-fpm            # Frontend
-```
+Reihenfolge einhalten: **Migrationen vor dem Neustart der API**, sonst startet neuer API-Code gegen ein altes Schema.
 
-Danach prüfen, ob neue Migrationen (siehe unten) oder geänderte nginx-Beispiele dazugekommen sind:
+1. **Sichern** (empfohlen, vor allem wenn Migrationen anstehen), falls die Datensicherung eingerichtet ist:
 
-```bash
-git diff --stat ORIG_HEAD -- backend/database infra/nginx-sicherheit.conf.example infra/nginx/fuelstat.conf.example
-```
+   ```bash
+   sudo systemctl start fuelstat-backup.service
+   ```
+
+2. **Code holen:**
+
+   ```bash
+   git pull
+   ```
+
+3. **Prüfen, was zu tun ist:** „Hinweise zum Update“ der neuen Version(en) in `CHANGELOG.md` lesen und nachsehen, ob Migrationen, Beispiel-Konfigurationen oder nginx-Beispiele dazugekommen sind:
+
+   ```bash
+   git diff --stat ORIG_HEAD -- backend/database infra/.env.example infra/nginx-sicherheit.conf.example infra/nginx/fuelstat.conf.example infra/backup/backup.env.example
+   ```
+
+4. **Neue Migrationen einspielen**, der Reihe nach (siehe [Datenbank-Migrationen](#datenbank-migrationen)); die Datenbank läuft dabei weiter, die API noch mit dem alten Code:
+
+   ```bash
+   cd infra
+   sudo docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ../backend/database/postgres_0NN_name.sql
+   ```
+
+5. **Konfiguration nachziehen**, falls die Hinweise es verlangen: neue Variablen aus `infra/.env.example` in `infra/.env` übernehmen, nginx-Änderungen einspielen (`sudo nginx -t && sudo systemctl reload nginx`).
+
+6. **API neu bauen und starten, Frontend neu laden:**
+
+   ```bash
+   cd infra && sudo docker compose up -d --build   # API: neues Image mit aktuellem Code und aktuellen Paketen
+   sudo systemctl reload php8.4-fpm                 # Frontend
+   ```
+
+7. **Kontrollieren:** `curl -s http://127.0.0.1:3000/api/v1/health` meldet die neue Version; unter „Neuigkeiten“ erscheint für Admins keine Warnung zu unterschiedlichen Versionen.
+
+Hinweis: Das PHP-Frontend liegt im Repository und nutzt den neuen Code schon ab Schritt 2. Zwischen Schritt 2 und 6 also zügig arbeiten oder bei größeren Updates kurz in Kauf nehmen, dass Frontend und API nicht zusammenpassen.
 
 **Einmalig beim Umstieg auf den `prod`-Container (November 2026):** Bis dahin lief die API im Entwicklungs-Container mit eingebundenem Code und eigenem `node_modules`-Volume. Dadurch kamen Paket-Updates nicht an. Umstellen:
 
@@ -54,13 +82,6 @@ sudo docker volume rm infra_api_node_modules # altes Paket-Volume wird nicht meh
 cd infra
 sudo docker compose exec api node scripts/bilder-optimieren.js --probe   # zeigt nur an
 sudo docker compose exec api node scripts/bilder-optimieren.js           # umstellen
-```
-
-Neue Datenbank-Migrationen (siehe unten) **vor** dem Neustart der API einspielen, z. B.:
-
-```bash
-cd infra
-sudo docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ../backend/database/postgres_014_expense_categories.sql
 ```
 
 ## Datenbank-Migrationen
@@ -80,7 +101,7 @@ Neue Installationen brauchen keine Migrationen: `postgres_init.sql` enthält ber
 | `postgres_013_vehicle_details.sql` | Fahrzeugangaben: Kennzeichen, FIN, Erstzulassung, Kauf/Verkauf, Intervalle, Versicherung, Steuer, Reifen |
 | `postgres_014_expense_categories.sql` | Eigene Kategorien für Ausgaben (Plus) |
 
-Alle Migrationen laufen in einer Transaktion und lassen sich gefahrlos ein zweites Mal ausführen.
+Alle Migrationen laufen in einer Transaktion und lassen sich gefahrlos ein zweites Mal ausführen. Einspielen wie unter [Aktualisieren](#aktualisieren), Schritt 4, z. B. `< ../backend/database/postgres_014_expense_categories.sql`.
 
 ## Datensicherung
 
