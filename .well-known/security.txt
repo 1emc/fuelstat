@@ -1,9 +1,9 @@
 # Found a security vulnerability in Fuelstat?
 # Please report it confidentially rather than through public issues.
 
-Contact: https://github.com/1emc/fuelstat/security/advisories/new
+Contact: https://github.com/FuelStat/fuelstat/security/advisories/new
 Contact: mailto:mario@caraggiu.eu
 Expires: 2027-10-30T00:00:00.000Z
 Preferred-Languages: de, en
 Canonical: https://tanken.1emc.de/.well-known/security.txt
-Policy: https://github.com/1emc/fuelstat/security/policy
+Policy: https://github.com/FuelStat/fuelstat/security/policy

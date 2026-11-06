@@ -23,7 +23,7 @@ This document explains how to contribute to the project.
 
 Before submitting a contribution:
 
-1. Check the existing [issues](https://github.com/1emc/fuelstat/issues) to see whether the problem or feature has already been reported.
+1. Check the existing [issues](https://github.com/FuelStat/fuelstat/issues) to see whether the problem or feature has already been reported.
 2. For significant changes, open an issue first to discuss the proposed implementation.
 3. Keep contributions focused. Smaller, clearly scoped pull requests are easier to review and maintain.
 
@@ -183,9 +183,9 @@ Please follow these general principles:
 
 If you discover a potential security vulnerability, report it privately using GitHub Security Advisories:
 
-[Report a vulnerability](https://github.com/1emc/fuelstat/security/advisories/new)
+[Report a vulnerability](https://github.com/FuelStat/fuelstat/security/advisories/new)
 
-For further information, see the repository's [SECURITY.md](https://github.com/1emc/fuelstat/blob/main/SECURITY.md).
+For further information, see the repository's [SECURITY.md](https://github.com/FuelStat/fuelstat/blob/main/SECURITY.md).
 
 ## License
 
@@ -202,4 +202,4 @@ Thank you for helping make Fuelstat better!
 Every contribution, no matter how small, is appreciated.
 
 **Fuelstat**  
-[GitHub Repository](https://github.com/1emc/fuelstat)
+[GitHub Repository](https://github.com/FuelStat/fuelstat)

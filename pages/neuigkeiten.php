@@ -70,7 +70,7 @@ $datumText = fn(?string $d) => $d ? (int)substr($d, 8, 2) . '. ' . $monate[(int)
     <?php endforeach; ?>
 
     <p class="small text-body-secondary mt-4">
-        Alle Versionen mit Quellcode: <a href="https://github.com/1emc/fuelstat/releases" target="_blank" rel="noopener">GitHub-Releases</a>.
+        Alle Versionen mit Quellcode: <a href="https://github.com/FuelStat/fuelstat/releases" target="_blank" rel="noopener">GitHub-Releases</a>.
         Fehler gefunden oder eine Idee? <a href="feedback.php">Feedback senden</a>.
     </p>
 </div>

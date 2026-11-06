@@ -6,6 +6,12 @@ Kategorien je Version: **Neu**, **Verbessert**, **Behoben**, **Sicherheit**, **T
 
 ## [Unreleased]
 
+### Technik
+- Das Repository ist umgezogen nach [FuelStat/fuelstat](https://github.com/FuelStat/fuelstat); Links in App und Doku zeigen auf die neue Adresse. Die iOS-App entsteht in [FuelStat/fuelstat-ios](https://github.com/FuelStat/fuelstat-ios).
+
+### Hinweise zum Update
+- Auf bestehenden Installationen die Git-Adresse umstellen: `git remote set-url origin https://github.com/FuelStat/fuelstat.git` (die alte Adresse leitet GitHub vorerst weiter).
+
 ## [0.9.0] - 2026-11-06
 
 Erste Version mit Versionsnummer: alles, was Fuelstat bis zu diesem Stand kann.
@@ -48,5 +54,5 @@ Erste Version mit Versionsnummer: alles, was Fuelstat bis zu diesem Stand kann.
 - Einmalig vorhandene Bilder umstellen: `sudo docker compose exec api node scripts/bilder-optimieren.js`
 - nginx: `/uploads/` sperren, `FUELSTAT_API_BASE_URL` direkt auf `127.0.0.1:3000` setzen (`docs/installation.md`)
 
-[Unreleased]: https://github.com/1emc/fuelstat/compare/v0.9.0...HEAD
-[0.9.0]: https://github.com/1emc/fuelstat/releases/tag/v0.9.0
+[Unreleased]: https://github.com/FuelStat/fuelstat/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/FuelStat/fuelstat/releases/tag/v0.9.0
