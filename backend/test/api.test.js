@@ -526,3 +526,25 @@ test('CORS ist ohne CORS_ORIGINS aus', async () => {
   const r = await api('GET', '/health', { headers: { origin: 'https://boese.example' } });
   assert.equal(r.headers.get('access-control-allow-origin'), null);
 });
+
+test('Tankstellensuche: nur angemeldet, prüft Eingaben, ohne Key 503', async () => {
+  const u = await newUser();
+  const vorher = process.env.TANKERKOENIG_API_KEY;
+  try {
+    assert.equal((await api('GET', '/stations?lat=52.52&lng=13.4')).status, 401, 'ohne Token');
+
+    delete process.env.TANKERKOENIG_API_KEY;
+    const ohneKey = await api('GET', '/stations?lat=52.52&lng=13.4', { token: u.token });
+    assert.equal(ohneKey.status, 503);
+    assert.equal(ohneKey.body.error, 'stations_not_configured');
+
+    // Ungültige Eingaben werden geprüft, bevor Tankerkönig gefragt wird
+    process.env.TANKERKOENIG_API_KEY = 'test-key';
+    const falsch = await api('GET', '/stations?lat=95&lng=13.4', { token: u.token });
+    assert.equal(falsch.status, 400);
+    assert.equal(falsch.body.error, 'invalid_coordinates');
+    assert.equal((await api('GET', '/stations?lat=52&lng=13&radius=50', { token: u.token })).body.error, 'invalid_radius');
+  } finally {
+    if (vorher === undefined) delete process.env.TANKERKOENIG_API_KEY; else process.env.TANKERKOENIG_API_KEY = vorher;
+  }
+});

@@ -34,6 +34,7 @@ Pfade relativ zu `/api/v1`. „Auth“: ohne = öffentlich, ✓ = angemeldet, Ad
 | GET · POST | `/vehicles` | ✓ | Fahrzeuge auflisten, anlegen |
 | GET · PATCH · DELETE | `/vehicles/:vehicleId` | ✓ | Fahrzeug lesen, ändern, löschen (samt Einträgen) |
 | GET | `/vehicles/:vehicleId/stats` | ✓ | Tachostand, Ø Preis, Verbrauchsabschnitte, Trend je Einheit |
+| GET | `/stations?lat=&lng=&radius=&type=` | ✓ | Tankstellen in der Nähe mit aktuellen Preisen (Tankerkönig) |
 | GET | `/vehicles/:vehicleId/reminders` | ✓ | Fälligkeiten TÜV, Wartung, Versicherung, Steuer |
 | POST | `/vehicles/:vehicleId/import` | ✓ | Massenimport (CSV) |
 | GET | `/vehicles/:vehicleId/fillups` | ✓ | Tank- und Ladevorgänge (`limit`, `offset`) |
@@ -525,6 +526,33 @@ Bestehende Bilder umstellen (einmalig, wiederholbar): `docker compose exec api n
 * `POST /media/upload` → Profilbild; danach `PATCH /auth/users/:userId { "profileImageUrl": url }`
 * `POST /vehicles/:vehicleId/media/upload` → Fahrzeugbild; danach `PATCH /vehicles/:vehicleId { "imageUrl": url }`
 * Fehler: 400 `missing_file`, 400 `invalid_image`, 404 `vehicle_not_found` bzw. `media_not_found`
+
+## Tankstellen (Auth required)
+
+### GET /stations?lat=52.52&lng=13.40&radius=5&type=e10
+
+Tankstellen im Umkreis mit aktuellen Preisen von [Tankerkönig](https://www.tankerkoenig.de) (Lizenz CC BY 4.0, die Quelle muss angezeigt werden). Gedacht für die Erfassung in den Apps; der API-Key bleibt auf dem Server (`TANKERKOENIG_API_KEY`).
+
+* `lat`, `lng`: Standort (Pflicht)
+* `radius`: 1–25 km, Standard 5
+* `type`: `e5`, `e10`, `diesel` oder `all` (Standard). Andere Werte (z. B. Elektro) gelten als `all`.
+* Sortiert nach Entfernung. Ergebnisse werden 2 Minuten zwischengespeichert (Standort auf etwa 100 m gerundet), höchstens 30 Abfragen pro Minute und Konto.
+
+```json
+{
+  "stations": [
+    { "id": "51d4b55e-a095-1aa0-e100-80009459e03a", "name": "JET BERLIN", "brand": "JET",
+      "street": "Mustergasse", "houseNumber": "1", "postCode": "10115", "place": "Berlin",
+      "lat": 52.52, "lng": 13.40, "distanceKm": 0.8, "isOpen": true,
+      "prices": { "e10": 1.719 } }
+  ],
+  "source": "Tankerkönig", "license": "CC BY 4.0", "sourceUrl": "https://www.tankerkoenig.de"
+}
+```
+
+Bei `type=all` enthält `prices` die Felder `e5`, `e10` und `diesel`; fehlt eine Sorte, ist der Wert `null`.
+
+Fehler: 400 `invalid_coordinates` bzw. `invalid_radius`, 429 `too_many_requests`, 502 `stations_unavailable` (Tankerkönig nicht erreichbar), 503 `stations_not_configured` (kein Key gesetzt).
 
 ## Common error format
 

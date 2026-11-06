@@ -15,6 +15,7 @@ const notifier = require('./services/notifier');
 const plans = require('./services/plans');
 const categories = require('./services/categories');
 const media = require('./services/media');
+const stations = require('./services/stations');
 // Version der API (#111): aus package.json, das neue-version.js zusammen mit VERSION pflegt
 const API_VERSION = require('../package.json').version;
 const { checkOdometer, loadOdometerPoints, odometerWarnings } = require('./services/odometer');
@@ -62,6 +63,8 @@ const apiLimiter = limiter(60 * 1000, 600, 300);
 // Nach auth eingehängt, zählen also immer je Konto
 const uploadLimiter = limiter(10 * 60 * 1000, 30, 30);
 const importLimiter = limiter(10 * 60 * 1000, 60, 60);
+// Tankstellensuche: schont das Kontingent des Tankerkönig-Keys (Ergebnisse sind zusätzlich 2 Minuten gecacht)
+const stationsLimiter = limiter(60 * 1000, 30, 30);
 // Signierte Bilder (#103): ohne Anmeldung, zählen je IP; großzügig, eine Seite lädt mehrere Bilder
 const fileLimiter = limiter(60 * 1000, 2000, 2000);
 
@@ -2620,6 +2623,20 @@ app.get('/api/v1/vehicles/:vehicleId/stats', auth, async (req, res) => {
   }
 });
 
+
+// Tankstellen in der Nähe mit aktuellen Preisen (Tankerkönig), z. B. für die Erfassung in den Apps.
+// Nur angemeldet: sonst könnte jeder das Kontingent des Keys verbrauchen. Der Key verlässt den Server nie.
+app.get('/api/v1/stations', auth, stationsLimiter, async (req, res) => {
+  const apiKey = String(process.env.TANKERKOENIG_API_KEY || '').trim();
+  if (!apiKey) return res.status(503).json({ error: 'stations_not_configured' });
+
+  const params = stations.parseQuery(req.query);
+  if (params.error) return res.status(400).json({ error: params.error });
+
+  const list = await stations.nearbyStations(params, { apiKey });
+  if (!list) return res.status(502).json({ error: 'stations_unavailable' });
+  res.json({ stations: list, source: 'Tankerkönig', license: 'CC BY 4.0', sourceUrl: 'https://www.tankerkoenig.de' });
+});
 
 // ============================================
 // Media Upload Endpoints (User Media)
