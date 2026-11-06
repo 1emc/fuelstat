@@ -57,6 +57,7 @@ $email = ($b['email'] ?? '') !== '' ? htmlspecialchars(str_replace('@', '[at]', 
     <li><strong>Fahrzeug-Cookie (fuelstat_fahrzeug):</strong> merkt sich das zuletzt genutzte Fahrzeug, damit es bei der Schnellerfassung über das App-Kürzel oben steht. Es enthält nur die interne Kennung des Fahrzeugs, ist für Skripte nicht lesbar und gilt ein Jahr.</li>
     <li><strong>Lokaler Speicher (fuelstat-theme):</strong> merkt sich, ob du die helle oder dunkle Darstellung gewählt hast.</li>
     <li><strong>Lokaler Speicher (fuelstat-cookie-hinweis):</strong> merkt sich, dass du den Hinweis zu Cookies gesehen hast, damit er nicht bei jedem Aufruf erscheint. Über „Cookie-Hinweis“ unten auf jeder Seite kannst du ihn wieder anzeigen.</li>
+    <li><strong>Lokaler Speicher (fuelstat-version-gesehen):</strong> zuletzt angesehene Version unter „Neuigkeiten“, damit neue Versionen markiert werden können.</li>
     <li><strong>Lokaler Speicher (fuelstat-geaendert):</strong> Zeitpunkt der letzten Änderung (Speichern, Abmelden), damit beim Zurückblättern keine veraltete Seite angezeigt wird.</li>
     <li><strong>Service Worker:</strong> speichert Programmdateien und Grafiken der App (z. B. Stylesheets, Schriften, Symbole) im Browser, damit sie schneller laden. Seiten mit persönlichen Daten und deine hochgeladenen Bilder werden dort nicht abgelegt.</li>
   </ul>

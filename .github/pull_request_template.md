@@ -76,3 +76,4 @@ If applicable, add screenshots or screen recordings showing the changes.
 - [ ] I have tested my changes.
 - [ ] I have checked for unintended side effects.
 - [ ] This pull request is focused on the described changes.
+- [ ] User-visible changes are listed under `## [Unreleased]` in `CHANGELOG.md`.

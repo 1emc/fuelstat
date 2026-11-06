@@ -84,6 +84,9 @@ test('Healthcheck', async () => {
   const r = await api('GET', '/health');
   assert.equal(r.status, 200);
   assert.equal(r.body.status, 'healthy');
+  // Version (#111): dieselbe wie in der Datei VERSION
+  const version = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', 'VERSION'), 'utf8').trim();
+  assert.equal(r.body.version, version);
 });
 
 test('Registrierung und Login', async () => {

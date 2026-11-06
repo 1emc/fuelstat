@@ -15,6 +15,8 @@ const notifier = require('./services/notifier');
 const plans = require('./services/plans');
 const categories = require('./services/categories');
 const media = require('./services/media');
+// Version der API (#111): aus package.json, das neue-version.js zusammen mit VERSION pflegt
+const API_VERSION = require('../package.json').version;
 const { checkOdometer, loadOdometerPoints, odometerWarnings } = require('./services/odometer');
 const { VEHICLE_EXTRA_COLUMNS, parseVehicleExtras } = require('./services/vehicleFields');
 
@@ -469,6 +471,7 @@ app.get('/api/v1/health', (req, res) => {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     service: 'fuelstat-api-v2',
+    version: API_VERSION,
     registration_enabled: process.env.REGISTRATION_ENABLED !== 'false',
     beta_phase: isBetaPhase()
   });
