@@ -34,7 +34,7 @@ Wird `JWT_SECRET` später ohne eigenen `MAIL_ENCRYPTION_KEY` geändert, lassen s
 - Das Repository-Wurzelverzeichnis ist der Webroot des Frontends.
 - Eine Datenbankverbindung braucht das Frontend nicht: Es liest und schreibt ausschließlich über die API. Eine alte `includes/db_connect.php` aus der MySQL-Zeit kann gelöscht werden.
 - API-Adresse: Das Frontend ruft die API serverseitig auf, standardmäßig direkt unter `http://127.0.0.1:3000/api/v1`. Das nginx-Beispiel setzt `FUELSTAT_API_BASE_URL` ausdrücklich; bei anderem Port oder Server dort bzw. im PHP-FPM-Pool (`env[FUELSTAT_API_BASE_URL] = …`) anpassen. **Nicht die öffentliche Adresse eintragen:** Dann geht jeder API-Aufruf über das Internet (bzw. Cloudflare) und kostet je ca. 0,2 s – bei 6–7 Aufrufen pro Seite deutlich spürbar.
-- Tankstellensuche: Tankerkönig-API-Key (kostenlos auf creativecommons.tankerkoenig.de) in `api/key.key` ablegen.
+- Tankstellensuche: Tankerkönig-API-Key (kostenlos auf creativecommons.tankerkoenig.de) in `api/key.key` ablegen. Für die Apps denselben Key zusätzlich als `TANKERKOENIG_API_KEY` in `infra/.env` eintragen und die API neu starten (`docker compose up -d`).
 - Ladestationssuche für E-Autos und Plug-in-Hybride: Open-Charge-Map-API-Key (kostenlos, openchargemap.org → Mein Profil → API-Schlüssel) in `api/ocm.key` eintragen. Die leere Datei ist versioniert. Nach dem Eintragen `git update-index --skip-worktree api/ocm.key` ausführen, damit der Schlüssel nie committet wird.
 - Betreiberangaben für Impressum und Datenschutzerklärung in `includes/betreiber.php` eintragen.
 - Bootstrap, Chart.js, QRCode.js und Font Awesome liegen in `vendor/` bzw. `css/` und `webfonts/`. Es werden keine CDNs geladen (siehe `vendor/README.md`).

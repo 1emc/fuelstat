@@ -18,6 +18,7 @@ tags:
   - name: Entries
   - name: Feedback
   - name: Media
+  - name: Stations
 
 security:
   - BearerAuth: []
@@ -1388,6 +1389,61 @@ paths:
           description: invalid_mfa_token | invalid_mfa_code
         "429":
           description: too_many_attempts
+
+  /api/v1/stations:
+    get:
+      tags: [Stations]
+      summary: Nearby fuel stations with current prices (Tankerkönig, CC BY 4.0)
+      description: "Nach Entfernung sortiert, 2 Minuten gecacht, 30 Abfragen pro Minute und Konto. Die Quelle Tankerkönig muss angezeigt werden."
+      operationId: getStations
+      parameters:
+        - { name: lat, in: query, required: true, schema: { type: number, minimum: -90, maximum: 90 } }
+        - { name: lng, in: query, required: true, schema: { type: number, minimum: -180, maximum: 180 } }
+        - { name: radius, in: query, required: false, schema: { type: number, minimum: 1, maximum: 25, default: 5 } }
+        - { name: type, in: query, required: false, schema: { type: string, enum: [e5, e10, diesel, all], default: all } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        name: { type: string }
+                        brand: { type: string, nullable: true }
+                        street: { type: string, nullable: true }
+                        houseNumber: { type: string, nullable: true }
+                        postCode: { type: string, nullable: true }
+                        place: { type: string, nullable: true }
+                        lat: { type: number }
+                        lng: { type: number }
+                        distanceKm: { type: number, nullable: true }
+                        isOpen: { type: boolean }
+                        prices:
+                          type: object
+                          description: "Preis je Sorte in EUR/l, null wenn nicht angeboten; bei type=all e5, e10 und diesel"
+                          additionalProperties: { type: number, nullable: true }
+                      required: [id, name, lat, lng, isOpen, prices]
+                  source: { type: string, example: Tankerkönig }
+                  license: { type: string, example: CC BY 4.0 }
+                  sourceUrl: { type: string }
+                required: [stations]
+        "400":
+          description: invalid_coordinates | invalid_radius
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          description: too_many_requests
+        "502":
+          description: stations_unavailable (Tankerkönig nicht erreichbar)
+        "503":
+          description: stations_not_configured (TANKERKOENIG_API_KEY fehlt)
 
   /api/v1/media/upload:
     post:
