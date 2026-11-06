@@ -460,6 +460,12 @@ Der aktuelle Entwicklungsstand und offene Aufgaben sind im [GitHub Issue Tracker
 
 ---
 
+## Versionen
+
+Aktuelle Version und alle Änderungen: [CHANGELOG.md](CHANGELOG.md), in der App unter „Neuigkeiten“ und als [GitHub-Releases](https://github.com/1emc/fuelstat/releases). Ablauf für neue Versionen: [docs/betrieb.md](docs/betrieb.md#versionen-und-releases).
+
+---
+
 ## Lizenz
 
 Fuelstat wird unter der **GNU Affero General Public License v3.0 (AGPL-3.0)** veröffentlicht.

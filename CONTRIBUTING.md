@@ -129,6 +129,7 @@ Before submitting a pull request, make sure that:
 - [ ] No secrets, credentials, or personal data are included.
 - [ ] The pull request has a clear description of the changes.
 - [ ] Related issues are referenced where applicable.
+- [ ] User-visible changes have an entry under `## [Unreleased]` in `CHANGELOG.md` (category: Neu, Verbessert, Behoben, Sicherheit, Technik, Hinweise zum Update).
 
 Pull requests should explain:
 

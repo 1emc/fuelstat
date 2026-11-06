@@ -2,6 +2,29 @@
 
 Updates, Datenbank-Migrationen, Datensicherung und Sicherheitsdetails einer laufenden Installation. Ersteinrichtung: [Installation](installation.md).
 
+## Versionen und Releases
+
+Fuelstat folgt [Semantic Versioning](https://semver.org/lang/de/) (`MAJOR.MINOR.PATCH`); während der Beta bleibt die Hauptversion 0. Die **einzige Quelle** der Versionsnummer ist die Datei `VERSION`. Das Frontend zeigt sie im Footer und unter „Neuigkeiten“, die API unter `GET /api/v1/health` (`version`, aus `backend/package.json`). Die CI prüft, dass alle Stellen übereinstimmen (`tests/VersionTest.php`).
+
+- **Laufend:** Jeder PR mit sichtbarer Änderung trägt sie in `CHANGELOG.md` unter `## [Unreleased]` ein.
+- **Release vorbereiten** (setzt `VERSION`, `backend/package.json` und schließt `[Unreleased]` als neue Version ab):
+
+  ```bash
+  node backend/scripts/neue-version.js 0.10.0
+  ```
+
+  Dann committen und als PR mergen.
+- **Veröffentlichen** auf dem gemergten `main`:
+
+  ```bash
+  git tag -a v0.10.0 -m "Fuelstat 0.10.0"
+  git push origin v0.10.0
+  ```
+
+  Der Workflow `.github/workflows/release.yml` prüft Tag, `VERSION` und `CHANGELOG.md` und legt das GitHub-Release mit dem Text der Version an (0.x und Vorabversionen als „Pre-release“).
+- **Ausrollen:** wie unter „Aktualisieren“. Unter „Neuigkeiten“ sehen Admins eine Warnung, wenn API und Frontend unterschiedliche Versionen melden (API-Image nicht neu gebaut).
+- **Welche Version?** PATCH für Fehlerbehebungen, MINOR für neue Funktionen, MAJOR für Brüche (z. B. API-Änderungen, die Apps anpassen müssen). Vorabversionen: `1.0.0-rc.1`.
+
 ## Aktualisieren
 
 ```bash

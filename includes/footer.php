@@ -1,4 +1,5 @@
 </div> <!-- Ende von .hauptinhalt -->
+<?php require_once __DIR__ . '/version.php'; ?>
 
 <!-- Footer -->
 <footer class="bg-body-tertiary text-center text-muted py-3 mt-4">
@@ -6,7 +7,8 @@
     &copy; <?php echo date('Y'); ?> Mario Caraggiu — 
     <a href="<?php echo htmlspecialchars($baseUrl); ?>pages/impressum.php" class="text-decoration-none">Impressum</a> | 
     <a href="<?php echo htmlspecialchars($baseUrl); ?>pages/datenschutz.php" class="text-decoration-none">Datenschutz</a> |
-    <button type="button" class="btn btn-link btn-sm p-0 align-baseline text-decoration-none" id="cookieHinweisOeffnen" style="font-size: inherit;">Cookie-Hinweis</button>
+    <button type="button" class="btn btn-link btn-sm p-0 align-baseline text-decoration-none" id="cookieHinweisOeffnen" style="font-size: inherit;">Cookie-Hinweis</button> |
+    <a href="<?php echo htmlspecialchars($baseUrl); ?>pages/neuigkeiten.php" class="text-decoration-none" title="Neuigkeiten">Version <?= htmlspecialchars(fuelstatVersion()) ?><span class="badge rounded-pill text-bg-primary ms-1 d-none" data-neu-version>neu</span></a>
   </small>
 </footer>
 
@@ -22,6 +24,15 @@
   <button type="button" class="btn btn-primary btn-sm flex-shrink-0" id="cookieHinweisOk">Verstanden</button>
 </div>
 <script>
+  // Neuigkeiten (#111): Hinweis "neu", bis die aktuelle Version auf der Seite Neuigkeiten angesehen wurde.
+  // Nur angemeldet und nur, wenn schon einmal eine frühere Version gesehen wurde (nicht bei der ersten Nutzung).
+  (function () {
+    var version = <?= json_encode(fuelstatVersion()) ?>, gesehen = null;
+    try { gesehen = localStorage.getItem('fuelstat-version-gesehen'); } catch (e) { return; }
+    if (gesehen === null) { try { localStorage.setItem('fuelstat-version-gesehen', version); } catch (e) {} return; }
+    if (gesehen === version) return;
+    document.querySelectorAll('[data-neu-version]').forEach(function (el) { el.classList.remove('d-none'); });
+  })();
   window.fuelstatEinwilligung = {
     // Bisher gibt es keine optionalen Dienste: alles außer "notwendig" ist nicht erlaubt
     erlaubt: function (kategorie) { return kategorie === 'notwendig'; }

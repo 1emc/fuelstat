@@ -1,0 +1,57 @@
+# GitHub-Release aus einem Versions-Tag (#111).
+# Ablauf: node backend/scripts/neue-version.js X.Y.Z → PR → mergen → auf main: git tag -a vX.Y.Z && git push origin vX.Y.Z
+# Dieser Workflow prüft, dass Tag, VERSION, backend/package.json und CHANGELOG.md zusammenpassen, und
+# veröffentlicht das Release mit dem Abschnitt der Version aus CHANGELOG.md als Text.
+# Versionen 0.x und Vorabversionen (z. B. 1.0.0-rc.1) werden als "Pre-release" markiert, solange die Beta läuft.
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: GitHub-Release erstellen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Version prüfen
+        id: version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          datei="$(tr -d '[:space:]' < VERSION)"
+          paket="$(node -p "require('./backend/package.json').version")"
+          echo "Tag $tag, VERSION $datei, package.json $paket"
+          if [ "$tag" != "$datei" ] || [ "$tag" != "$paket" ]; then
+            echo "::error::Tag, VERSION und backend/package.json passen nicht zusammen"
+            exit 1
+          fi
+          if ! grep -q "^## \[$tag\] - " CHANGELOG.md; then
+            echo "::error::CHANGELOG.md hat keinen Abschnitt ## [$tag] - JJJJ-MM-TT"
+            exit 1
+          fi
+          case "$tag" in 0.*|*-*) echo "vorab=true" >> "$GITHUB_OUTPUT" ;; *) echo "vorab=false" >> "$GITHUB_OUTPUT" ;; esac
+          echo "version=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Release-Text aus CHANGELOG.md
+        run: |
+          awk -v v="${{ steps.version.outputs.version }}" '
+            /^## \[/ { drin = (index($0, "## [" v "]") == 1); next }
+            /^\[[^]]+\]: / { next }
+            drin { print }
+          ' CHANGELOG.md > release-notes.md
+          test -s release-notes.md
+          cat release-notes.md
+
+      - name: Release veröffentlichen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          vorab=""
+          if [ "${{ steps.version.outputs.vorab }}" = "true" ]; then vorab="--prerelease"; fi
+          gh release create "$GITHUB_REF_NAME" --title "Fuelstat ${{ steps.version.outputs.version }}" \
+            --notes-file release-notes.md --verify-tag $vorab
